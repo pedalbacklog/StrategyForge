@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Plain net8.0, no Windows/WinUI dependency on purpose: this is the "portable core"
+    windows/PORT-PLAN.md calls out (§2) — Models/Services logic ported from the macOS
+    app's Models/ and Generators/Services, kept free of UI so it stays unit-testable
+    without pulling in the Windows App SDK. The Coral app project (WinUI 3) and
+    Coral.Tests both reference this instead of duplicating the logic.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Coral.Core</RootNamespace>
+  </PropertyGroup>
+
+</Project>

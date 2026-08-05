@@ -1,0 +1,15 @@
+## .NET / Visual Studio build output — same intent as the macOS app's build ignores,
+## scoped to this folder so nothing here relies on a shared .gitignore at repo root.
+
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]64/
+*.user
+.vs/
+*.suo
+*.userosscache
+*.sln.docstates
