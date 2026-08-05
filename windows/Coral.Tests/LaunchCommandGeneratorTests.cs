@@ -1,4 +1,5 @@
 using Coral.Core.Generators;
+using Coral.Core.Models;
 using Xunit;
 
 namespace Coral.Tests;
@@ -9,7 +10,7 @@ public class LaunchCommandGeneratorTests
     [Fact]
     public void UsesOrchestratorModel()
     {
-        var strategy = TestStrategies.DebateConsensus(); // moderator is Opus 5 (current expert)
+        var strategy = StrategyLibrary.DebateConsensus(); // moderator is Opus 5 (current expert)
         Assert.Equal("claude --model claude-opus-5", LaunchCommandGenerator.Command(strategy));
         Assert.Equal("/model claude-opus-5", LaunchCommandGenerator.InSessionInstruction(strategy));
     }
@@ -17,7 +18,7 @@ public class LaunchCommandGeneratorTests
     [Fact]
     public void RespectsCustomBinaryPath()
     {
-        var strategy = TestStrategies.Solo();
+        var strategy = StrategyLibrary.Solo();
         var cmd = LaunchCommandGenerator.Command(strategy, "/usr/local/bin/claude");
         Assert.StartsWith("/usr/local/bin/claude --model ", cmd);
     }

@@ -3,15 +3,22 @@ using Xunit;
 
 namespace Coral.Tests;
 
-/// <summary>Port of the StrategyValidationTests portion of StrategyForgeTests/GeneratorTests.swift.
-/// (`templatesAreAllValid`, which iterates the full StrategyLibrary, is skipped — that
-/// library isn't ported yet; see windows/PORT-PLAN.md Fase 2.)</summary>
+/// <summary>Port of the StrategyValidationTests portion of StrategyForgeTests/GeneratorTests.swift.</summary>
 public class StrategyValidationTests
 {
     [Fact]
+    public void TemplatesAreAllValid()
+    {
+        foreach (var strategy in StrategyLibrary.All)
+        {
+            Assert.True(strategy.IsValid, $"Template {strategy.Name} should be valid");
+        }
+    }
+
+    [Fact]
     public void DetectsMissingOrchestrator()
     {
-        var strategy = TestStrategies.OrchestratorWorkers();
+        var strategy = StrategyLibrary.OrchestratorWorkers();
         strategy.Roles = strategy.Roles.Where(r => !r.IsOrchestrator).ToList();
         Assert.False(strategy.IsValid);
     }
@@ -19,7 +26,7 @@ public class StrategyValidationTests
     [Fact]
     public void DetectsDuplicateNames()
     {
-        var strategy = TestStrategies.OrchestratorWorkers();
+        var strategy = StrategyLibrary.OrchestratorWorkers();
         strategy.Roles[1].Name = strategy.Roles[0].Name;
         Assert.False(strategy.IsValid);
     }
@@ -29,7 +36,7 @@ public class StrategyValidationTests
     {
         // A "worker" with count 3 writes worker-1…worker-3; a literal "worker-1" writes
         // the same file — different names, so the plain duplicate check misses it.
-        var strategy = TestStrategies.OrchestratorWorkers();
+        var strategy = StrategyLibrary.OrchestratorWorkers();
         var orch = strategy.Roles.First(r => r.IsOrchestrator);
         strategy.Roles = new List<AgentRole>
         {

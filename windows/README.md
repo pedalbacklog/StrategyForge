@@ -44,8 +44,8 @@ windows/
 
 `Coral.Core` today ports:
 - **Models**: `ClaudeModel`, `RoleKind`, `AgentRole`, `Strategy` (+ validation),
-  `McpServer`, `AIProvider`/`ProviderModel` — equivalents of the macOS app's
-  `Models/*.swift`.
+  `McpServer`, `StrategyLibrary` (all 15 built-in templates), `AIProvider`/
+  `ProviderModel` — equivalents of the macOS app's `Models/*.swift`.
 - **Services**: `ModelCatalog` — built-in per-provider model defaults, plus parsing
   the live `models.json` (the shared contract above) as an override.
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
@@ -68,7 +68,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **40/40**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **41/41**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. The `Coral`
 > WinUI 3 app project needs the Windows App SDK/Windows 10 SDK and can only be built on
 > Windows — `windows-tests.yml` (below) is its real check, and it passed on the Fase 1
@@ -87,13 +87,14 @@ gate either direction: changes here never trigger a macOS run, and macOS-only ch
 
 ## Status
 
-**Fase 1 (scaffolding) done**; **Fase 2 (portable core) in progress**, per
+**Fase 1 (scaffolding) done**; **Fase 2 (portable core) well underway**, per
 `PORT-PLAN.md`'s stack recommendation (WinUI 3 + .NET 8/C#, confirmed). Ported so far:
 the full "Strategy → subagent `.md` files + CLAUDE.md + launch command" path
 (`AgentRole`/`Strategy`/validation + `AgentFileGenerator`/`ClaudeMdGenerator`/
-`LaunchCommandGenerator`/`FileDiff`), plus `ModelCatalog` from Fase 1 — 40 xUnit tests,
-all passing. Still not ported: `StrategyLibrary` (the 13 templates), `EvalSuite`/
-`ToolChecks`, `Strategy.AutoFixed()`, and everything under `Services/` beyond
-`ModelCatalog` (git, providers, auth, loops — the last one stays vetoed for human review
-per Fase 8). The `Coral` WinUI 3 app project itself is still just the Fase 1 blank
-window — no UI wired to any of this yet (Fase 5).
+`LaunchCommandGenerator`/`FileDiff`), all 15 built-in `StrategyLibrary` templates, plus
+`ModelCatalog` from Fase 1 — 41 xUnit tests, all passing (including
+`TemplatesAreAllValid`, which iterates every template through `Strategy.Validate()`).
+Still not ported: `EvalSuite`/`ToolChecks`, `Strategy.AutoFixed()`, and everything under
+`Services/` beyond `ModelCatalog` (git, providers, auth, loops — the last one stays
+vetoed for human review per Fase 8). The `Coral` WinUI 3 app project itself is still
+just the Fase 1 blank window — no UI wired to any of this yet (Fase 5).

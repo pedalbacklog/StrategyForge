@@ -10,7 +10,7 @@ public class AgentFileGeneratorTests
     [Fact]
     public void SkipsOrchestratorAndExpandsCount()
     {
-        var strategy = TestStrategies.OrchestratorWorkers(); // 1 orchestrator + worker(count 3)
+        var strategy = StrategyLibrary.OrchestratorWorkers(); // 1 orchestrator + worker(count 3)
         var files = AgentFileGenerator.Generate(strategy);
 
         Assert.All(files, f => Assert.DoesNotContain("orchestrator", f.RelativePath));
@@ -24,7 +24,7 @@ public class AgentFileGeneratorTests
     [Fact]
     public void SingleInstanceHasNoSuffix()
     {
-        var strategy = TestStrategies.ExecutorAdvisor(); // advisor count 1
+        var strategy = StrategyLibrary.ExecutorAdvisor(); // advisor count 1
         var files = AgentFileGenerator.Generate(strategy);
         Assert.Single(files);
         Assert.Equal(".claude/agents/advisor.md", files[0].RelativePath);
@@ -33,7 +33,7 @@ public class AgentFileGeneratorTests
     [Fact]
     public void FrontmatterIsValidAndPinsModel()
     {
-        var strategy = TestStrategies.OrchestratorWorkers();
+        var strategy = StrategyLibrary.OrchestratorWorkers();
         var file = AgentFileGenerator.Generate(strategy).First();
         var contents = file.Contents;
 
@@ -54,7 +54,7 @@ public class AgentFileGeneratorTests
     [Fact]
     public void ToolsAreEmittedWhenPresent()
     {
-        var strategy = TestStrategies.ResearchFanout(); // researchers are read-only
+        var strategy = StrategyLibrary.ResearchFanout(); // researchers are read-only
         var file = AgentFileGenerator.Generate(strategy).First();
         Assert.Contains("tools: Read, Grep, Glob", file.Contents);
     }
