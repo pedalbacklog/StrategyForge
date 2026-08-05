@@ -1,4 +1,4 @@
-Comment Coral for Windows
+# Coral for Windows
 
 Native Windows port of Coral, built with Visual Studio. Lives entirely in this folder so
 it can be developed in parallel with the macOS app (`StrategyForge/`) without touching
