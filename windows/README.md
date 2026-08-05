@@ -8,8 +8,10 @@ its build, its CI gate, or its code.
 
 There is **no shared code** between the two apps — the macOS app is SwiftUI/AppKit and
 can only build on Apple platforms, so a Windows port is a from-scratch implementation in
-whatever stack Visual Studio targets (WinUI 3, MAUI, or C++/WinRT — pick what fits; not
-decided yet). What *is* shared is the product surface and its data contracts:
+whatever stack Visual Studio targets. See **[`PORT-PLAN.md`](PORT-PLAN.md)** for the
+full analysis, the stack recommendation (WinUI 3 + .NET, pending sign-off), the
+macOS→Windows service/API mapping, the phased work order, and a Windows-specific
+security review. What *is* shared is the product surface and its data contracts:
 
 - **`models.json`** and **`skills.json`** (repo root) — the live model/skills catalog.
   Both apps read the same files, so the schema is a cross-platform contract: don't change
@@ -48,7 +50,8 @@ project to build. It runs on `windows-latest` and is independent of the macOS
 
 ## Status
 
-Scaffolding only — no project yet. First contribution: pick the stack (WinUI 3 vs MAUI
-vs C++/WinRT), scaffold the solution here, and replace this section with real "first
-build" instructions (mirroring the macOS "First build" section in the root
-`CONTRIBUTING.md`).
+Scaffolding only — no project yet. `PORT-PLAN.md` proposes WinUI 3 + .NET (C#) with
+MSIX packaging; once that's confirmed, first contribution is Phase 1 from that plan:
+scaffold the solution here, wire `windows-tests.yml` to a real `dotnet test` step, and
+replace this section with real "first build" instructions (mirroring the macOS "First
+build" section in the root `CONTRIBUTING.md").
