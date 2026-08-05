@@ -5,9 +5,6 @@ namespace Coral.Core.Models;
 /// <summary>
 /// Port of <c>StrategyForge/Models/Strategy.swift</c>. A multi-agent topology,
 /// fully editable (model and count per role).
-///
-/// <c>AutoFixed()</c> is not ported yet — nothing in Coral.Core references it
-/// today; add it alongside whatever UI/feature needs it.
 /// </summary>
 public sealed class Strategy
 {
@@ -205,5 +202,73 @@ public sealed class Strategy
     {
         if (name.Length == 0) return false;
         return name.All(c => c < 128 && (char.IsLetterOrDigit(c) || c == '-' || c == '_'));
+    }
+
+    // MARK: - Auto-fix
+
+    /// <summary>True when at least one issue can be resolved automatically.</summary>
+    public bool HasAutoFixableIssues
+    {
+        get
+        {
+            var fixedStrategy = AutoFixed();
+            if (fixedStrategy.Roles.Count != Roles.Count) return true;
+            for (var i = 0; i < Roles.Count; i++)
+            {
+                if (Roles[i].Name != fixedStrategy.Roles[i].Name) return true;
+                if (Roles[i].Count != fixedStrategy.Roles[i].Count) return true;
+                if (!Roles[i].Tools.SequenceEqual(fixedStrategy.Roles[i].Tools)) return true;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>Return a copy with all safe, mechanical issues fixed:
+    /// <list type="bullet">
+    /// <item>read-only roles (advisor/reviewer/researcher) lose write tools;</item>
+    /// <item>subagents lose the <c>Agent</c> tool (single level of delegation);</item>
+    /// <item>counts below 1 are clamped to 1;</item>
+    /// <item>duplicate role names get a numeric suffix.</item>
+    /// </list>
+    /// Structural problems (e.g. missing orchestrator) are left for the user.</summary>
+    public Strategy AutoFixed()
+    {
+        var writeTools = new HashSet<string> { "Write", "Edit", "Bash" };
+        var newRoles = Roles.Select(r => r.Clone()).ToList();
+
+        foreach (var role in newRoles)
+        {
+            if (role.Role.IsReadOnlyByDefault() && !role.IsOrchestrator)
+            {
+                role.Tools.RemoveAll(writeTools.Contains);
+            }
+            if (!role.IsOrchestrator)
+            {
+                role.Tools.RemoveAll(t => t == "Agent");
+            }
+            if (role.Count < 1) role.Count = 1;
+            if (role.IsOrchestrator) role.Count = 1;
+        }
+
+        // De-duplicate names deterministically (append -2, -3, … to later dupes).
+        var seen = new Dictionary<string, int>();
+        foreach (var role in newRoles)
+        {
+            var name = role.Name;
+            if (seen.TryGetValue(name, out var n))
+            {
+                var next = n + 1;
+                seen[name] = next;
+                role.Name = $"{name}-{next}";
+            }
+            else
+            {
+                seen[name] = 1;
+            }
+        }
+
+        return new Strategy(Name, Description, newRoles, OrchestrationNotes,
+            new List<McpServer>(McpServers), new List<string>(Skills), EvalSuite,
+            new List<ToolCheck>(ToolChecks), Id);
     }
 }

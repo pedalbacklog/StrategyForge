@@ -54,11 +54,14 @@ windows/
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
   `.claude/workflows/*.mjs` dynamic workflow), `McpConfigGenerator` (`.mcp.json` +
   Gemini/Codex CLI equivalents), `GeneratedFile`/`FileDiff`/`LineDiff` (pure LCS diff
-  for before-you-write previews), and `StrategyWriter` — the first port that
-  actually touches disk (`System.IO`): writes subagents, merges CLAUDE.md, seeds
-  memory files, writes the dynamic workflow and MCP configs, and prunes only the
+  for before-you-write previews), `StrategyWriter` (the first port that actually
+  touches disk — `System.IO`: writes subagents, merges CLAUDE.md, seeds memory
+  files, writes the dynamic workflow and MCP configs, and prunes only the
   managed-signature files that fell out of the current strategy, never hand-written
-  ones — equivalents of `Generators/*.swift`.
+  ones), `CostEstimationHooks` (rough per-strategy $/token estimate, effort-scaled),
+  and `MissionReport` (shareable run headline + Markdown report; the part that
+  derives per-agent stats from the live activity timeline isn't ported yet — see
+  Status below) — equivalents of `Generators/*.swift`.
 
 `Coral.Tests` mirrors the matching macOS test files (`GeneratorTests`, `DiffTests`,
 `ModelJSONTests`), plus `ModelCatalogTests` parses the *real* repo-root `models.json`
@@ -75,7 +78,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **68/68**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **78/78**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. The `Coral`
 > WinUI 3 app project needs the Windows App SDK/Windows 10 SDK and can only be built on
 > Windows — `windows-tests.yml` (below) is its real check, and it passed on the Fase 1
@@ -94,19 +97,21 @@ gate either direction: changes here never trigger a macOS run, and macOS-only ch
 
 ## Status
 
-**Fase 1 (scaffolding) done**; **Fase 2 (portable core) close to done** — see
-`PORT-PLAN.md` §6 for the live done/remaining checklist. Ported so far: the full
+**Fase 1 (scaffolding) done**; **Fase 2 (portable core) essentially done** — see
+`PORT-PLAN.md` §6 for the live done/remaining checklist. Ported: the full
 "Strategy → subagent `.md` files + CLAUDE.md + dynamic workflow + MCP configs,
-written to disk" path (`AgentRole`/`Strategy`/validation +
+written to disk" path (`AgentRole`/`Strategy`/validation + `Strategy.AutoFixed()` +
 `AgentFileGenerator`/`ClaudeMdGenerator`/`LaunchCommandGenerator`/`WorkflowGenerator`/
 `McpConfigGenerator`/`FileDiff`/`StrategyWriter`), all 15 built-in `StrategyLibrary`
 templates, `EvalSuite`/`ToolCheck` (pure scoring/assertion logic — the judge and
-command runner that produce their inputs are Services, not ported), plus
-`ModelCatalog` from Fase 1 — 68 xUnit tests, all passing (including
-`TemplatesAreAllValid`, which iterates every template through `Strategy.Validate()`,
-and `StrategyWriterTests`, which round-trips real writes to a temp directory). Still
-not ported: `Strategy.AutoFixed()`, `Generators/MissionReport.swift`/
-`CostEstimationHooks.swift`, and everything under `Services/` beyond `ModelCatalog`
-(git, providers, auth, loops — the last one stays vetoed for human review per Fase 8).
-The `Coral` WinUI 3 app project itself is still just the Fase 1 blank window — no UI
+command runner that produce their inputs are Services, not ported), cost estimation
+(`CostEstimationHooks`), the shareable mission-report headline/Markdown
+(`MissionReport`), plus `ModelCatalog` from Fase 1 — 78 xUnit tests, all passing
+(including `TemplatesAreAllValid`, which iterates every template through
+`Strategy.Validate()`, and `StrategyWriterTests`, which round-trips real writes to a
+temp directory). Still not ported: `MissionReport.agentLines()` (needs the not-yet-
+built chat/activity runtime — `ActivityStep`/`AgentNameMatcher` — so it's deferred to
+Fase 5 on purpose), and everything under `Services/` beyond `ModelCatalog` (git,
+providers, auth, loops — the last one stays vetoed for human review per Fase 8). The
+`Coral` WinUI 3 app project itself is still just the Fase 1 blank window — no UI
 wired to any of this yet (Fase 5).

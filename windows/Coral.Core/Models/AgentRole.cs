@@ -74,6 +74,14 @@ public sealed class AgentRole
     /// expanded instance, so <c>worker-2</c> keeps its own notes).</summary>
     public string MemoryPath(string instanceName) => $".claude/memory/{instanceName}.md";
 
+    /// <summary>An independent copy — mutating the clone's <see cref="Tools"/> or
+    /// other fields never affects the original. Used by <c>Strategy.AutoFixed()</c>
+    /// so it can apply fixes to a scratch copy, matching the Swift struct's
+    /// copy-on-write semantics.</summary>
+    public AgentRole Clone() => new(
+        Name, Role, Model, SystemPrompt, Description, Provider, ProviderModelId,
+        new List<string>(Tools), Count, IsOrchestrator, MemoryEnabled, Id);
+
     /// <summary>The model name to display for this role, honoring the provider choice.</summary>
     public string ModelDisplayName
     {

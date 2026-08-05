@@ -199,7 +199,9 @@ antivirus y es, a la vez, una superficie real si se implementa mal.
 Fase 0 — Decisión y setup            ✅ hecha (esta doc + confirmación del stack)
 Fase 1 — Scaffolding                 ✅ hecha: Coral.sln, Coral (WinUI3, unpackaged),
                                       Coral.Core, Coral.Tests, windows-tests.yml real
-Fase 2 — Núcleo portable             🔶 en progreso — ver detalle abajo
+Fase 2 — Núcleo portable             ✅ esencialmente cerrada — ver detalle abajo
+                                      (solo queda MissionReport.agentLines(),
+                                      diferido a Fase 5 a propósito)
 Fase 3 — Runner de procesos          Process spawn + parseo NDJSON (equivalente a
                                       ClaudeRunner) + ConPTY para login — CON TESTS,
                                       sin CLI real todavía (fakes)
@@ -242,13 +244,21 @@ la capa de más ROI porque es lógica pura sin UI):
   semillas de memoria + workflow dinámico + `.mcp.json`/Gemini/Codex, podando
   SOLO los archivos con firma gestionada que ya no corresponden a la estrategia
   actual (nunca toca archivos escritos a mano)
-- ⬜ `Strategy.AutoFixed()`
-- ⬜ `Generators/MissionReport.swift`, `CostEstimationHooks.swift` y el resto de
-  `Generators/` que aún no tenga consumidor
+- ✅ `Strategy.autoFixed()`/`hasAutoFixableIssues` → `Strategy.AutoFixed()`/
+  `HasAutoFixableIssues` (más `AgentRole.Clone()`, nuevo, para la semántica de
+  copia que el struct de Swift tenía gratis)
+- ✅ `Generators/CostEstimationHooks.swift` → `CostEstimationHooks.cs`
+  (`StrategyCost`, `CostEffort`, `CostEstimator`) + tabla de precios/constantes
+  de `Constants.swift` → `Constants.cs`
+- 🔶 `Generators/MissionReport.swift` → `MissionReport.cs` — solo `Headline`/
+  `Markdown` (puros); `agentLines(strategy:timeline:)` queda sin portar porque
+  depende de `ActivityStep` (un tipo de ViewModel) y `AgentNameMatcher`
+  (`Services/`), ninguno portado — se hará junto al runtime de chat/actividad
+  (Fase 5)
 - ⬜ Todo lo demás bajo `Services/` distinto de `ModelCatalog` empieza a pisar
   Fase 3 (spawn de procesos, APIs solo-Windows) — no cuenta como Fase 2
 
-68 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
+78 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
 `dotnet test` real en este entorno además de en `windows-latest`).
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
@@ -281,18 +291,16 @@ solo `windows-tests.yml` — nunca el gate de macOS.
 
 ## 9. Siguiente paso concreto
 
-Fases 0-1 hechas; Fase 2 muy avanzada (detalle en §6): el camino completo
-"Strategy → archivos en disco" ya está portado y probado (`StrategyWriter`
-escribiendo de verdad a un directorio temporal, no solo generando strings en
-memoria). Lo que queda de Fase 2:
+Fases 0-1 hechas; Fase 2 esencialmente cerrada (detalle en §6): todo `Models/` y
+`Generators/` que es lógica pura (sin runtime de chat/actividad) está portado y
+probado, incluyendo el camino completo "Strategy → archivos en disco"
+(`StrategyWriter`, contra un directorio temporal real) y la estimación de coste.
+Solo queda pendiente, y deliberadamente diferido:
 
-1. `Strategy.AutoFixed()` — nada en `Coral.Core` lo necesita todavía; portarlo
-   junto con lo que primero lo consuma (probablemente el editor de estrategias,
-   Fase 5).
-2. `Generators/MissionReport.swift`, `CostEstimationHooks.swift` — según vayan
-   haciendo falta, no hay que portarlos todos de una vez si nada los usa aún.
+1. `MissionReport.agentLines()` — depende de `ActivityStep`/`AgentNameMatcher`
+   (runtime de chat), se porta junto a Fase 5.
 
-Cuando eso esté razonablemente cerrado, Fase 3 (runner de procesos) es el
-salto real: ahí es donde entran `System.Diagnostics.Process`, PATH resolution
+Fase 3 (runner de procesos) es el salto real siguiente: ahí es donde entran
+`System.Diagnostics.Process`, PATH resolution
 y ConPTY — la primera vez que el puerto necesita ejecutarse en Windows de
 verdad para probarse (no solo `dotnet test` en Linux).
