@@ -48,13 +48,18 @@ windows/
   `EvalScenario`/`EvalRun`/`EvalRegression`, `ToolCheck`/`ToolCheckEngine`,
   `AIProvider`/`ProviderModel` — equivalents of the macOS app's `Models/*.swift`.
 - **Services**: `ModelCatalog` — built-in per-provider model defaults, plus parsing
-  the live `models.json` (the shared contract above) as an override —
-  and `ClaudeStreamParser`/`ChatEvent`/`AgentTodo` (Fase 3's first slice): a pure,
-  tolerant parser for Claude Code's `--output-format stream-json` NDJSON lines
-  (text, tool use, tool results, todos, denials, token usage, the final
-  success/failure line). Never throws on malformed input — unknown lines just
-  yield no events. The process-spawning side that feeds it real subprocess output
-  isn't ported yet (see Status below).
+  the live `models.json` (the shared contract above) as an override;
+  `ClaudeStreamParser`/`ChatEvent`/`AgentTodo` (Fase 3): a pure, tolerant parser
+  for Claude Code's `--output-format stream-json` NDJSON lines (text, tool use,
+  tool results, todos, denials, token usage, the final success/failure line) —
+  never throws on malformed input, unknown lines just yield no events; and
+  `BinaryResolver` (Fase 3): resolves the `claude`/`codex`/`gemini` binary — a
+  fresh Windows design rather than a port (the macOS original shells out to an
+  interactive login shell, which has no Windows equivalent), but the same shape:
+  absolute path → PATH search → `%APPDATA%\npm` fallback, trying `.cmd`/`.exe`/
+  `.bat` shims in that order. Both are pure enough to unit-test on Linux via a
+  fake filesystem probe; the actual process-spawning side that feeds
+  `ClaudeStreamParser` real subprocess output isn't ported yet (see Status below).
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
@@ -84,7 +89,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **88/88**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **95/95**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. The `Coral`
 > WinUI 3 app project needs the Windows App SDK/Windows 10 SDK and can only be built on
 > Windows — `windows-tests.yml` (below) is its real check, and it passed on the Fase 1
@@ -113,15 +118,17 @@ CLAUDE.md + dynamic workflow + MCP configs, written to disk" path
 templates, `EvalSuite`/`ToolCheck` (pure scoring/assertion logic — the judge and
 command runner that produce their inputs are Services, not ported), cost estimation
 (`CostEstimationHooks`), the shareable mission-report headline/Markdown
-(`MissionReport`), `ModelCatalog`, and now `ClaudeStreamParser` — the pure NDJSON
-stream parser that turns Claude Code's `--output-format stream-json` lines into
-`ChatEvent`s — 88 xUnit tests, all passing (including `TemplatesAreAllValid`, which
-iterates every template through `Strategy.Validate()`, and `StrategyWriterTests`,
-which round-trips real writes to a temp directory). Still not ported:
+(`MissionReport`), `ModelCatalog`, the pure NDJSON stream parser
+(`ClaudeStreamParser`, turns Claude Code's `--output-format stream-json` lines
+into `ChatEvent`s), and CLI binary resolution (`BinaryResolver`) — 95 xUnit
+tests, all passing (including `TemplatesAreAllValid`, which iterates every
+template through `Strategy.Validate()`, and `StrategyWriterTests`, which
+round-trips real writes to a temp directory). Still not ported:
 `MissionReport.agentLines()` (needs the not-yet-built chat/activity runtime —
 `ActivityStep`/`AgentNameMatcher` — deferred to Fase 5 on purpose), the actual
-process-spawning half of Fase 3 (`System.Diagnostics.Process`, PATH resolution,
-ConPTY — needs Windows to verify with confidence, so it lands as its own
+process spawn + stdout streaming that ties `BinaryResolver` and
+`ClaudeStreamParser` together (`System.Diagnostics.Process`, no shell, ConPTY for
+login — needs Windows to verify with confidence, so it lands as its own
 `windows-latest`-checked increment), and everything else under `Services/` (git,
 providers, auth, loops — the last one stays vetoed for human review per Fase 8). The
 `Coral` WinUI 3 app project itself is still just the Fase 1 blank window — no UI

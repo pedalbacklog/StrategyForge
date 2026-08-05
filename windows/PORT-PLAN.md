@@ -270,9 +270,18 @@ empezando por lo que es puro y testeable sin spawnear nada):
   privado en la base → jerarquía cerrada, el equivalente más directo en C#
   al enum de Swift con valores asociados). Nunca lanza excepción ante JSON
   malformado/adversarial — mismo contrato "tolerante" que el original.
-- ⬜ `ClaudeRunner.resolveBinary()`/`which()`/PATH resolution — lógica
-  mayormente pura (dado un `PATH` y un `FileManager`/`IO` fake se puede
-  testear sin spawnear nada de verdad)
+- ✅ `ClaudeRunner.resolveBinary()`/`which()` → `BinaryResolver.cs` — **no** es
+  un puerto 1:1 (el original invoca un shell de login interactivo `/bin/zsh
+  -ilc` para cargar `~/.zshrc`/nvm/Homebrew, sin equivalente en Windows; los
+  binarios instalados vía npm en Windows son shims `.cmd`, y las rutas
+  conocidas son otras — ver el mapa macOS→Windows en §3). Diseño nuevo con la
+  misma forma: ruta absoluta configurada → búsqueda en `PATH` → fallback a
+  `%APPDATA%\npm` por nombre de hoja, probando `.cmd`/`.exe`/`.bat` en ese
+  orden. `ResolveUncached` es puro (recibe `PATH`/home/probe de ejecutable
+  como parámetros vía `IExecutableProbe`), así que el ALGORITMO se prueba sin
+  tocar disco real ni depender de qué SO corre `dotnet test`; solo
+  `Resolve()` (la capa fina que lee el `PATH`/home reales) queda sin
+  verificar hasta correr en Windows de verdad
 - ⬜ El spawn real (`Process.Start` sin shell, streaming de stdout línea a
   línea, `PermissionResponder`/`LaunchGate`/`InactivityWatchdog`) — esto SÍ
   necesita ejecutarse en Windows de verdad para probarse con confianza, así
@@ -281,7 +290,7 @@ empezando por lo que es puro y testeable sin spawnear nada):
 - ⬜ ConPTY para captura de login OAuth — API solo-Windows, sin equivalente
   probable en Linux; documentar y portar cuando llegue Fase 6
 
-88 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
+95 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
 `dotnet test` real en este entorno además de en `windows-latest`).
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
@@ -323,15 +332,13 @@ Solo queda pendiente, y deliberadamente diferido:
 1. `MissionReport.agentLines()` — depende de `ActivityStep`/`AgentNameMatcher`
    (runtime de chat), se porta junto a Fase 5.
 
-Fase 3 (runner de procesos) ya empezó: el parser NDJSON puro
-(`ClaudeStreamParser`) está portado y probado (detalle en §6). Lo que queda de
-Fase 3, en orden:
+Fase 3 (runner de procesos) avanza: el parser NDJSON puro (`ClaudeStreamParser`)
+y la resolución de binario/PATH (`BinaryResolver`) están portados y probados
+(detalle en §6). Lo que queda de Fase 3:
 
-1. `ClaudeRunner.resolveBinary()`/PATH resolution — todavía mayormente lógica
-   pura (dado un PATH y una capa de IO fake), con tests.
-2. El spawn real (`System.Diagnostics.Process`, sin shell, `ArgumentList`) +
+1. El spawn real (`System.Diagnostics.Process`, sin shell, `ArgumentList`) +
    streaming de stdout línea a línea hacia `ClaudeStreamParser.Events()` — la
    primera vez que el puerto necesita ejecutarse en Windows de verdad para
    probarse con confianza (`windows-latest`, con un binario fake — no
    `claude` real todavía).
-3. ConPTY para login OAuth — API solo-Windows, entra más adelante (Fase 6).
+2. ConPTY para login OAuth — API solo-Windows, entra más adelante (Fase 6).
