@@ -231,15 +231,24 @@ la capa de más ROI porque es lógica pura sin UI):
   y el motor de aserciones `ToolCheckEngine`; el juez que produce un `EvalRun`
   real y el runner que ejecuta un `ToolCheck` de verdad son `Services/`, no
   portados — spawnean procesos o llaman al modelo)
+- ✅ `Generators/WorkflowGenerator.swift` → `WorkflowGenerator.cs` (topología del
+  equipo → programa `.mjs` ejecutable: fan-out por rol o fan-out por ítem según
+  el equipo, fases Plan/Work/Verify/Synthesize, escaping JS)
+- ✅ `Generators/McpConfigGenerator.swift` → `McpConfigGenerator.cs` (`.mcp.json`
+  con merge preservando servidores del usuario, `.gemini/settings.json`
+  reutilizando el mismo merge, `.codex/config.toml` sin merge)
+- ✅ `Generators/StrategyWriter.swift` → `StrategyWriter.cs` — primer puerto que
+  toca disco de verdad (`System.IO`): escribe subagentes + CLAUDE.md fusionado +
+  semillas de memoria + workflow dinámico + `.mcp.json`/Gemini/Codex, podando
+  SOLO los archivos con firma gestionada que ya no corresponden a la estrategia
+  actual (nunca toca archivos escritos a mano)
 - ⬜ `Strategy.AutoFixed()`
-- ⬜ `Generators/StrategyWriter.swift` (el único que hace I/O real — escribe los
-  `GeneratedFile` a disco; hoy los generators son puros y no tocan el filesystem)
-- ⬜ `Generators/WorkflowGenerator.swift`, `McpConfigGenerator.swift`,
-  `MissionReport.swift`, `CostEstimationHooks.swift` y el resto de `Generators/`
+- ⬜ `Generators/MissionReport.swift`, `CostEstimationHooks.swift` y el resto de
+  `Generators/` que aún no tenga consumidor
 - ⬜ Todo lo demás bajo `Services/` distinto de `ModelCatalog` empieza a pisar
   Fase 3 (spawn de procesos, APIs solo-Windows) — no cuenta como Fase 2
 
-50 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
+68 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
 `dotnet test` real en este entorno además de en `windows-latest`).
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
@@ -272,15 +281,16 @@ solo `windows-tests.yml` — nunca el gate de macOS.
 
 ## 9. Siguiente paso concreto
 
-Fases 0-1 hechas; Fase 2 en progreso (detalle en §6). El resto del backlog de
-Fase 2 antes de pasar a Fase 3:
+Fases 0-1 hechas; Fase 2 muy avanzada (detalle en §6): el camino completo
+"Strategy → archivos en disco" ya está portado y probado (`StrategyWriter`
+escribiendo de verdad a un directorio temporal, no solo generando strings en
+memoria). Lo que queda de Fase 2:
 
-1. `Generators/StrategyWriter.swift` — primer punto donde `Coral.Core` toca
-   disco (`System.IO` en vez de `FileManager`); necesita tests con un
-   directorio temporal, como ya hace `StrategyWriterTests.swift` en macOS.
-2. El resto de `Generators/` (`WorkflowGenerator`, `McpConfigGenerator`,
-   `MissionReport`, etc.) según vayan haciendo falta — no hay que portarlos
-   todos de una sola vez si nada los usa aún.
+1. `Strategy.AutoFixed()` — nada en `Coral.Core` lo necesita todavía; portarlo
+   junto con lo que primero lo consuma (probablemente el editor de estrategias,
+   Fase 5).
+2. `Generators/MissionReport.swift`, `CostEstimationHooks.swift` — según vayan
+   haciendo falta, no hay que portarlos todos de una vez si nada los usa aún.
 
 Cuando eso esté razonablemente cerrado, Fase 3 (runner de procesos) es el
 salto real: ahí es donde entran `System.Diagnostics.Process`, PATH resolution
