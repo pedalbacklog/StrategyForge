@@ -3,9 +3,11 @@
 > Este documento es el resultado de analizar el código actual de `StrategyForge/`
 > (la app macOS) y de `windows/README.md` (el scaffold ya existente) para proponer
 > un plan concreto: stack, requisitos, orden de trabajo y revisión de seguridad.
-> No sustituye a `windows/README.md` — lo desarrolla. La primera sección
-> ("Decisión de stack") es la única que necesita tu confirmación antes de que el
-> resto del plan tenga sentido; todo lo posterior asume esa elección.
+> No sustituye a `windows/README.md` — lo desarrolla.
+>
+> **Stack confirmado** (§1) — el resto del plan asume esa elección. Progreso real
+> por fase en §6; `windows/README.md` → "Status" tiene el estado más al día
+> (qué hay portado, cuántos tests, qué falta) porque se actualiza en cada commit.
 
 ## 0. Qué NO cambia
 
@@ -24,10 +26,10 @@
   el gate de `StrategyForge/`; este trabajo no debe tocar esos archivos salvo
   para el propio `windows-tests.yml`.
 
-## 1. Decisión de stack — recomendación
+## 1. Decisión de stack — recomendación (✅ confirmada)
 
-`windows/README.md` deja el stack abierto: WinUI 3, MAUI o C++/WinRT. Mi
-recomendación:
+`windows/README.md` dejaba el stack abierto: WinUI 3, MAUI o C++/WinRT. Mi
+recomendación, confirmada por el founder:
 
 **WinUI 3 + .NET 8 (C#), MVVM con `CommunityToolkit.Mvvm`, empaquetado MSIX
 (con fallback a instalador firmado sin MSIX si el Store/sideload da fricción).**
@@ -194,11 +196,10 @@ antivirus y es, a la vez, una superficie real si se implementa mal.
 ## 6. Orden de trabajo (fases)
 
 ```
-Fase 0 — Decisión y setup            (esta doc + confirmación del stack)
-Fase 1 — Scaffolding                 solution WinUI3, proyecto app + proyecto test,
-                                      lee models.json/skills.json de la raíz, CI real
-Fase 2 — Núcleo portable             Models/ + Generators/ traducidos 1:1 con tests
-                                      (la parte de más ROI: lógica pura, sin UI)
+Fase 0 — Decisión y setup            ✅ hecha (esta doc + confirmación del stack)
+Fase 1 — Scaffolding                 ✅ hecha: Coral.sln, Coral (WinUI3, unpackaged),
+                                      Coral.Core, Coral.Tests, windows-tests.yml real
+Fase 2 — Núcleo portable             🔶 en progreso — ver detalle abajo
 Fase 3 — Runner de procesos          Process spawn + parseo NDJSON (equivalente a
                                       ClaudeRunner) + ConPTY para login — CON TESTS,
                                       sin CLI real todavía (fakes)
@@ -215,6 +216,26 @@ Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
 Fase 10 — Beta                       paridad P1 cerrada, docs de Windows en
                                       CONTRIBUTING/README actualizados
 ```
+
+**Fase 2, detalle** (Models/ + Generators/ → `Coral.Core`, traducidos con tests,
+la capa de más ROI porque es lógica pura sin UI):
+- ✅ `Services/ModelCatalog.swift` → `ModelCatalog.cs`
+- ✅ `Models/AgentRole.swift`, `Models/Strategy.swift` (+ `Validate()`/`IsValid`
+  completo) → `AgentRole.cs`, `Strategy.cs`
+- ✅ `Models/StrategyLibrary.swift` (los 15 templates) → `StrategyLibrary.cs`
+- ✅ `Generators/AgentFileGenerator.swift`, `ClaudeMdGenerator.swift`,
+  `LaunchCommandGenerator.swift`, `FileDiff.swift`/`GeneratedFile.swift` →
+  puertos 1:1 en `Coral.Core/Generators/`
+- ⬜ `Models/EvalSuite.swift`, `Models/ToolCheck.swift`, `Strategy.AutoFixed()`
+- ⬜ `Generators/StrategyWriter.swift` (el único que hace I/O real — escribe los
+  `GeneratedFile` a disco; hoy los generators son puros y no tocan el filesystem)
+- ⬜ `Generators/WorkflowGenerator.swift`, `McpConfigGenerator.swift`,
+  `MissionReport.swift`, `CostEstimationHooks.swift` y el resto de `Generators/`
+- ⬜ Todo lo demás bajo `Services/` distinto de `ModelCatalog` empieza a pisar
+  Fase 3 (spawn de procesos, APIs solo-Windows) — no cuenta como Fase 2
+
+41 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
+`dotnet test` real en este entorno además de en `windows-latest`).
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
 solo `windows-tests.yml` — nunca el gate de macOS.
@@ -244,13 +265,21 @@ solo `windows-tests.yml` — nunca el gate de macOS.
   distribuirse como instalador firmado directo, igual que macOS ships fuera
   de la Mac App Store hoy.
 
-## 9. Primer paso concreto
+## 9. Siguiente paso concreto
 
-1. Confirmar la elección de stack (§1) — es la única decisión que bloquea
-   todo lo demás.
-2. Abrir el PR de **Fase 1**: crear `windows/Coral.sln`, `windows/Coral/`
-   (proyecto WinUI 3 app) y `windows/Coral.Tests/` (xUnit), reemplazar el job
-   placeholder de `.github/workflows/windows-tests.yml` por
-   `dotnet test` real, y actualizar la sección "Status" de
-   `windows/README.md` para reflejar que el stack ya está decidido y el
-   primer build existe.
+Fases 0-1 hechas; Fase 2 en progreso (detalle en §6). El resto del backlog de
+Fase 2 antes de pasar a Fase 3:
+
+1. `Models/EvalSuite.swift`, `Models/ToolCheck.swift` — pequeños, sin
+   dependencias nuevas.
+2. `Generators/StrategyWriter.swift` — primer punto donde `Coral.Core` toca
+   disco (`System.IO` en vez de `FileManager`); necesita tests con un
+   directorio temporal, como ya hace `StrategyWriterTests.swift` en macOS.
+3. El resto de `Generators/` (`WorkflowGenerator`, `McpConfigGenerator`,
+   `MissionReport`, etc.) según vayan haciendo falta — no hay que portarlos
+   todos de una sola vez si nada los usa aún.
+
+Cuando eso esté razonablemente cerrado, Fase 3 (runner de procesos) es el
+salto real: ahí es donde entran `System.Diagnostics.Process`, PATH resolution
+y ConPTY — la primera vez que el puerto necesita ejecutarse en Windows de
+verdad para probarse (no solo `dotnet test` en Linux).
