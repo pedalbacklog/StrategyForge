@@ -57,5 +57,11 @@ public static class Constants
         /// <summary>Cache reads cost about a tenth of fresh input at both labs
         /// (~90% off).</summary>
         public const double CacheReadMultiplier = 0.1;
+
+        /// <summary>Blended $/M-token used ONLY to turn an estimated token count
+        /// into a rough "~$" for a model we don't have a real price for
+        /// (Codex/Gemini). A mid-tier placeholder, always shown with a "~". Not a
+        /// billing figure.</summary>
+        public const double EstimatedBlendedFallbackPerM = 5.0;
     }
 }

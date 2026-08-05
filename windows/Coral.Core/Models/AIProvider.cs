@@ -32,4 +32,13 @@ public static class AIProviderExtensions
         "gemini" => AIProvider.Gemini,
         _ => null,
     };
+
+    /// <summary>Human name shown in the UI.</summary>
+    public static string DisplayName(this AIProvider provider) => provider switch
+    {
+        AIProvider.Claude => "Claude",
+        AIProvider.Openai => "ChatGPT · Codex",
+        AIProvider.Gemini => "Gemini",
+        _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, null),
+    };
 }

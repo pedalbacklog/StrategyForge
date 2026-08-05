@@ -57,11 +57,16 @@ windows/
   fresh Windows design rather than a port (the macOS original shells out to an
   interactive login shell, which has no Windows equivalent), but the same shape:
   absolute path → PATH search → `%APPDATA%\npm` fallback, trying `.cmd`/`.exe`/
-  `.bat` shims in that order; and `ClaudeRunArgs` (Fase 3): the CLI argument
+  `.bat` shims in that order; `ClaudeRunArgs` (Fase 3): the CLI argument
   list for one headless turn (`--model`, `--resume`/`--session-id`, `--effort`,
   `--add-dir` per attached folder, `-p <prompt>`), in the exact order
-  `Process.Start` will need it. All three are pure enough to unit-test on Linux
-  via fakes/parameterized inputs; the actual process-spawning side that feeds
+  `Process.Start` will need it; and `CLIOneShotRunner` (Fase 3): the pure half of
+  the multi-provider one-shot runner — per-provider command building
+  (Claude/Codex/Gemini each get their own flags), ANSI-stripping/progress-line
+  cleanup for providers with no structured stream (Codex/Gemini), auth-prompt/
+  auth-failure detection by text, and token/cost estimation for CLIs that report
+  no usage. All four are pure enough to unit-test on Linux via fakes/
+  parameterized inputs; the actual process-spawning side that feeds
   `ClaudeStreamParser` real subprocess output isn't ported yet (see Status below).
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
@@ -92,7 +97,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **102/102**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **113/113**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. The `Coral`
 > WinUI 3 app project needs the Windows App SDK/Windows 10 SDK and can only be built on
 > Windows — `windows-tests.yml` (below) is its real check, and it passed on the Fase 1
@@ -123,11 +128,14 @@ command runner that produce their inputs are Services, not ported), cost estimat
 (`CostEstimationHooks`), the shareable mission-report headline/Markdown
 (`MissionReport`), `ModelCatalog`, the pure NDJSON stream parser
 (`ClaudeStreamParser`, turns Claude Code's `--output-format stream-json` lines
-into `ChatEvent`s), CLI binary resolution (`BinaryResolver`), and the CLI
-argument-list builder (`ClaudeRunArgs`) — 102 xUnit tests, all passing
-(including `TemplatesAreAllValid`, which iterates every template through
-`Strategy.Validate()`, and `StrategyWriterTests`, which round-trips real writes
-to a temp directory). Still not ported: `MissionReport.agentLines()` (needs the
+into `ChatEvent`s), CLI binary resolution (`BinaryResolver`), the CLI
+argument-list builder (`ClaudeRunArgs`), and the pure half of the
+multi-provider one-shot runner (`CLIOneShotRunner`: per-provider command
+building, ANSI/progress-line cleanup, auth-prompt/failure detection, token/cost
+estimation) — 113 xUnit tests, all passing (including `TemplatesAreAllValid`,
+which iterates every template through `Strategy.Validate()`, and
+`StrategyWriterTests`, which round-trips real writes to a temp directory).
+Still not ported: `MissionReport.agentLines()` (needs the
 not-yet-built chat/activity runtime — `ActivityStep`/`AgentNameMatcher` —
 deferred to Fase 5 on purpose), the actual process spawn + stdout streaming that
 ties `BinaryResolver`/`ClaudeRunArgs`/`ClaudeStreamParser` together

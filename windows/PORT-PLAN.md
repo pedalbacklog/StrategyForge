@@ -286,6 +286,19 @@ empezando por lo que es puro y testeable sin spawnear nada):
   → `ClaudeRunArgs.Build()` — puro (dados los inputs, siempre la misma lista
   de argumentos en el mismo orden), así que se prueba sin spawnear nada;
   exactamente lo que el `Process.Start(ArgumentList)` real va a necesitar
+- ✅ La parte pura de `Services/ProviderRun.swift`'s `CLIOneShotRunner` (el
+  runner "one-shot" multi-proveedor que usa `MetaOrchestrator` — no portado
+  todavía) → `CLIOneShotRunner.cs`: `Command()` (argv por proveedor —
+  Claude/Codex/Gemini, cada uno con sus propias flags), `StripAnsi()`/
+  `ProgressLine()` (limpia el output crudo de Codex/Gemini, que no tienen
+  stream estructurado, para mostrar "qué está haciendo ahora"),
+  `IsAuthPrompt()`/`IsAntigravityMigration()`/`AuthFailureMessage()`
+  (detección de fallos de login por texto), `EstimateTokens()`/
+  `EstimatedCostUsd()` (estimación aproximada cuando la CLI no reporta uso
+  real). `OneShotResult`/`OneShotError`/`OneShotEvent` y `parseClaudeJSON()`
+  **no** se portan todavía — ningún test los ejercita de forma aislada hoy y
+  solo tienen sentido junto al runner real (Fase 3's spawn) o a
+  `MetaOrchestrator` (fuera de alcance); añadirlos cuando algo los consuma.
 - ⬜ El spawn real (`Process.Start` sin shell, streaming de stdout línea a
   línea, `PermissionResponder`/`LaunchGate`/`InactivityWatchdog`) — esto SÍ
   necesita ejecutarse en Windows de verdad para probarse con confianza, así
@@ -294,7 +307,7 @@ empezando por lo que es puro y testeable sin spawnear nada):
 - ⬜ ConPTY para captura de login OAuth — API solo-Windows, sin equivalente
   probable en Linux; documentar y portar cuando llegue Fase 6
 
-102 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
+113 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
 `dotnet test` real en este entorno además de en `windows-latest`).
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
