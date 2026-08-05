@@ -282,6 +282,10 @@ empezando por lo que es puro y testeable sin spawnear nada):
   tocar disco real ni depender de qué SO corre `dotnet test`; solo
   `Resolve()` (la capa fina que lee el `PATH`/home reales) queda sin
   verificar hasta correr en Windows de verdad
+- ✅ La construcción de argumentos de `stream()` (líneas 267-281 del original)
+  → `ClaudeRunArgs.Build()` — puro (dados los inputs, siempre la misma lista
+  de argumentos en el mismo orden), así que se prueba sin spawnear nada;
+  exactamente lo que el `Process.Start(ArgumentList)` real va a necesitar
 - ⬜ El spawn real (`Process.Start` sin shell, streaming de stdout línea a
   línea, `PermissionResponder`/`LaunchGate`/`InactivityWatchdog`) — esto SÍ
   necesita ejecutarse en Windows de verdad para probarse con confianza, así
@@ -290,7 +294,7 @@ empezando por lo que es puro y testeable sin spawnear nada):
 - ⬜ ConPTY para captura de login OAuth — API solo-Windows, sin equivalente
   probable en Linux; documentar y portar cuando llegue Fase 6
 
-95 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
+102 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
 `dotnet test` real en este entorno además de en `windows-latest`).
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
@@ -332,12 +336,14 @@ Solo queda pendiente, y deliberadamente diferido:
 1. `MissionReport.agentLines()` — depende de `ActivityStep`/`AgentNameMatcher`
    (runtime de chat), se porta junto a Fase 5.
 
-Fase 3 (runner de procesos) avanza: el parser NDJSON puro (`ClaudeStreamParser`)
-y la resolución de binario/PATH (`BinaryResolver`) están portados y probados
-(detalle en §6). Lo que queda de Fase 3:
+Fase 3 (runner de procesos) avanza: todo lo que es puro está portado y probado
+(detalle en §6) — el parser NDJSON (`ClaudeStreamParser`), la resolución de
+binario/PATH (`BinaryResolver`), y la construcción de argumentos del comando
+(`ClaudeRunArgs`). Solo queda la parte que de verdad necesita Windows:
 
-1. El spawn real (`System.Diagnostics.Process`, sin shell, `ArgumentList`) +
-   streaming de stdout línea a línea hacia `ClaudeStreamParser.Events()` — la
+1. El spawn real (`System.Diagnostics.Process`, sin shell, `ArgumentList` ya
+   armada por `ClaudeRunArgs.Build()`) + streaming de stdout línea a línea
+   hacia `ClaudeStreamParser.Events()` — la
    primera vez que el puerto necesita ejecutarse en Windows de verdad para
    probarse con confianza (`windows-latest`, con un binario fake — no
    `claude` real todavía).
