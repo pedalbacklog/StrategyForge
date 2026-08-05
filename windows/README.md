@@ -42,11 +42,20 @@ windows/
   README.md              # this file
 ```
 
-`Coral.Core` today has one ported vertical slice: `Services/ModelCatalog.cs`, the
-equivalent of `StrategyForge/Services/ModelCatalog.swift` — built-in model defaults per
-provider, plus parsing the live `models.json` (the shared contract above) as an override.
-`Coral.Tests/ModelCatalogTests.cs` parses the *real* repo-root `models.json` (copied into
-the test output at build time), not a fixture that can drift from it.
+`Coral.Core` today ports:
+- **Models**: `ClaudeModel`, `RoleKind`, `AgentRole`, `Strategy` (+ validation),
+  `McpServer`, `AIProvider`/`ProviderModel` — equivalents of the macOS app's
+  `Models/*.swift`.
+- **Services**: `ModelCatalog` — built-in per-provider model defaults, plus parsing
+  the live `models.json` (the shared contract above) as an override.
+- **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
+  `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
+  `LaunchCommandGenerator`, `GeneratedFile`/`FileDiff`/`LineDiff` (pure LCS diff for
+  before-you-write previews) — equivalents of `Generators/*.swift`.
+
+`Coral.Tests` mirrors the matching macOS test files (`GeneratorTests`, `DiffTests`,
+`ModelJSONTests`), plus `ModelCatalogTests` parses the *real* repo-root `models.json`
+(copied into the test output at build time) rather than a fixture that can drift from it.
 
 ## First build
 
@@ -59,10 +68,12 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> This scaffold was authored without access to a Windows machine, so it has **not**
-> been build-verified locally — `windows-tests.yml` (below) is the first real check.
-> If a NuGet package version or a WinUI 3 project-file setting turns out to be wrong,
-> that's expected for a first pass; fix it in place rather than starting over.
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **40/40**
+> tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. The `Coral`
+> WinUI 3 app project needs the Windows App SDK/Windows 10 SDK and can only be built on
+> Windows — `windows-tests.yml` (below) is its real check, and it passed on the Fase 1
+> scaffold. If a NuGet pin or a WinUI 3 project-file setting turns out to be wrong as the
+> app project grows, fix it in place rather than starting over.
 
 ## CI
 
@@ -76,10 +87,13 @@ gate either direction: changes here never trigger a macOS run, and macOS-only ch
 
 ## Status
 
-**Fase 1 (scaffolding) done**, per `PORT-PLAN.md`'s stack recommendation (WinUI 3 +
-.NET 8/C#, confirmed): solution + WinUI 3 app project (unpackaged) + `Coral.Core` +
-xUnit tests, with one real ported service (`ModelCatalog`) rather than an empty shell.
-Not yet build-verified on real Windows/Visual Studio — watch the first `windows-tests.yml`
-run. Next up is **Fase 2**: port the rest of `Models/` and `Generators/` into
-`Coral.Core` (pure logic, highest ROI, mirrors the macOS test coverage in
-`GeneratorTests`/`ModelJSONTests`/etc.).
+**Fase 1 (scaffolding) done**; **Fase 2 (portable core) in progress**, per
+`PORT-PLAN.md`'s stack recommendation (WinUI 3 + .NET 8/C#, confirmed). Ported so far:
+the full "Strategy → subagent `.md` files + CLAUDE.md + launch command" path
+(`AgentRole`/`Strategy`/validation + `AgentFileGenerator`/`ClaudeMdGenerator`/
+`LaunchCommandGenerator`/`FileDiff`), plus `ModelCatalog` from Fase 1 — 40 xUnit tests,
+all passing. Still not ported: `StrategyLibrary` (the 13 templates), `EvalSuite`/
+`ToolChecks`, `Strategy.AutoFixed()`, and everything under `Services/` beyond
+`ModelCatalog` (git, providers, auth, loops — the last one stays vetoed for human review
+per Fase 8). The `Coral` WinUI 3 app project itself is still just the Fase 1 blank
+window — no UI wired to any of this yet (Fase 5).
