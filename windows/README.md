@@ -1,4 +1,4 @@
-# Coral for Windows
+Comment Coral for Windows
 
 Native Windows port of Coral, built with Visual Studio. Lives entirely in this folder so
 it can be developed in parallel with the macOS app (`StrategyForge/`) without touching
@@ -54,4 +54,4 @@ Scaffolding only — no project yet. `PORT-PLAN.md` proposes WinUI 3 + .NET (C#)
 MSIX packaging; once that's confirmed, first contribution is Phase 1 from that plan:
 scaffold the solution here, wire `windows-tests.yml` to a real `dotnet test` step, and
 replace this section with real "first build" instructions (mirroring the macOS "First
-build" section in the root `CONTRIBUTING.md").
+build" section in the root `CONTRIBUTING.md`).
