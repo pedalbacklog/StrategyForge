@@ -6,9 +6,8 @@ namespace Coral.Core.Models;
 /// Port of <c>StrategyForge/Models/Strategy.swift</c>. A multi-agent topology,
 /// fully editable (model and count per role).
 ///
-/// <c>EvalSuite</c>/<c>ToolChecks</c> (Swift's optional eval suite and deterministic
-/// tool checks) and <c>AutoFixed()</c> are not ported yet — nothing in Coral.Core
-/// references them today; add them alongside whatever UI/feature needs them.
+/// <c>AutoFixed()</c> is not ported yet — nothing in Coral.Core references it
+/// today; add it alongside whatever UI/feature needs it.
 /// </summary>
 public sealed class Strategy
 {
@@ -24,6 +23,12 @@ public sealed class Strategy
     public List<McpServer> McpServers { get; set; }
     /// <summary>Attached skill slugs (folders under .claude/skills).</summary>
     public List<string> Skills { get; set; }
+    /// <summary>Optional eval suite: reusable test scenarios the team is scored
+    /// against, so it can be measured before trusting it.</summary>
+    public EvalSuite? EvalSuite { get; set; }
+    /// <summary>Deterministic tool unit tests: each runs a command and asserts
+    /// on the output, no model in the loop.</summary>
+    public List<ToolCheck> ToolChecks { get; set; }
 
     public Strategy(
         string name,
@@ -32,6 +37,8 @@ public sealed class Strategy
         string orchestrationNotes,
         List<McpServer>? mcpServers = null,
         List<string>? skills = null,
+        EvalSuite? evalSuite = null,
+        List<ToolCheck>? toolChecks = null,
         Guid? id = null)
     {
         Id = id ?? Guid.NewGuid();
@@ -41,6 +48,8 @@ public sealed class Strategy
         OrchestrationNotes = orchestrationNotes;
         McpServers = mcpServers ?? new List<McpServer>();
         Skills = skills ?? new List<string>();
+        EvalSuite = evalSuite;
+        ToolChecks = toolChecks ?? new List<ToolCheck>();
     }
 
     /// <summary>The single orchestrator role, if the strategy is well-formed.</summary>

@@ -226,7 +226,12 @@ la capa de más ROI porque es lógica pura sin UI):
 - ✅ `Generators/AgentFileGenerator.swift`, `ClaudeMdGenerator.swift`,
   `LaunchCommandGenerator.swift`, `FileDiff.swift`/`GeneratedFile.swift` →
   puertos 1:1 en `Coral.Core/Generators/`
-- ⬜ `Models/EvalSuite.swift`, `Models/ToolCheck.swift`, `Strategy.AutoFixed()`
+- ✅ `Models/EvalSuite.swift`, `Models/ToolCheck.swift` → `EvalSuite.cs`,
+  `ToolCheck.cs` (solo la lógica pura: scoring/gate de `EvalRun`, regresión,
+  y el motor de aserciones `ToolCheckEngine`; el juez que produce un `EvalRun`
+  real y el runner que ejecuta un `ToolCheck` de verdad son `Services/`, no
+  portados — spawnean procesos o llaman al modelo)
+- ⬜ `Strategy.AutoFixed()`
 - ⬜ `Generators/StrategyWriter.swift` (el único que hace I/O real — escribe los
   `GeneratedFile` a disco; hoy los generators son puros y no tocan el filesystem)
 - ⬜ `Generators/WorkflowGenerator.swift`, `McpConfigGenerator.swift`,
@@ -234,7 +239,7 @@ la capa de más ROI porque es lógica pura sin UI):
 - ⬜ Todo lo demás bajo `Services/` distinto de `ModelCatalog` empieza a pisar
   Fase 3 (spawn de procesos, APIs solo-Windows) — no cuenta como Fase 2
 
-41 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
+50 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
 `dotnet test` real en este entorno además de en `windows-latest`).
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
@@ -270,12 +275,10 @@ solo `windows-tests.yml` — nunca el gate de macOS.
 Fases 0-1 hechas; Fase 2 en progreso (detalle en §6). El resto del backlog de
 Fase 2 antes de pasar a Fase 3:
 
-1. `Models/EvalSuite.swift`, `Models/ToolCheck.swift` — pequeños, sin
-   dependencias nuevas.
-2. `Generators/StrategyWriter.swift` — primer punto donde `Coral.Core` toca
+1. `Generators/StrategyWriter.swift` — primer punto donde `Coral.Core` toca
    disco (`System.IO` en vez de `FileManager`); necesita tests con un
    directorio temporal, como ya hace `StrategyWriterTests.swift` en macOS.
-3. El resto de `Generators/` (`WorkflowGenerator`, `McpConfigGenerator`,
+2. El resto de `Generators/` (`WorkflowGenerator`, `McpConfigGenerator`,
    `MissionReport`, etc.) según vayan haciendo falta — no hay que portarlos
    todos de una sola vez si nada los usa aún.
 
