@@ -202,9 +202,10 @@ Fase 1 — Scaffolding                 ✅ hecha: Coral.sln, Coral (WinUI3, unpa
 Fase 2 — Núcleo portable             ✅ esencialmente cerrada — ver detalle abajo
                                       (solo queda MissionReport.agentLines(),
                                       diferido a Fase 5 a propósito)
-Fase 3 — Runner de procesos          Process spawn + parseo NDJSON (equivalente a
-                                      ClaudeRunner) + ConPTY para login — CON TESTS,
-                                      sin CLI real todavía (fakes)
+Fase 3 — Runner de procesos          🔶 en progreso — parseo NDJSON portado y
+                                      probado (ver detalle abajo); falta el
+                                      spawn de verdad (Process + PATH + ConPTY)
+                                      — solo verificable en windows-latest
 Fase 4 — Secretos + auth             Credential Manager/DPAPI, Google OAuth (loopback)
 Fase 5 — Chat MVP                    ViewModel + XAML mínimo: enviar prompt, ver
                                       streaming, ver activity panel — esto es "P0"
@@ -258,7 +259,29 @@ la capa de más ROI porque es lógica pura sin UI):
 - ⬜ Todo lo demás bajo `Services/` distinto de `ModelCatalog` empieza a pisar
   Fase 3 (spawn de procesos, APIs solo-Windows) — no cuenta como Fase 2
 
-78 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
+**Fase 3, detalle** (`Services/ClaudeRunner.swift` y afines → `Coral.Core`,
+empezando por lo que es puro y testeable sin spawnear nada):
+- ✅ `ChatEvent`/`AgentTodo`/`ClaudeStreamParser.events(from:)` →
+  `ChatEvent.cs`/`ClaudeStreamParser.cs` (`Coral.Core/Services/`) — parser
+  puro y tolerante de las líneas NDJSON de `claude --output-format
+  stream-json` (texto, tool_use, tool_result, todos, resultado final,
+  denegaciones de permisos, uso de tokens). `ChatEvent` es un `record`
+  abstracto con un caso `sealed record` anidado por variante (constructor
+  privado en la base → jerarquía cerrada, el equivalente más directo en C#
+  al enum de Swift con valores asociados). Nunca lanza excepción ante JSON
+  malformado/adversarial — mismo contrato "tolerante" que el original.
+- ⬜ `ClaudeRunner.resolveBinary()`/`which()`/PATH resolution — lógica
+  mayormente pura (dado un `PATH` y un `FileManager`/`IO` fake se puede
+  testear sin spawnear nada de verdad)
+- ⬜ El spawn real (`Process.Start` sin shell, streaming de stdout línea a
+  línea, `PermissionResponder`/`LaunchGate`/`InactivityWatchdog`) — esto SÍ
+  necesita ejecutarse en Windows de verdad para probarse con confianza, así
+  que solo se verifica en `windows-latest` (con un binario fake/echo, no
+  `claude` real) — ver §5 (nunca usar shell, `ArgumentList` no una string)
+- ⬜ ConPTY para captura de login OAuth — API solo-Windows, sin equivalente
+  probable en Linux; documentar y portar cuando llegue Fase 6
+
+88 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
 `dotnet test` real en este entorno además de en `windows-latest`).
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
@@ -300,7 +323,15 @@ Solo queda pendiente, y deliberadamente diferido:
 1. `MissionReport.agentLines()` — depende de `ActivityStep`/`AgentNameMatcher`
    (runtime de chat), se porta junto a Fase 5.
 
-Fase 3 (runner de procesos) es el salto real siguiente: ahí es donde entran
-`System.Diagnostics.Process`, PATH resolution
-y ConPTY — la primera vez que el puerto necesita ejecutarse en Windows de
-verdad para probarse (no solo `dotnet test` en Linux).
+Fase 3 (runner de procesos) ya empezó: el parser NDJSON puro
+(`ClaudeStreamParser`) está portado y probado (detalle en §6). Lo que queda de
+Fase 3, en orden:
+
+1. `ClaudeRunner.resolveBinary()`/PATH resolution — todavía mayormente lógica
+   pura (dado un PATH y una capa de IO fake), con tests.
+2. El spawn real (`System.Diagnostics.Process`, sin shell, `ArgumentList`) +
+   streaming de stdout línea a línea hacia `ClaudeStreamParser.Events()` — la
+   primera vez que el puerto necesita ejecutarse en Windows de verdad para
+   probarse con confianza (`windows-latest`, con un binario fake — no
+   `claude` real todavía).
+3. ConPTY para login OAuth — API solo-Windows, entra más adelante (Fase 6).
