@@ -202,10 +202,12 @@ Fase 1 — Scaffolding                 ✅ hecha: Coral.sln, Coral (WinUI3, unpa
 Fase 2 — Núcleo portable             ✅ esencialmente cerrada — ver detalle abajo
                                       (solo queda MissionReport.agentLines(),
                                       diferido a Fase 5 a propósito)
-Fase 3 — Runner de procesos          🔶 en progreso — parseo NDJSON portado y
-                                      probado (ver detalle abajo); falta el
-                                      spawn de verdad (Process + PATH + ConPTY)
-                                      — solo verificable en windows-latest
+Fase 3 — Runner de procesos          🔶 en progreso — ClaudeRunner.Stream() ya
+                                      escrito y probado con fakes + un smoke
+                                      test de proceso real (ver detalle abajo);
+                                      falta correr contra `claude` de verdad en
+                                      Windows — el founder lo prueba en su
+                                      máquina; ConPTY para login sigue pendiente
 Fase 4 — Secretos + auth             Credential Manager/DPAPI, Google OAuth (loopback)
 Fase 5 — Chat MVP                    ViewModel + XAML mínimo: enviar prompt, ver
                                       streaming, ver activity panel — esto es "P0"
@@ -299,15 +301,38 @@ empezando por lo que es puro y testeable sin spawnear nada):
   **no** se portan todavía — ningún test los ejercita de forma aislada hoy y
   solo tienen sentido junto al runner real (Fase 3's spawn) o a
   `MetaOrchestrator` (fuera de alcance); añadirlos cuando algo los consuma.
-- ⬜ El spawn real (`Process.Start` sin shell, streaming de stdout línea a
-  línea, `PermissionResponder`/`LaunchGate`/`InactivityWatchdog`) — esto SÍ
-  necesita ejecutarse en Windows de verdad para probarse con confianza, así
-  que solo se verifica en `windows-latest` (con un binario fake/echo, no
-  `claude` real) — ver §5 (nunca usar shell, `ArgumentList` no una string)
+- 🔶 El spawn real → `ClaudeRunner.cs`/`IProcessLauncher.cs`/
+  `RealProcessLauncher.cs`. **Escrito, pero sin correr contra `claude` de
+  verdad todavía** — el founder lo prueba en su máquina Windows (ver nota al
+  final de esta entrada). Diseño:
+  - `IProcessLauncher`/`IChildProcess`: la única frontera no pura (spawn de
+    verdad, sin shell — `ArgumentList`, nunca una string concatenada).
+    `RealProcessLauncher` es un wrapper fino sobre
+    `System.Diagnostics.Process`. Gracias a esta interfaz, TODA la orquestación
+    de `ClaudeRunner.Stream()` (orden de streaming, watchdog, cancelación,
+    manejo de exit code) se prueba con un `FakeProcessLauncher` — sin
+    spawnear nada real — igual que `BinaryResolver`.
+  - El watchdog de inactividad de Swift (`InactivityWatchdog`, un
+    `DispatchSourceTimer` con polling manual) **no** se porta como clase
+    propia: `CancellationTokenSource.CancelAfter()` ya reinicia su propio
+    plazo en cada llamada, así que rearmarlo en cada línea es más simple y
+    exacto que portar el polling — una simplificación deliberada, no un
+    corte de esquina.
+  - `System.IO.StreamReader.ReadLineAsync` reemplaza el `LineBuffer` a mano
+    de Swift (bufferiza líneas de forma nativa); no hace falta portarlo.
+  - **Sí verificado de verdad, aunque no contra `claude`:**
+    `RealProcessLauncherTests` spawnea el propio `dotnet` (garantizado
+    presente donde se compile Coral) como smoke test — prueba que el spawn
+    sin shell, la lectura async de stdout línea a línea, el exit code, la
+    captura de stderr, `Kill()` y las mutaciones de entorno funcionan de
+    verdad en este entorno, no solo que compilan. Lo único que falta
+    verificar es el comportamiento específico de `claude`/`codex`/`gemini`
+    en Windows real (rutas, shims `.cmd`, el formato exacto de su stream) —
+    exactamente lo que el founder va a probar en su máquina.
 - ⬜ ConPTY para captura de login OAuth — API solo-Windows, sin equivalente
   probable en Linux; documentar y portar cuando llegue Fase 6
 
-113 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
+125 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
 `dotnet test` real en este entorno además de en `windows-latest`).
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
@@ -349,15 +374,15 @@ Solo queda pendiente, y deliberadamente diferido:
 1. `MissionReport.agentLines()` — depende de `ActivityStep`/`AgentNameMatcher`
    (runtime de chat), se porta junto a Fase 5.
 
-Fase 3 (runner de procesos) avanza: todo lo que es puro está portado y probado
-(detalle en §6) — el parser NDJSON (`ClaudeStreamParser`), la resolución de
-binario/PATH (`BinaryResolver`), y la construcción de argumentos del comando
-(`ClaudeRunArgs`). Solo queda la parte que de verdad necesita Windows:
+Fase 3 (runner de procesos) tiene ya escrito y probado (con fakes + un smoke
+test de proceso real) todo el camino: parser NDJSON (`ClaudeStreamParser`),
+resolución de binario/PATH (`BinaryResolver`), construcción de argumentos
+(`ClaudeRunArgs`), y ahora el spawn real orquestado por `ClaudeRunner.Stream()`
+(detalle en §6). El founder prueba esto en su máquina Windows con el `claude`
+real instalado — eso es lo que falta para dar Fase 3 por cerrada:
 
-1. El spawn real (`System.Diagnostics.Process`, sin shell, `ArgumentList` ya
-   armada por `ClaudeRunArgs.Build()`) + streaming de stdout línea a línea
-   hacia `ClaudeStreamParser.Events()` — la
-   primera vez que el puerto necesita ejecutarse en Windows de verdad para
-   probarse con confianza (`windows-latest`, con un binario fake — no
-   `claude` real todavía).
+1. Correr `ClaudeRunner.Stream()` contra `claude` de verdad en Windows y
+   confirmar que el formato de su stream, la resolución de PATH y el spawn
+   se comportan como se diseñó — si algo falla, es la primera señal real de
+   dónde el diseño (no solo el código) necesita ajustarse.
 2. ConPTY para login OAuth — API solo-Windows, entra más adelante (Fase 6).

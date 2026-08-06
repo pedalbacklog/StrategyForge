@@ -60,14 +60,18 @@ windows/
   `.bat` shims in that order; `ClaudeRunArgs` (Fase 3): the CLI argument
   list for one headless turn (`--model`, `--resume`/`--session-id`, `--effort`,
   `--add-dir` per attached folder, `-p <prompt>`), in the exact order
-  `Process.Start` will need it; and `CLIOneShotRunner` (Fase 3): the pure half of
+  `Process.Start` will need it; `CLIOneShotRunner` (Fase 3): the pure half of
   the multi-provider one-shot runner — per-provider command building
   (Claude/Codex/Gemini each get their own flags), ANSI-stripping/progress-line
   cleanup for providers with no structured stream (Codex/Gemini), auth-prompt/
   auth-failure detection by text, and token/cost estimation for CLIs that report
-  no usage. All four are pure enough to unit-test on Linux via fakes/
-  parameterized inputs; the actual process-spawning side that feeds
-  `ClaudeStreamParser` real subprocess output isn't ported yet (see Status below).
+  no usage; and now `ClaudeRunner` (Fase 3): the real spawn, wired behind an
+  `IProcessLauncher` abstraction so its streaming/watchdog/cancellation
+  orchestration is unit-tested with a fake, while `RealProcessLauncher` (a thin
+  `System.Diagnostics.Process` wrapper — no shell, `ArgumentList` only) is
+  smoke-tested against a genuinely real process (`dotnet` itself). **Not yet run
+  against the actual `claude` CLI or on a real Windows machine** — see Status
+  below.
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
@@ -97,7 +101,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **113/113**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **125/125**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. The `Coral`
 > WinUI 3 app project needs the Windows App SDK/Windows 10 SDK and can only be built on
 > Windows — `windows-tests.yml` (below) is its real check, and it passed on the Fase 1
@@ -129,19 +133,21 @@ command runner that produce their inputs are Services, not ported), cost estimat
 (`MissionReport`), `ModelCatalog`, the pure NDJSON stream parser
 (`ClaudeStreamParser`, turns Claude Code's `--output-format stream-json` lines
 into `ChatEvent`s), CLI binary resolution (`BinaryResolver`), the CLI
-argument-list builder (`ClaudeRunArgs`), and the pure half of the
-multi-provider one-shot runner (`CLIOneShotRunner`: per-provider command
-building, ANSI/progress-line cleanup, auth-prompt/failure detection, token/cost
-estimation) — 113 xUnit tests, all passing (including `TemplatesAreAllValid`,
-which iterates every template through `Strategy.Validate()`, and
-`StrategyWriterTests`, which round-trips real writes to a temp directory).
-Still not ported: `MissionReport.agentLines()` (needs the
+argument-list builder (`ClaudeRunArgs`), the pure half of the multi-provider
+one-shot runner (`CLIOneShotRunner`: per-provider command building,
+ANSI/progress-line cleanup, auth-prompt/failure detection, token/cost
+estimation), and now the real spawn (`ClaudeRunner.Stream()`,
+`IProcessLauncher`/`RealProcessLauncher`) — 125 xUnit tests, all passing
+(including `TemplatesAreAllValid`, which iterates every template through
+`Strategy.Validate()`, `StrategyWriterTests`, which round-trips real writes to a
+temp directory, and `RealProcessLauncherTests`, which spawns a genuinely real
+process to smoke-test the no-shell `Process.Start`/async-stdout/exit-code/`Kill()`
+plumbing). Still not ported: `MissionReport.agentLines()` (needs the
 not-yet-built chat/activity runtime — `ActivityStep`/`AgentNameMatcher` —
-deferred to Fase 5 on purpose), the actual process spawn + stdout streaming that
-ties `BinaryResolver`/`ClaudeRunArgs`/`ClaudeStreamParser` together
-(`System.Diagnostics.Process`, no shell, ConPTY for login — needs Windows to
-verify with confidence, so it lands as its own `windows-latest`-checked
-increment), and everything else under `Services/` (git,
-providers, auth, loops — the last one stays vetoed for human review per Fase 8). The
-`Coral` WinUI 3 app project itself is still just the Fase 1 blank window — no UI
-wired to any of this yet (Fase 5).
+deferred to Fase 5 on purpose) and ConPTY for login (Fase 6). **`ClaudeRunner`
+hasn't run against the real `claude` CLI or on a real Windows machine yet** —
+that verification happens on the founder's Windows box, not in this sandbox.
+Everything else under `Services/` (git, providers, auth, loops — the last one
+stays vetoed for human review per Fase 8) is still unported. The `Coral` WinUI 3
+app project itself is still just the Fase 1 blank window — no UI wired to any of
+this yet (Fase 5).
