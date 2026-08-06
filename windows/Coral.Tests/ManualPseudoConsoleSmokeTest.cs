@@ -33,8 +33,12 @@ public class ManualPseudoConsoleSmokeTest
             return;
         }
 
+        // TEMPORARY: swapped from cmd.exe to powershell.exe to check whether the
+        // missing-echo bypass is cmd.exe-specific (it has known quirky heuristics
+        // for detecting a "real" console) or affects every console app equally.
         var launcher = new Win32PseudoConsoleLauncher { Diagnostics = _output.WriteLine };
-        using var session = launcher.Start("cmd.exe", new List<string> { "/c", "echo hello-from-conpty" },
+        using var session = launcher.Start("powershell.exe",
+            new List<string> { "-NoProfile", "-Command", "Write-Output hello-from-conpty" },
             Environment.CurrentDirectory, new Dictionary<string, string?>());
 
         // TEMPORARY: dump the raw bytes off the pipe (bypassing line-splitting)
@@ -44,7 +48,7 @@ public class ManualPseudoConsoleSmokeTest
         // why the echoed text isn't coming through ReadOutputLinesAsync.
         if (session is Win32PseudoConsoleSession diagnosticSession)
         {
-            var raw = await diagnosticSession.ReadRawOutputForDiagnosticsAsync(8192, TimeSpan.FromSeconds(5));
+            var raw = await diagnosticSession.ReadRawOutputForDiagnosticsAsync(8192, TimeSpan.FromSeconds(8));
             _output.WriteLine($"Raw bytes read: {raw.Length}");
             for (var offset = 0; offset < raw.Length; offset += 16)
             {
