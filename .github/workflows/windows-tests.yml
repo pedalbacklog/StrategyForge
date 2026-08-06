@@ -34,9 +34,11 @@ jobs:
 
       # Coral.Tests only references Coral.Core (plain net8.0, no WinUI/Windows App
       # SDK), so this alone already exercises the ported logic (ModelCatalog today)
-      # against the real repo-root models.json.
+      # against the real repo-root models.json. Category=Manual is excluded: those
+      # tests (ManualClaudeRunnerSmokeTest) need a real, logged-in `claude` CLI,
+      # which this runner doesn't have — see windows/README.md to run them yourself.
       - name: Test Coral.Core (via Coral.Tests)
-        run: dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release
+        run: dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category!=Manual"
 
       # Separate step so a WinUI 3/Windows App SDK restore or packaging problem in
       # the app project doesn't get masked by (or block) the test step above.

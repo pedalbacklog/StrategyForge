@@ -97,12 +97,14 @@ and "Windows application development" workloads, or the .NET 8 SDK + `dotnet` CL
 `Coral.sln`, or from a terminal:
 
 ```
-dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release
+dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category!=Manual"
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
 > `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **125/125**
-> tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. The `Coral`
+> tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
+> `--filter` excludes one more test, `ManualClaudeRunnerSmokeTest`, that needs a real,
+> logged-in `claude` CLI — see "Testing against the real `claude` CLI" below.) The `Coral`
 > WinUI 3 app project needs the Windows App SDK/Windows 10 SDK and can only be built on
 > Windows — `windows-tests.yml` (below) is its real check, and it passed on the Fase 1
 > scaffold. If a NuGet pin or a WinUI 3 project-file setting turns out to be wrong as the
@@ -117,6 +119,35 @@ dependency), then `dotnet build` on the `Coral` app project to catch WinUI 3/Win
 SDK restore problems separately from test failures. Independent of the macOS `tests.yml`
 gate either direction: changes here never trigger a macOS run, and macOS-only changes
 (anything outside `windows/**`, `models.json`, `skills.json`) never trigger this one.
+CI excludes `Category=Manual` (see below) — those tests need a real, logged-in `claude`
+CLI, which the runner doesn't have.
+
+## Testing against the real `claude` CLI
+
+Everything in `Coral.Core` has been verified with `dotnet test` and, for Fase 3's
+`ClaudeRunner`, against fakes plus a smoke test that spawns a real (non-`claude`)
+process — but **nothing has run against the actual `claude` CLI yet**. Do this on a
+Windows machine with the CLI installed and logged in:
+
+```
+npm install -g @anthropic-ai/claude-code
+claude   # sign in once, interactively, to your plan
+```
+
+Then run the one test written for exactly this (excluded from the normal suite/CI
+because it needs that real, logged-in CLI):
+
+```
+dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~ManualClaudeRunnerSmokeTest"
+```
+
+It resolves `claude` via `BinaryResolver`, sends it a one-word prompt through
+`ClaudeRunner.Stream()`, and prints every `ChatEvent` it streams back — the first
+real, end-to-end exercise of the whole Fase 3 chain (`BinaryResolver` →
+`ClaudeRunArgs` → `RealProcessLauncher` → `ClaudeStreamParser`). A `[FAILED] ...` line
+or a thrown assertion means something in that chain needs fixing; a normal run ends
+with `[usage] ... tokens` and `[finished]`. Point `CORAL_MANUAL_REPO_PATH` at a
+specific folder to run `claude` there instead of the current directory.
 
 ## Status
 
