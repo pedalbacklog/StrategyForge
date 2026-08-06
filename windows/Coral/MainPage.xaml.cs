@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using Coral.Core.Models;
 using Coral.Core.Services;
 using Coral.Core.ViewModels;
 using Microsoft.UI.Xaml;
@@ -26,6 +27,12 @@ public sealed partial class MainPage : Page
     public string RepoPath { get; }
     public ChatViewModel ViewModel { get; }
 
+    /// <summary>Drives the "Connect Claude" flyout (Fase 6) — install-if-missing
+    /// + headless sign-in against the real CLI, streamed into the flyout's log/
+    /// status/paste-code UI. Claude only for now, matching ChatViewModel's own
+    /// single-provider scope.</summary>
+    public ConnectViewModel ConnectViewModel { get; }
+
     private ScrollViewer? _chatScrollViewer;
 
     public MainPage()
@@ -36,6 +43,8 @@ public sealed partial class MainPage : Page
         // update (OneTime bindings don't re-evaluate).
         RepoPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         ViewModel = new ChatViewModel(new RealProcessLauncher(), RepoPath);
+        ConnectViewModel = new ConnectViewModel(new RealProcessLauncher(), new Win32PseudoConsoleLauncher(),
+            AIProvider.Claude);
 
         InitializeComponent();
 
@@ -73,6 +82,12 @@ public sealed partial class MainPage : Page
     }
 
     private void OnStopClick(object sender, RoutedEventArgs e) => ViewModel.CancelCurrentTurn();
+
+    private async void OnConnectFlyoutOpened(object sender, object e) => await ConnectViewModel.ConnectAsync();
+
+    private void OnConnectFlyoutClosed(object sender, object e) => ConnectViewModel.CancelConnect();
+
+    private async void OnSubmitCodeClick(object sender, RoutedEventArgs e) => await ConnectViewModel.SubmitCodeAsync();
 
     /// <summary>Scroll all the way to the bottom of the ListView's real
     /// scrollable content. Deliberately NOT ChatList.ScrollIntoView(lastItem):

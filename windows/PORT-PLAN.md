@@ -227,14 +227,12 @@ Fase 5 — Chat MVP                    ✅ cerrada — confirmado funcionando en
                                       quedó verificado por el founder, no solo
                                       revisado o compilado
                                       (ver §10)
-Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs portado (install vía
-                                      npm, sign-in headless reutilizando ConPTY,
-                                      flujo connect unificado) y probado con
+Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewModel.cs
+                                      + botón "Connect Claude" en MainPage,
+                                      todo portado/construido y probado con
                                       fakes (ver §6); AÚN sin correr contra
-                                      npm/claude/codex/gemini reales ni tener
-                                      ViewModel/UI propios — eso sigue siendo
-                                      trabajo de esta misma fase, no cerrada del
-                                      todo
+                                      npm/claude reales en Windows — lo único
+                                      que falta para cerrar esta fase
 Fase 7 — Code mode                   git/diff/PR
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
@@ -504,7 +502,7 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
     dependencia de WinUI (mismo motivo que `ChatViewModel` no toca navegación),
     así que este puerto expone la URL como evento (`ConnectEvent.Url`) para que
     una futura capa de ViewModel/View la abra con la API de Windows que
-    corresponda.
+    corresponda — ver el siguiente punto, ya construida.
   - 28 tests nuevos contra fakes (`FakePseudoConsoleLauncher`/
     `FakePseudoConsoleSession`, nuevo, mismo patrón que `FakeProcessLauncher`):
     extracción de URL (incluyendo el caso con códigos ANSI), instalación
@@ -513,16 +511,28 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
     por cambio de mtime, y el flujo `Connect` completo (salta instalación si
     la CLI ya existe, instala primero si falta, reenvía el evento de URL) —
     188 en total.
-  - **AÚN sin verificar en Windows real** — a diferencia de Fase 3/5, esta
-    pieza no se ha corrido ni una vez contra un `npm install` real, un CLI real
-    esperando login, ni una pseudo-consola real (los fakes prueban la
-    ORQUESTACIÓN, no que el `IPseudoConsoleLauncher`/`IProcessLauncher` reales
-    se comporten como esperan estos flujos cuando el proceso al otro lado es
-    `claude auth login`/`codex login`/`gemini` de verdad). Tampoco tiene
-    ViewModel ni UI propios todavía — eso es la siguiente pieza de esta misma
-    fase, no una fase aparte.
+  - ✅ **`ConnectViewModel.cs` (`Coral.Core.ViewModels`), la capa de UI que
+    faltaba** — mismo patrón que `ChatViewModel`: consume
+    `ProviderInstaller.Connect()`, expone `Phase`/`PhaseLabel`/`LogLines`/
+    `NeedsCode`/`CodeInput`/`StatusMessage` como propiedades observables,
+    `ConnectAsync()`/`SubmitCodeAsync()`/`CancelConnect()` como comandos, y
+    abre el navegador vía un delegado inyectable (`Action<string>? openUrl`,
+    por defecto `Process.Start(UseShellExecute: true)`) — el mismo patrón de
+    "inyecta el efecto de lado real, pruébalo con un fake" que
+    `IProcessLauncher`/`resolveBinary`. 7 tests nuevos, 195 en total.
+    `MainPage.xaml` gana un botón "Connect Claude" con un `Flyout` (fase de
+    instalación/log/estado/campo para pegar el código), disparado por el
+    evento `Opened` del propio `Flyout`. Construido con cuidado extra por la
+    lección de Fase 5 (el converter `BoolToVisibilityConverter` nuevo vive en
+    `Page.Resources`, no anidado) — pero, igual que toda la UI de Fase 5 antes
+    de que el founder la corriera, **esto compila (a falta de confirmar en CI)
+    pero no está verificado en Windows real todavía**: ni el `Flyout` con
+    contenido `x:Bind` (patrón nuevo en este proyecto, aunque el mismo
+    mecanismo ya funciona para los `DataTemplate` de `ChatList`/Activity), ni
+    — sobre todo — el flujo de instalación/login real contra `npm`/`claude
+    auth login` de verdad.
 
-188 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+195 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 2 tests manuales (Category=Manual, excluidos del CI),
 **ambos confirmados pasando en Windows real**: uno contra `claude` real, el
@@ -598,15 +608,18 @@ bugs reales en el camino (compilación rota por `x:Bind` en `Window`, ventana
 en blanco por un recurso mal ubicado, mojibake por no fijar UTF-8, texto no
 seleccionable, scroll que no seguía el streaming) — detalle completo en §10.
 
-**Fase 6 (Instalación de CLIs) en marcha — capa de servicio portada, sin
-verificar en Windows real todavía.** `ProviderInstaller.cs` (instalación vía
-npm, sign-in headless reutilizando la primitiva ConPTY de Fase 3, flujo
-`Connect` unificado) escrito y probado con fakes (28 tests nuevos, 188 en
-total) — detalle en §6. A diferencia de Fase 3/5, ningún test hasta ahora
-llamó a un `npm` real ni a un `claude auth login`/`codex login`/`gemini`
-real esperando autenticación por una pseudo-consola real: eso, más el
-ViewModel/UI que consuma estos eventos, sigue pendiente dentro de esta misma
-fase.
+**Fase 6 (Instalación de CLIs) en marcha — servicio + ViewModel + UI ya
+construidos, sin verificar en Windows real todavía.** `ProviderInstaller.cs`
+(instalación vía npm, sign-in headless reutilizando la primitiva ConPTY de
+Fase 3, flujo `Connect` unificado) y `ConnectViewModel.cs` (la capa de UI que
+lo consume — mismo patrón que `ChatViewModel`) escritos y probados con fakes
+(35 tests nuevos entre ambos, 195 en total) — detalle en §6. `MainPage.xaml`
+gana un botón "Connect Claude" con un panel de instalación/log/estado/código.
+A diferencia de Fase 3/5, ningún test hasta ahora llamó a un `npm` real ni a
+un `claude auth login` real esperando autenticación por una pseudo-consola
+real, y la UI nueva (un `Flyout` con contenido `x:Bind`, patrón no usado
+antes en este proyecto) tampoco se ha visto correr — eso es lo único que
+falta para cerrar esta fase del todo.
 
 ## 10. Bitácora de verificación en Windows real
 

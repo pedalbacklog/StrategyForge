@@ -112,11 +112,17 @@ windows/
   history — each is its own much larger feature). Lives in `Coral.Core`, not the
   WinUI project: `ObservableCollection`/hand-rolled `INotifyPropertyChanged`
   (`ObservableObject`) have no WinUI dependency, so the ViewModel is unit-tested
-  the same way as everything else here, with an injected `IProcessLauncher`. 10
+  the same way as everything here, with an injected `IProcessLauncher`. 10
   tests cover the delta/full-text dedup, activity mapping, invariant-culture cost
   formatting, the resumed-session-missing retry, and cancellation — all real
-  behavior ported from the Swift original, not reinvented. **Not yet confirmed
-  on real Windows** — see Status.
+  behavior ported from the Swift original, not reinvented. **Confirmed working
+  end to end on real Windows** — see Status. And `ConnectViewModel` (Fase 6):
+  drives one provider's "Connect" flow — install-if-missing, then sign in —
+  for a UI, consuming `ProviderInstaller.Connect()`'s event stream into
+  observable `Phase`/`LogLines`/`NeedsCode`/`StatusMessage` state, with an
+  injectable `openUrl` delegate (default: `Process.Start(UseShellExecute:
+  true)`) so opening the login link is still unit-testable. 7 tests; **not
+  yet confirmed on real Windows** — see Status.
 
 `Coral.Tests` mirrors the matching macOS test files (`GeneratorTests`, `DiffTests`,
 `ModelJSONTests`), plus `ModelCatalogTests` parses the *real* repo-root `models.json`
@@ -133,7 +139,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **188/188**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **195/195**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -235,7 +241,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 (login-freshness check for `claude`/`codex`/`gemini`, reading only their own
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only), and
-`ProviderInstaller` (Fase 6, service layer only — see below) — 188 automated
+`ProviderInstaller`/`ConnectViewModel` (Fase 6 — see below) — 195 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -244,9 +250,9 @@ spawns a genuinely real process to smoke-test the no-shell
 added after the first real-Windows run, `ProviderAuthTests`,
 `ChatViewModelTests`, `AgentNameMatcherTests`, `ProviderInstallerTests`
 (against a new `FakePseudoConsoleLauncher`, mirroring `FakeProcessLauncher`),
-and the `MissionReport.AgentLines` cases — see below) — plus 2 manual tests
-excluded from that count and from CI (see "Testing the pieces that need a
-real Windows machine").
+`ConnectViewModelTests`, and the `MissionReport.AgentLines` cases — see
+below) — plus 2 manual tests excluded from that count and from CI (see
+"Testing the pieces that need a real Windows machine").
 Fase 2's last loose end (`MissionReport.agentLines()`, which needed
 `ActivityStep`/`AgentNameMatcher`) is now closed — `ActivityStep` picked up
 `IsDelegation`/`Agent` fields once `ChatViewModel` existed to populate them,
@@ -258,12 +264,12 @@ OAuth+PKCE with a loopback listener — deliberately deferred, see `PORT-PLAN.md
 §6/§9: it only exists on macOS to gate CloudKit sync, itself a Windows
 non-goal), the rest of Fase 5 (repo picker, model/effort/permission-mode
 settings, "Ask" live-permission mode, the cross-provider `MetaOrchestrator`,
-persisted turn history — each its own follow-up), and the rest of Fase 6 (a
-ViewModel/UI to actually drive `ProviderInstaller` from the app, plus running
-it for real against npm and a real CLI login on Windows — the service layer
-itself is ported and unit-tested, see Status above). Everything else under
-`Services/` (git, loops — the last one stays vetoed for human review per
-Fase 8) is still unported.
+persisted turn history — each its own follow-up), and the rest of Fase 6
+(running the "Connect Claude" flow for real against npm and a real CLI login
+on Windows — the service layer and its ViewModel/UI are built and
+unit-tested, see Status above, but nobody has clicked the button yet).
+Everything else under `Services/` (git, loops — the last one stays vetoed
+for human review per Fase 8) is still unported.
 
 **The `Coral` WinUI 3 app project's first real chat UI is confirmed working
 end to end on real Windows** — prompt box, transcript, activity panel,
@@ -310,20 +316,29 @@ pointer to a heap copy of the `HPCON` handle instead of the handle value
 itself). Full story, including a red herring that turned out to be a Windows
 Terminal ConPTY-passthrough artifact rather than a bug, in `PORT-PLAN.md` §10.
 
-**Fase 6 (Instalación de CLIs) is in progress: the service layer
-(`ProviderInstaller.cs`) is ported and unit-tested against fakes, but not yet
-run on real Windows.** It covers npm-based CLI install, headless sign-in
-(reusing the now-confirmed ConPTY primitive the same way the Swift original
-reuses `openpty`), Gemini's TUI-nudge-and-creds-mtime success detection,
-Antigravity-migration detection, and the unified install-then-sign-in
-`Connect()` flow — 28 new tests (188 automated total). Deliberately deferred,
-each for being a platform redesign rather than a missing translation: an
-automated Node.js bootstrap (Swift's `installNode()` shells out to Homebrew;
-Windows has no single trusted equivalent verified in this port, so it falls
-back to sending the user to nodejs.org, the same terminal state Swift itself
-uses when Homebrew isn't present), the Terminal.app/AppleScript fallback
+**Fase 6 (Instalación de CLIs) is in progress: the service layer, its
+ViewModel, and a first UI surface are all built and unit-tested, but nothing
+has run on real Windows yet.** `ProviderInstaller.cs` covers npm-based CLI
+install, headless sign-in (reusing the now-confirmed ConPTY primitive the
+same way the Swift original reuses `openpty`), Gemini's
+TUI-nudge-and-creds-mtime success detection, Antigravity-migration detection,
+and the unified install-then-sign-in `Connect()` flow. `ConnectViewModel.cs`
+consumes that event stream for a UI (same pattern as `ChatViewModel`), and
+`MainPage.xaml` now has a "Connect Claude" button/flyout wired to it — 35 new
+tests between the two (195 automated total). Deliberately deferred, each for
+being a platform redesign rather than a missing translation: an automated
+Node.js bootstrap (Swift's `installNode()` shells out to Homebrew; Windows
+has no single trusted equivalent verified in this port, so it falls back to
+sending the user to nodejs.org, the same terminal state Swift itself uses
+when Homebrew isn't present), and the Terminal.app/AppleScript fallback
 (already dead code in Swift today — no provider needs a visible terminal
-anymore), and actually opening the sign-in URL in a browser (kept out of
-`Coral.Core` on purpose, same reasoning as `ChatViewModel` not touching
-navigation — it's surfaced as a `ConnectEvent.Url` for a future ViewModel/View
-to act on). See `PORT-PLAN.md` §6/§9 for the full breakdown.
+anymore). Opening the sign-in URL in a browser IS wired up (`ConnectViewModel`'s
+injectable `openUrl`, defaulting to `Process.Start(UseShellExecute: true)`) —
+unlike the rest of Fase 6, this one piece is exercised by a real system call
+in production, just not yet run for real. Two things specifically need a real
+Windows machine before this phase can close: the `Flyout` with `x:Bind`
+content (a pattern not used elsewhere in this project yet, though the same
+underlying mechanism already works for `ChatList`'s `DataTemplate`), and —
+the actual point of this phase — clicking "Connect Claude" against a real
+npm install and a real `claude auth login`. See `PORT-PLAN.md` §6/§9 for the
+full breakdown.

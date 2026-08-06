@@ -12,6 +12,7 @@
              Resources dictionary (unlike a plain {Binding}, which does walk the
              visual tree) — keep converters here, not on Border/Grid. -->
         <converters:BoolNegationConverter x:Key="Negate" />
+        <converters:BoolToVisibilityConverter x:Key="Visible" />
     </Page.Resources>
 
     <Border Padding="16">
@@ -26,6 +27,30 @@
             <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12">
                 <TextBlock Text="Coral" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <TextBlock Text="{x:Bind RepoPath}" Opacity="0.6" VerticalAlignment="Center" />
+                <Button Content="Connect Claude" VerticalAlignment="Center">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom" Opened="OnConnectFlyoutOpened" Closed="OnConnectFlyoutClosed">
+                            <StackPanel Width="380" Spacing="6">
+                                <TextBlock Text="{x:Bind ConnectViewModel.PhaseLabel, Mode=OneWay}"
+                                           FontWeight="SemiBold" />
+                                <ListView ItemsSource="{x:Bind ConnectViewModel.LogLines}" MaxHeight="160"
+                                          FontSize="11" SelectionMode="None" />
+                                <TextBlock Text="{x:Bind ConnectViewModel.StatusMessage, Mode=OneWay}"
+                                           Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                                <Grid ColumnSpacing="8"
+                                      Visibility="{x:Bind ConnectViewModel.NeedsCode, Mode=OneWay, Converter={StaticResource Visible}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" PlaceholderText="Paste the code from the browser"
+                                             Text="{x:Bind ConnectViewModel.CodeInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <Button Grid.Column="1" Content="Submit" Click="OnSubmitCodeClick" />
+                                </Grid>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
             </StackPanel>
 
             <!-- Transcript + activity -->
