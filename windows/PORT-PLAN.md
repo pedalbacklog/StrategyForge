@@ -214,7 +214,7 @@ Fase 4 — Secretos + auth             🔶 ProviderAuth.cs portada (login-fresh
                                       Manager/DPAPI + Google OAuth deliberadamente
                                       diferidos — solo sirven para CloudKit sync,
                                       no-objetivo de v1 (ver §6/§8)
-Fase 5 — Chat MVP                    🔶 ChatViewModel + MainWindow.xaml escritos —
+Fase 5 — Chat MVP                    🔶 ChatViewModel + MainPage.xaml escritos —
                                       ViewModel probado de verdad (10 tests con
                                       fakes, Coral.Core); la UI XAML/Coral.csproj
                                       NO ha compilado en ningún sitio todavía (no
@@ -391,7 +391,7 @@ imposible de verificar de extremo a extremo en cualquier plataforma. Se
 retoma cuando haya un backend/CloudKit-equivalente real que lo necesite, o si
 surge otra razón de producto para tener una identidad de usuario en Windows.
 
-- 🔶 **Fase 5 (Chat MVP), primer corte — `ChatViewModel.cs` + `MainWindow.xaml`.**
+- 🔶 **Fase 5 (Chat MVP), primer corte — `ChatViewModel.cs` + `MainPage.xaml`.**
   Puerto MÍNIMO de `ViewModels/ChatViewModel.swift` (1535 líneas en macOS):
   solo el camino `-p` de un único proveedor — sin modo "Ask" (permisos en
   vivo), sin `MetaOrchestrator` multi-proveedor, sin historial de turnos
@@ -409,15 +409,21 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
   (streaming, dedup, activity, formato de coste en `InvariantCulture`,
   reintento de sesión, cancelación).
 
-  `MainWindow.xaml`/`.xaml.cs` (proyecto `Coral`, WinUI3) quedan como la
-  primera UI real: caja de prompt, transcript, panel de actividad, botones
-  Send/Stop. **`Coral.csproj` NO ha compilado en ningún sitio todavía** — el
-  Windows App SDK no existe en este sandbox Linux, así que solo se pudo
-  revisar el XAML/C# a mano y verificar que `Coral.Core` (de donde viene
-  `ChatViewModel`) compila y pasa sus tests; la primera compilación real de
-  este XAML será en `windows-latest` vía CI, y nadie ha visto esta ventana
-  renderizada todavía ni se ha probado un turno real contra `claude`.
-  Repasado a mano con cuidado extra por eso (orden de
+  `MainPage.xaml`/`.xaml.cs` (proyecto `Coral`, WinUI3) es la primera UI
+  real: caja de prompt, transcript, panel de actividad, botones Send/Stop.
+  **El primer intento SÍ falló al compilar en `windows-latest` CI** — la
+  primera versión ponía los `x:Bind` directamente en `MainWindow.xaml`, y
+  WinUI3's `Window` NO es un `FrameworkElement` (a diferencia de `Page` en
+  UWP/WinUI), así que el código generado por el compilador de XAML no
+  compilaba (`CS1503: cannot convert from 'Coral.MainWindow' to
+  'Microsoft.UI.Xaml.FrameworkElement'`). Arreglado moviendo TODO el
+  contenido/bindings a una `Page` nueva (`MainPage.xaml`) que `MainWindow`
+  aloja como su `Content` — el patrón estándar de WinUI3 para esto.
+  `MainWindow` queda como un shell mínimo sin bindings propios. Este bug
+  real, encontrado por CI y no por revisión de código, es la prueba de por
+  qué esta fase no se puede dar por cerrada solo con una lectura cuidadosa:
+  hacía falta una compilación real contra el Windows App SDK para
+  encontrarlo. Repasado a mano con cuidado extra en lo demás (orden de
   `InitializeComponent()` vs. asignar `ViewModel`/`RepoPath` antes para que
   los `x:Bind` en modo `OneTime` no capturen `null`; `UpdateSourceTrigger=
   PropertyChanged` en el `TextBox` para que Enviar no lea texto obsoleto; un
@@ -499,15 +505,17 @@ de verdad todavía en el propio macOS — construirlo ahora sería trabajo
 dormido e inverificable en cualquier plataforma. Se retoma si/cuando surja
 una razón de producto real para tener identidad de usuario en Windows.
 
-**Fase 5 (Chat MVP) con un primer corte escrito, sin verificar en Windows
-todavía.** `ChatViewModel.cs` (`Coral.Core`) está probado de verdad (10
-tests contra fakes); `MainWindow.xaml`/`.xaml.cs` (`Coral`, WinUI3) es la
-primera UI real del port, pero **no ha compilado en ningún sitio** — este
-sandbox no tiene el Windows App SDK. Su primera compilación real será
-`windows-latest` vía CI; su primera verificación de verdad (¿renderiza?,
-¿manda un prompt real?, ¿hace scroll?) tiene que ser el founder viéndola
-correr en su máquina. No dar Fase 5 por cerrada hasta entonces — detalle en
-§6.
+**Fase 5 (Chat MVP) con un primer corte escrito; compila en CI, sin
+verificar en Windows todavía.** `ChatViewModel.cs` (`Coral.Core`) está
+probado de verdad (10 tests contra fakes); `MainPage.xaml`/`.xaml.cs`
+(`Coral`, WinUI3) es la primera UI real del port. Su primer intento de
+compilación en `windows-latest` CI **falló de verdad** (`x:Bind` puesto
+directamente en `MainWindow.xaml`, que en WinUI3 no es un
+`FrameworkElement` — detalle en §6) — arreglado moviendo el contenido a una
+`Page` separada, patrón estándar de WinUI3. Su primera verificación
+genuina (¿renderiza?, ¿manda un prompt real?, ¿hace scroll?) todavía tiene
+que ser el founder viéndola correr en su máquina. No dar Fase 5 por
+cerrada hasta entonces — detalle en §6.
 
 ## 10. Bitácora de verificación en Windows real
 

@@ -249,14 +249,17 @@ the ConPTY primitive that's already here). Everything else under `Services/`
 (git, loops — the last one stays vetoed for human review per Fase 8) is still
 unported.
 
-**The `Coral` WinUI 3 app project (`MainWindow.xaml`/`.xaml.cs`) now has a
-first real chat UI — prompt box, transcript, activity panel, Send/Stop — but
-`Coral.csproj` has NOT compiled anywhere yet.** This sandbox has no Windows
-App SDK, so only `Coral.Core` (where `ChatViewModel` actually lives) built
-and tested here; the XAML/WinUI-specific code was reviewed by hand but its
-first real compile will be on `windows-latest` CI, and nobody has seen this
-window render or sent a real prompt through it yet. Don't treat Fase 5 as
-done until that happens — see `PORT-PLAN.md` §6/§10.
+**The `Coral` WinUI 3 app project now has a first real chat UI** — prompt box,
+transcript, activity panel, Send/Stop, in `MainPage.xaml`/`.xaml.cs` — hosted
+by a minimal `MainWindow`. It took two tries: the first attempt put its
+`x:Bind` bindings directly on `MainWindow`, which failed to compile on
+`windows-latest` CI (WinUI 3's `Window` isn't a `FrameworkElement`, unlike
+UWP's `Page`, so the XAML compiler's generated code didn't type-check) — fixed
+by moving the actual content/bindings into `MainPage`, the standard WinUI 3
+pattern for this. This sandbox has no Windows App SDK, so `Coral.csproj` can
+still only be verified via CI, not locally; nobody has seen this window
+render or sent a real prompt through it yet. Don't treat Fase 5 as done until
+that happens — see `PORT-PLAN.md` §6/§10.
 
 **`ClaudeRunner` has now run against the real `claude` CLI, on a real Windows
 machine** (`ManualClaudeRunnerSmokeTest` — see "Testing the pieces that need a
