@@ -42,7 +42,8 @@
                         <DataTemplate x:DataType="vm:ChatMessage">
                             <StackPanel Margin="0,4" MaxWidth="640">
                                 <TextBlock Text="{x:Bind RoleLabel}" Opacity="0.5" FontSize="12" />
-                                <TextBlock Text="{x:Bind Text, Mode=OneWay}" TextWrapping="Wrap" />
+                                <TextBlock Text="{x:Bind Text, Mode=OneWay}" TextWrapping="Wrap"
+                                           IsTextSelectionEnabled="True" />
                             </StackPanel>
                         </DataTemplate>
                     </ListView.ItemTemplate>

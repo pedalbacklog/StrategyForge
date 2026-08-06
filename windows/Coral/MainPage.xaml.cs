@@ -1,3 +1,5 @@
+using System.Collections.Specialized;
+using System.ComponentModel;
 using Coral.Core.Services;
 using Coral.Core.ViewModels;
 using Microsoft.UI.Xaml;
@@ -34,8 +36,27 @@ public sealed partial class MainPage : Page
 
         InitializeComponent();
 
-        ViewModel.Messages.CollectionChanged += (_, _) => ScrollChatToEnd();
+        ViewModel.Messages.CollectionChanged += OnMessagesChanged;
     }
+
+    /// <summary>Scroll on every new message AND on every streamed delta into the
+    /// current one — a growing message mutates its own Text in place (see
+    /// ChatViewModel.AddAssistantMessage), which doesn't raise
+    /// CollectionChanged, only that item's own PropertyChanged.</summary>
+    private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems is not null)
+        {
+            foreach (ChatMessage added in e.NewItems) added.PropertyChanged += OnMessagePropertyChanged;
+        }
+        if (e.OldItems is not null)
+        {
+            foreach (ChatMessage removed in e.OldItems) removed.PropertyChanged -= OnMessagePropertyChanged;
+        }
+        ScrollChatToEnd();
+    }
+
+    private void OnMessagePropertyChanged(object? sender, PropertyChangedEventArgs e) => ScrollChatToEnd();
 
     private async void OnSendClick(object sender, RoutedEventArgs e) => await ViewModel.SendAsync();
 
