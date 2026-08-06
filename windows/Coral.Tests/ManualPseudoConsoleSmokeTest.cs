@@ -32,7 +32,7 @@ public class ManualPseudoConsoleSmokeTest
             return;
         }
 
-        var launcher = new Win32PseudoConsoleLauncher();
+        var launcher = new Win32PseudoConsoleLauncher { Diagnostics = _output.WriteLine };
         using var session = launcher.Start("cmd.exe", new List<string> { "/c", "echo hello-from-conpty" },
             Environment.CurrentDirectory, new Dictionary<string, string?>());
 

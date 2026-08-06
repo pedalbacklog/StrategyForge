@@ -74,7 +74,8 @@ windows/
   and `IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher` (Fase 3): the ConPTY
   primitive — raw P/Invoke against `kernel32` (no shell-out equivalent exists on
   Windows the way `openpty` does on macOS), same interface-plus-real-wrapper shape
-  as the process launcher. **Compiles clean; not run anywhere yet** — see "Testing
+  as the process launcher. **Hit and fixed two real bugs on real Windows (a hang,
+  then `STATUS_DLL_INIT_FAILED`); fix not yet reconfirmed** — see "Testing
   the pieces that need a real Windows machine" below.
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
@@ -156,20 +157,26 @@ something in that chain needs fixing; a normal run ends with `[usage] ... tokens
 and `[finished]`. Point `CORAL_MANUAL_REPO_PATH` at a specific folder to run
 `claude` there instead of the current directory.
 
-**`ManualPseudoConsoleSmokeTest`** — ⬜ **not run anywhere yet.** ConPTY
-(`Win32PseudoConsoleLauncher`) is raw P/Invoke against `kernel32` with no
-cross-platform equivalent, so unlike `ClaudeRunner`'s plumbing (smoke-tested for
-real on Linux via `dotnet` before ever touching Windows), this has only ever
-compiled — never executed successfully anywhere. Run it on Windows:
+**`ManualPseudoConsoleSmokeTest`** — 🔶 **fix applied, not yet reconfirmed on real
+Windows.** ConPTY (`Win32PseudoConsoleLauncher`) is raw P/Invoke against `kernel32`
+with no cross-platform equivalent, so unlike `ClaudeRunner`'s plumbing, this has no
+Linux-side signal to fall back on. First real run hung (fixed — the ConPTY output
+pipe doesn't EOF on its own when the child exits, see `PORT-PLAN.md` §10), then
+failed with `STATUS_DLL_INIT_FAILED`. Root cause found by code review: the
+`PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` attribute was being set to a pointer-to-the-handle
+instead of the handle value itself (full writeup in `PORT-PLAN.md` §10). Fixed, but
+needs a real Windows run to confirm. Run it:
 
 ```
-dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~ManualPseudoConsoleSmokeTest"
+dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~ManualPseudoConsoleSmokeTest" --logger "console;verbosity=detailed"
 ```
 
-It spawns `cmd.exe /c echo hello-from-conpty` attached to a real pseudo-console and
-checks the echoed text comes back through it. If this fails, it fails in genuinely
-new territory — there's no Linux-side signal to fall back on, so report the exact
-output/exception and expect it may take a couple of iterations to get right.
+(`verbosity=detailed` matters here — `Win32PseudoConsoleLauncher.Diagnostics` prints a
+step-by-step trace of every Win32 call's return value through `ITestOutputHelper`,
+which is otherwise swallowed on success.) It spawns `cmd.exe /c echo hello-from-conpty`
+attached to a real pseudo-console and checks the echoed text comes back through it. If
+it still fails, report the full diagnostic trace verbatim — it pinpoints exactly which
+call returned something unexpected.
 
 ## Status
 

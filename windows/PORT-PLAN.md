@@ -448,10 +448,52 @@ fechas o moneda para mostrar (no solo para JSON/máquina) necesita o bien
 asumir que "pasa en CI" cubre esto, porque ni este sandbox ni `windows-latest`
 corren con una locale distinta a la inglesa por defecto.
 
-**Pendiente (próxima entrada de esta bitácora):** `ManualPseudoConsoleSmokeTest`
-(ConPTY) — a diferencia de todo lo anterior, esto es P/Invoke crudo contra
-`kernel32` sin ningún equivalente probable en Linux, así que no hay forma de
-smoke-testearlo aquí ni parcialmente. Compila limpio (0 warnings) pero no ha
-corrido con éxito en NINGÚN lado todavía. Es la única pieza de Fase 3 que
-sigue en ese estado — cuando el founder la corra en Windows y confirme
-resultado, esta entrada se actualiza y Fase 3 queda cerrada del todo.
+**2026-08-06 — `ManualPseudoConsoleSmokeTest` (ConPTY): hang, luego
+`STATUS_DLL_INIT_FAILED`, causa raíz encontrada por revisión de código.**
+La primera corrida real en Windows colgó más de 3 minutos: el pipe de salida
+de ConPTY nunca llega a EOF por sí solo cuando el proceso hijo termina —
+conhost mantiene su extremo de escritura abierto hasta que se llama
+`ClosePseudoConsole` explícitamente, con independencia de que el proceso
+adjunto siga vivo. Arreglado con una tarea de fondo que espera la salida del
+proceso, da 200ms de margen para drenar el búfer, y fuerza el cierre de la
+pseudo-consola (de forma idempotente) para desbloquear la lectura pendiente.
+
+Confirmado que el hang se arregló (232ms en vez de >3min), pero apareció un
+fallo nuevo: `STATUS_DLL_INIT_FAILED` (0xC0000142) — `CreateProcess` tiene
+éxito (PID válido), pero el proceso hijo (`cmd.exe`) muere durante su propio
+arranque, sin producir ninguna línea de salida. Se descartaron por pruebas
+directas del founder: sandboxing de herramientas (falla igual en una consola
+PowerShell sin sandbox) y versión de Windows (build 10.0.26200.0, muy por
+encima del mínimo de ConPTY). Un test de bisección temporal
+(`ManualConPtyDiagnosticTest.cs`, borrar una vez cerrado esto) probó que
+`STARTUPINFOEX` + lista de atributos + `CreateProcess` + bloque de entorno a
+medida funcionan bien de forma aislada — acotando el bug a la parte
+específica de ConPTY (`CreatePseudoConsole`/pipes/el atributo
+`PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`).
+
+Con eso acotado, una relectura del código encontró la causa: en
+`CreateAndInitializeAttributeListForPseudoConsole`,
+`UpdateProcThreadAttribute` recibía como `lpValue` un puntero a un bloque de
+heap que a su vez contenía el handle `hPc` — un nivel de indirección de más.
+La muestra oficial de ConPTY de Microsoft (y cualquier otro binding correcto,
+p.ej. el paquete Go de `hcsshim`) pasa el propio valor del handle `HPCON`
+directamente como `lpValue`, no un puntero a una variable que lo contenga —
+como `HPCON` ya ocupa el tamaño de un puntero, ese es el contrato exacto de
+este atributo en particular. Con el nivel de indirección de más,
+`CreateProcess` seguía teniendo éxito (la lista de atributos es
+estructuralmente válida) pero el hijo fallaba al intentar adjuntar su E/S de
+consola a través de una referencia de pseudo-consola corrupta — encaja
+exactamente con `STATUS_DLL_INIT_FAILED`. Arreglado pasando `hPc` en vez de
+un puntero nuevo; de paso desaparece el pequeño leak intencional de
+`hPcPtr` que existía antes. Se añadió también un `Diagnostics` opcional
+(`Action<string>?`) en `Win32PseudoConsoleLauncher`, cableado en el smoke
+test, para tener trazas paso a paso si esta corrección no fuera suficiente.
+
+**Pendiente de verdad:** esta corrección se basa en revisión de código (el
+patrón es un "gotcha" bien documentado del binding de ConPTY, no una
+suposición), pero **todavía no se ha confirmado con una corrida real en
+Windows** — la build local en este sandbox solo prueba que compila y que los
+128 tests automatizados siguen pasando. `ManualPseudoConsoleSmokeTest` debe
+correr en la máquina Windows del founder antes de dar Fase 3 por cerrada del
+todo. Si pasa, borrar `ManualConPtyDiagnosticTest.cs` (scaffolding temporal)
+y actualizar esta entrada con el resultado.

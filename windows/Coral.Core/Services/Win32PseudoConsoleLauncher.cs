@@ -27,27 +27,44 @@ namespace Coral.Core.Services;
 [SupportedOSPlatform("windows")]
 public sealed class Win32PseudoConsoleLauncher : IPseudoConsoleLauncher
 {
+    /// <summary>Optional step-by-step diagnostic sink for <see cref="Start"/> —
+    /// set by a caller that wants visibility into exactly what each Win32 call
+    /// returned (HRESULTs, handle values, Win32 errors) without a debugger. Null
+    /// by default; every call site is a null-conditional, so there's no overhead
+    /// when unset.</summary>
+    public Action<string>? Diagnostics { get; set; }
+
     public IPseudoConsoleSession Start(string fileName, IReadOnlyList<string> arguments,
         string workingDirectory, IReadOnlyDictionary<string, string?> environmentOverrides,
         short columns = 160, short rows = 48)
     {
+        void Log(string s) => Diagnostics?.Invoke(s);
+
         // 1. A pipe pair for the console's INPUT: we write to inputWrite, the
         // pseudo-console reads from inputRead and hands it to the child as stdin.
         if (!NativeMethods.CreatePipe(out var inputRead, out var inputWrite, IntPtr.Zero, 0))
         {
+            var err = Marshal.GetLastWin32Error();
+            Log($"CreatePipe (input) FAILED: Win32 error {err}");
             throw new InvalidOperationException("Failed to create the ConPTY input pipe.");
         }
+        Log($"Input pipe: read=0x{inputRead.DangerousGetHandle():X}, write=0x{inputWrite.DangerousGetHandle():X}");
+
         // 2. A pipe pair for the console's OUTPUT: the child's stdout/stderr land
         // in outputWrite via the pseudo-console, we read the terminal stream from
         // outputRead.
         if (!NativeMethods.CreatePipe(out var outputRead, out var outputWrite, IntPtr.Zero, 0))
         {
+            var err = Marshal.GetLastWin32Error();
+            Log($"CreatePipe (output) FAILED: Win32 error {err}");
             inputRead.Dispose(); inputWrite.Dispose();
             throw new InvalidOperationException("Failed to create the ConPTY output pipe.");
         }
+        Log($"Output pipe: read=0x{outputRead.DangerousGetHandle():X}, write=0x{outputWrite.DangerousGetHandle():X}");
 
         var size = new NativeMethods.COORD { X = columns, Y = rows };
         var hr = NativeMethods.CreatePseudoConsole(size, inputRead, outputWrite, 0, out var hPc);
+        Log($"CreatePseudoConsole: hr=0x{hr:X8}, hPc=0x{hPc:X}, size={columns}x{rows}");
         // CreatePseudoConsole duplicates the handles it needs; our copies of the
         // "far" ends are no longer ours to hold once it succeeds.
         inputRead.Dispose();
@@ -62,19 +79,25 @@ public sealed class Win32PseudoConsoleLauncher : IPseudoConsoleLauncher
         try
         {
             attributeList = NativeMethods.CreateAndInitializeAttributeListForPseudoConsole(hPc);
+            Log($"Attribute list allocated at 0x{attributeList:X}, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE set to hPc=0x{hPc:X}");
 
             var startupInfo = new NativeMethods.STARTUPINFOEX
             {
                 StartupInfo = new NativeMethods.STARTUPINFO { cb = Marshal.SizeOf<NativeMethods.STARTUPINFOEX>() },
                 lpAttributeList = attributeList,
             };
+            Log($"STARTUPINFOEX.StartupInfo.cb = {startupInfo.StartupInfo.cb} (sizeof STARTUPINFOEX)");
 
-            var commandLine = new StringBuilder(NativeMethods.BuildCommandLine(fileName, arguments));
+            var commandLineText = NativeMethods.BuildCommandLine(fileName, arguments);
+            Log($"Command line: {commandLineText}");
+            var commandLine = new StringBuilder(commandLineText);
             var envBlock = NativeMethods.BuildEnvironmentBlock(environmentOverrides);
+            Log($"Environment block: {(envBlock is null ? "null (inherit)" : $"{envBlock.Length} bytes")}");
             var envHandle = envBlock is null ? default : GCHandle.Alloc(envBlock, GCHandleType.Pinned);
             try
             {
                 var creationFlags = NativeMethods.EXTENDED_STARTUPINFO_PRESENT | NativeMethods.CREATE_UNICODE_ENVIRONMENT;
+                Log($"CreateProcess: workingDirectory={workingDirectory}, creationFlags=0x{creationFlags:X8}");
                 var ok = NativeMethods.CreateProcess(
                     null, commandLine, IntPtr.Zero, IntPtr.Zero, false, creationFlags,
                     envBlock is null ? IntPtr.Zero : envHandle.AddrOfPinnedObject(),
@@ -82,8 +105,10 @@ public sealed class Win32PseudoConsoleLauncher : IPseudoConsoleLauncher
                 if (!ok)
                 {
                     var error = Marshal.GetLastWin32Error();
+                    Log($"CreateProcess FAILED: Win32 error {error}");
                     throw new InvalidOperationException($"CreateProcess failed for '{fileName}' (Win32 error {error}).");
                 }
+                Log($"CreateProcess OK: pid={processInfo.dwProcessId}, hProcess=0x{processInfo.hProcess:X}");
 
                 NativeMethods.CloseHandle(processInfo.hThread);
                 return new Win32PseudoConsoleSession(hPc, attributeList, processInfo.hProcess,
@@ -347,20 +372,21 @@ internal static class NativeMethods
             throw new InvalidOperationException("InitializeProcThreadAttributeList failed.");
         }
 
-        var hPcPtr = Marshal.AllocHGlobal(IntPtr.Size);
-        Marshal.WriteIntPtr(hPcPtr, hPc);
+        // UpdateProcThreadAttribute's lpValue for PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE is
+        // the HPCON handle VALUE itself, not a pointer to a variable holding it — this
+        // is what Microsoft's own ConPTY sample (and every other correct binding, e.g.
+        // hcsshim's Go port) does. HPCON is already pointer-sized, so passing a pointer
+        // TO it (one extra level of indirection) hands the kernel a bogus pseudo-console
+        // reference: CreateProcess still succeeds (the attribute list is structurally
+        // valid), but the child fails during its own startup trying to attach console
+        // I/O through it — this reproduces as STATUS_DLL_INIT_FAILED (0xC0000142).
         if (!UpdateProcThreadAttribute(attributeList, 0, (IntPtr)PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-                hPcPtr, (IntPtr)IntPtr.Size, IntPtr.Zero, IntPtr.Zero))
+                hPc, (IntPtr)IntPtr.Size, IntPtr.Zero, IntPtr.Zero))
         {
             DeleteProcThreadAttributeList(attributeList);
             Marshal.FreeHGlobal(attributeList);
-            Marshal.FreeHGlobal(hPcPtr);
             throw new InvalidOperationException("UpdateProcThreadAttribute failed.");
         }
-        // Intentionally leaked (freed alongside attributeList in the session's
-        // Dispose): CreateProcess reads through this pointer, so it must outlive
-        // the call, and there's no attribute-list "teardown" callback to free it
-        // from — same tradeoff the official ConPTY sample makes.
         return attributeList;
     }
 
