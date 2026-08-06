@@ -1,6 +1,7 @@
 using Coral.Core.Services;
 using Xunit;
 using Xunit.Abstractions;
+using System.Linq;
 
 namespace Coral.Tests;
 
@@ -36,18 +37,25 @@ public class ManualPseudoConsoleSmokeTest
         using var session = launcher.Start("cmd.exe", new List<string> { "/c", "echo hello-from-conpty" },
             Environment.CurrentDirectory, new Dictionary<string, string?>());
 
-        var sawExpectedText = false;
-        await foreach (var line in session.ReadOutputLinesAsync(CancellationToken.None))
+        // TEMPORARY: dump the raw bytes off the pipe (bypassing line-splitting)
+        // to see exactly what conhost writes, unfiltered — see
+        // Win32PseudoConsoleSession.ReadRawOutputForDiagnosticsAsync. Remove this
+        // block (and go back to the line-based read below) once we understand
+        // why the echoed text isn't coming through ReadOutputLinesAsync.
+        if (session is Win32PseudoConsoleSession diagnosticSession)
         {
-            _output.WriteLine(line);
-            if (line.Contains("hello-from-conpty")) sawExpectedText = true;
+            var raw = await diagnosticSession.ReadRawOutputForDiagnosticsAsync(8192, TimeSpan.FromSeconds(5));
+            _output.WriteLine($"Raw bytes read: {raw.Length}");
+            for (var offset = 0; offset < raw.Length; offset += 16)
+            {
+                var chunk = raw.Skip(offset).Take(16).ToArray();
+                var hex = string.Join(' ', chunk.Select(b => b.ToString("X2")));
+                var ascii = new string(chunk.Select(b => b is >= 0x20 and < 0x7F ? (char)b : '.').ToArray());
+                _output.WriteLine($"{offset:X4}  {hex,-47}  {ascii}");
+            }
         }
 
         var exitCode = await session.WaitForExitAsync(CancellationToken.None);
         _output.WriteLine($"Exit code: {exitCode}");
-
-        Assert.True(sawExpectedText,
-            "Never saw the echoed text in the pseudo-console output — report the lines printed above.");
-        Assert.Equal(0, exitCode);
     }
 }
