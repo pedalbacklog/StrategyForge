@@ -97,6 +97,36 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task StepsAfterADelegationAreAttributedToTheActiveSubagent()
+    {
+        var lines = new List<string>
+        {
+            // Orchestrator reads a file first (Agent should be null).
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/repo/a.txt"}}]}}""",
+            // Delegates to "reviewer" — a delegation marker, excluded from step counts.
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Task","input":{"subagent_type":"reviewer"}}]}}""",
+            // A step that happens while "reviewer" is active should be attributed to it.
+            // (Grep, not Edit/Write/Bash — those also emit a second FileEdited/
+            // CommandStarted event from the same tool_use, which isn't what this
+            // test is checking.)
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t3","name":"Grep","input":{"pattern":"TODO"}}]}}""",
+            """{"type":"result","subtype":"success","result":"done"}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        Assert.Equal(3, vm.Activity.Count);
+        Assert.Null(vm.Activity[0].Agent);
+        Assert.False(vm.Activity[0].IsDelegation);
+        Assert.True(vm.Activity[1].IsDelegation);
+        Assert.Null(vm.Activity[1].Agent); // the delegation itself is an orchestrator action
+        Assert.Equal("reviewer", vm.Activity[2].Agent);
+        Assert.False(vm.Activity[2].IsDelegation);
+    }
+
+    [Fact]
     public async Task UsageEventFormatsStatusMessageWithInvariantCulture()
     {
         var lines = new List<string>

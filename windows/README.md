@@ -125,7 +125,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **149/149**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **160/160**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -202,7 +202,7 @@ test and `PORT-PLAN.md` §10 for the full story.
 
 ## Status
 
-**Fase 1 (scaffolding) done**; **Fase 2 (portable core) essentially done**;
+**Fase 1 (scaffolding) done**; **Fase 2 (portable core) done**;
 **Fase 3 (process runner) done**; **Fase 4 (secretos + auth) started** (scope
 deliberately cut, see below); **Fase 5 (Chat MVP) done — confirmed end to end
 on real Windows** — see `PORT-PLAN.md` §6 for the live
@@ -213,8 +213,9 @@ CLAUDE.md + dynamic workflow + MCP configs, written to disk" path
 `McpConfigGenerator`/`FileDiff`/`StrategyWriter`), all 15 built-in `StrategyLibrary`
 templates, `EvalSuite`/`ToolCheck` (pure scoring/assertion logic — the judge and
 command runner that produce their inputs are Services, not ported), cost estimation
-(`CostEstimationHooks`), the shareable mission-report headline/Markdown
-(`MissionReport`), `ModelCatalog`, the pure NDJSON stream parser
+(`CostEstimationHooks`), the shareable mission-report headline/Markdown/
+per-agent stats (`MissionReport`, including `AgentLines` — see below),
+`AgentNameMatcher`, `ModelCatalog`, the pure NDJSON stream parser
 (`ClaudeStreamParser`, turns Claude Code's `--output-format stream-json` lines
 into `ChatEvent`s), CLI binary resolution (`BinaryResolver`), the CLI
 argument-list builder (`ClaudeRunArgs`), the pure half of the multi-provider
@@ -225,19 +226,23 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 (`IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher`), `ProviderAuth`
 (login-freshness check for `claude`/`codex`/`gemini`, reading only their own
 on-disk credentials files — the first piece of Fase 4), and the minimal
-`ChatViewModel` (Fase 5, single-provider `-p` path only) — 149 automated
+`ChatViewModel` (Fase 5, single-provider `-p` path only) — 160 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
 spawns a genuinely real process to smoke-test the no-shell
 `Process.Start`/async-stdout/exit-code/`Kill()` plumbing, `LocaleRegressionTests`,
-added after the first real-Windows run, `ProviderAuthTests`, and
-`ChatViewModelTests` — see below) — plus 2 manual tests excluded from that
+added after the first real-Windows run, `ProviderAuthTests`,
+`ChatViewModelTests`, `AgentNameMatcherTests`, and the `MissionReport.AgentLines`
+cases — see below) — plus 2 manual tests excluded from that
 count and from CI (see "Testing the pieces that need a real Windows machine").
-Still not ported: `MissionReport.agentLines()` (needs the not-yet-built
-chat/activity runtime — `ActivityStep`/`AgentNameMatcher` — now that
-`ChatViewModel` exists this is unblocked, just not done yet), the rest of
-Fase 4 (Credential Manager wrapper, `Account`/`AuthProviderKind`, Google
+Fase 2's last loose end (`MissionReport.agentLines()`, which needed
+`ActivityStep`/`AgentNameMatcher`) is now closed — `ActivityStep` picked up
+`IsDelegation`/`Agent` fields once `ChatViewModel` existed to populate them,
+and `ChatViewModel` now tracks which subagent is active (reset per turn) to
+attribute each step correctly, matching the Swift original. Still not
+ported: the rest of Fase 4 (Credential Manager wrapper, `Account`/
+`AuthProviderKind`, Google
 OAuth+PKCE with a loopback listener — deliberately deferred, see `PORT-PLAN.md`
 §6/§9: it only exists on macOS to gate CloudKit sync, itself a Windows
 non-goal), the rest of Fase 5 (repo picker, model/effort/permission-mode

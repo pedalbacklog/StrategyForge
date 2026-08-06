@@ -199,9 +199,9 @@ antivirus y es, a la vez, una superficie real si se implementa mal.
 Fase 0 — Decisión y setup            ✅ hecha (esta doc + confirmación del stack)
 Fase 1 — Scaffolding                 ✅ hecha: Coral.sln, Coral (WinUI3, unpackaged),
                                       Coral.Core, Coral.Tests, windows-tests.yml real
-Fase 2 — Núcleo portable             ✅ esencialmente cerrada — ver detalle abajo
-                                      (solo queda MissionReport.agentLines(),
-                                      diferido a Fase 5 a propósito)
+Fase 2 — Núcleo portable             ✅ cerrada del todo — MissionReport.
+                                      AgentLines() (el último cabo suelto)
+                                      portado junto a AgentNameMatcher
 Fase 3 — Runner de procesos          ✅ cerrada — ClaudeRunner.Stream() y la
                                       primitiva ConPTY confirmados en Windows
                                       real (ver §10); ambos encontraron y
@@ -269,11 +269,20 @@ la capa de más ROI porque es lógica pura sin UI):
 - ✅ `Generators/CostEstimationHooks.swift` → `CostEstimationHooks.cs`
   (`StrategyCost`, `CostEffort`, `CostEstimator`) + tabla de precios/constantes
   de `Constants.swift` → `Constants.cs`
-- 🔶 `Generators/MissionReport.swift` → `MissionReport.cs` — solo `Headline`/
-  `Markdown` (puros); `agentLines(strategy:timeline:)` queda sin portar porque
-  depende de `ActivityStep` (un tipo de ViewModel) y `AgentNameMatcher`
-  (`Services/`), ninguno portado — se hará junto al runtime de chat/actividad
-  (Fase 5)
+- ✅ `Generators/MissionReport.swift` → `MissionReport.cs` completo —
+  `Headline`/`Markdown` (puros) y ahora también `AgentLines(strategy:,
+  timeline:)`, que deriva estadísticas por agente del timeline de actividad:
+  el orquestador se queda con los pasos sin delegar (`Agent == null`), cada
+  subagente hace match laxo por nombre vía `AgentNameMatcher.TitlesMatch`
+  (nuevo, `Services/AgentNameMatcher.cs`). Necesitaba que `ActivityStep`
+  (`Coral.Core.ViewModels`, creado en Fase 5) tuviera los campos
+  `IsDelegation`/`Agent` — no existían en el corte mínimo de Fase 5, así que
+  se añadieron ahí también (con valores por defecto, sin romper nada
+  existente) y `ChatViewModel` ahora rastrea qué subagente está activo
+  (`_activeSubagent`, reseteado al empezar cada turno) para atribuir cada
+  paso correctamente, igual que el original Swift. 11 tests nuevos
+  (`AgentNameMatcherTests`, `MissionReportTests`, y un caso nuevo en
+  `ChatViewModelTests` para la atribución) — 160 en total.
 - ⬜ Todo lo demás bajo `Services/` distinto de `ModelCatalog` empieza a pisar
   Fase 3 (spawn de procesos, APIs solo-Windows) — no cuenta como Fase 2
 
@@ -442,7 +451,7 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
   modelo/esfuerzo/permission-mode (valores fijos razonables) — eso es
   trabajo de seguimiento, no de este corte mínimo.
 
-149 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+160 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 2 tests manuales (Category=Manual, excluidos del CI),
 **ambos confirmados pasando en Windows real**: uno contra `claude` real, el
@@ -478,14 +487,11 @@ solo `windows-tests.yml` — nunca el gate de macOS.
 
 ## 9. Siguiente paso concreto
 
-Fases 0-1 hechas; Fase 2 esencialmente cerrada (detalle en §6): todo `Models/` y
-`Generators/` que es lógica pura (sin runtime de chat/actividad) está portado y
-probado, incluyendo el camino completo "Strategy → archivos en disco"
-(`StrategyWriter`, contra un directorio temporal real) y la estimación de coste.
-Solo queda pendiente, y deliberadamente diferido:
-
-1. `MissionReport.agentLines()` — depende de `ActivityStep`/`AgentNameMatcher`
-   (runtime de chat), se porta junto a Fase 5.
+Fases 0-1 hechas; **Fase 2 cerrada del todo** (detalle en §6): todo `Models/` y
+`Generators/` está portado y probado, incluyendo el camino completo "Strategy →
+archivos en disco" (`StrategyWriter`, contra un directorio temporal real), la
+estimación de coste, y `MissionReport.AgentLines()` (el último cabo suelto,
+resuelto junto con Fase 5 una vez `ChatViewModel`/`ActivityStep` ya existían).
 
 **Fase 3 (runner de procesos) cerrada del todo.** Escrita, probada con
 fakes, con smoke tests de proceso real, y **confirmada en Windows real

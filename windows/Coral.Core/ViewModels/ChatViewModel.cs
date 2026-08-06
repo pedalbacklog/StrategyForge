@@ -31,10 +31,14 @@ public sealed class ChatMessage : ObservableObject
     }
 }
 
-/// <summary>One entry in the live agent-activity panel — a trimmed-down
-/// <c>ActivityStep</c> (macOS also tracks delegation/per-agent attribution;
-/// out of scope for this minimal P0, see PORT-PLAN.md Fase 5).</summary>
-public sealed record ActivityStep(string Title, string? Detail, DateTimeOffset At)
+/// <summary>One entry in the live agent-activity panel. Port of
+/// <c>ActivityStep.swift</c>'s shape (minus persistence/Codable, not needed
+/// here yet): <see cref="IsDelegation"/>/<see cref="Agent"/> attribute each
+/// step to whichever subagent was active when it happened (null = the
+/// orchestrator) — <see cref="Coral.Core.Generators.MissionReport.AgentLines"/>
+/// uses this to derive per-agent stats.</summary>
+public sealed record ActivityStep(string Title, string? Detail, DateTimeOffset At,
+    bool IsDelegation = false, string? Agent = null)
 {
     /// <summary>Binding-friendly non-null <see cref="Detail"/> — avoids the UI
     /// layer needing a null check/converter just to show an optional line.</summary>
@@ -61,6 +65,12 @@ public sealed class ChatViewModel : ObservableObject
     private readonly string _sessionId = Guid.NewGuid().ToString();
     private bool _hasSentFirstTurn;
     private CancellationTokenSource? _cts;
+
+    /// <summary>Which subagent is currently delegated to, if any — null means
+    /// the orchestrator. Reset at the start of each turn (matches
+    /// ChatViewModel.swift's `activeSubagent = nil` on send); every step
+    /// added while a subagent is active gets attributed to it.</summary>
+    private string? _activeSubagent;
 
     public ObservableCollection<ChatMessage> Messages { get; } = new();
     public ObservableCollection<ActivityStep> Activity { get; } = new();
@@ -130,6 +140,7 @@ public sealed class ChatViewModel : ObservableObject
         var separatorPending = false;  // insert a blank line before the next text block
         var cts = new CancellationTokenSource();
         _cts = cts;
+        _activeSubagent = null;
 
         try
         {
@@ -155,30 +166,40 @@ public sealed class ChatViewModel : ObservableObject
                         break;
 
                     case ChatEvent.Tool tool:
-                        Activity.Add(new ActivityStep(tool.Name, tool.Detail, DateTimeOffset.Now));
+                        Activity.Add(new ActivityStep(tool.Name, tool.Detail, DateTimeOffset.Now,
+                            Agent: _activeSubagent));
                         separatorPending = true;
                         break;
 
                     case ChatEvent.Delegated del:
-                        Activity.Add(new ActivityStep($"→ {del.SubagentName}", null, DateTimeOffset.Now));
+                        // The delegation itself is an orchestrator action (Agent: null) —
+                        // it's the STEPS the subagent takes afterward that get attributed
+                        // to it, via _activeSubagent below.
+                        _activeSubagent = del.SubagentName;
+                        Activity.Add(new ActivityStep($"→ {del.SubagentName}", null, DateTimeOffset.Now,
+                            IsDelegation: true));
                         separatorPending = true;
                         break;
 
                     case ChatEvent.CommandStarted cmd:
-                        Activity.Add(new ActivityStep("Ran a command", cmd.Command, DateTimeOffset.Now));
+                        Activity.Add(new ActivityStep("Ran a command", cmd.Command, DateTimeOffset.Now,
+                            Agent: _activeSubagent));
                         break;
 
                     case ChatEvent.FileEdited f:
-                        Activity.Add(new ActivityStep("Edited " + Path.GetFileName(f.Path), f.Path, DateTimeOffset.Now));
+                        Activity.Add(new ActivityStep("Edited " + Path.GetFileName(f.Path), f.Path, DateTimeOffset.Now,
+                            Agent: _activeSubagent));
                         break;
 
                     case ChatEvent.SkillUsed s:
-                        Activity.Add(new ActivityStep("Skill: " + s.Slug, null, DateTimeOffset.Now));
+                        Activity.Add(new ActivityStep("Skill: " + s.Slug, null, DateTimeOffset.Now,
+                            Agent: _activeSubagent));
                         separatorPending = true;
                         break;
 
                     case ChatEvent.Denied den:
-                        Activity.Add(new ActivityStep("Blocked", string.Join(", ", den.Items), DateTimeOffset.Now));
+                        Activity.Add(new ActivityStep("Blocked", string.Join(", ", den.Items), DateTimeOffset.Now,
+                            Agent: _activeSubagent));
                         break;
 
                     case ChatEvent.Usage u:

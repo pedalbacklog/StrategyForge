@@ -1,4 +1,7 @@
 using System.Globalization;
+using Coral.Core.Models;
+using Coral.Core.Services;
+using Coral.Core.ViewModels;
 
 namespace Coral.Core.Generators;
 
@@ -8,12 +11,6 @@ namespace Coral.Core.Generators;
 /// tracks (the activity timeline, tokens, cost, the team). The headline — "my
 /// 4-agent team did X for $0.83" — is the shareable hook of the discovery phase.
 /// Pure and testable; the view just renders + exports what this produces.
-///
-/// <c>agentLines(strategy:timeline:)</c> is NOT ported yet — it derives per-agent
-/// stats from the live activity timeline (<c>ActivityStep</c>, a ViewModel type)
-/// via <c>AgentNameMatcher</c>, neither of which is in Coral.Core today. Port it
-/// alongside the chat/activity runtime (Fase 5), passing <see cref="AgentLine"/>
-/// values straight into <see cref="Markdown"/> in the meantime.
 /// </summary>
 public static class MissionReport
 {
@@ -26,6 +23,50 @@ public static class MissionReport
         var cost = costUsd > 0 ? $"${costUsd.ToString("F2", CultureInfo.InvariantCulture)}" : $"{FormatTokens(tokens)} tokens";
         if (agentCount <= 1) return $"A single agent finished for {cost}.";
         return $"A {agentCount}-agent team finished for {cost}.";
+    }
+
+    /// <summary>Derive per-agent lines from the strategy + the run's timeline
+    /// (orchestrator owns the un-delegated steps; subagents match loosely by
+    /// name via <see cref="AgentNameMatcher"/>).</summary>
+    public static List<AgentLine> AgentLines(Strategy strategy, IReadOnlyList<ActivityStep> timeline)
+    {
+        (int Count, string Span) Stats(Func<ActivityStep, bool> predicate)
+        {
+            var steps = timeline.Where(s => !s.IsDelegation && predicate(s)).ToList();
+            if (steps.Count == 0) return (0, "");
+            var first = steps[0].At;
+            var last = steps[^1].At;
+            var span = (last - first).TotalSeconds >= 1 ? ActivityElapsed(first, last) : "";
+            return (steps.Count, span);
+        }
+
+        var lines = new List<AgentLine>();
+        var orchestrator = strategy.Orchestrator;
+        if (orchestrator is not null)
+        {
+            var (n, span) = Stats(s => s.Agent is null);
+            lines.Add(new AgentLine(TitleCase(orchestrator.Name), orchestrator.Role.DisplayName(),
+                orchestrator.ModelDisplayName, n, span));
+        }
+        foreach (var role in strategy.SubagentRoles)
+        {
+            var name = TitleCase(role.Name);
+            var (n, span) = Stats(s => AgentNameMatcher.TitlesMatch(s.Agent ?? "", name));
+            lines.Add(new AgentLine(name, role.Role.DisplayName(), role.ModelDisplayName, n, span));
+        }
+        return lines;
+    }
+
+    private static string TitleCase(string s)
+    {
+        var words = s.Replace('-', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(' ', words.Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
+    }
+
+    private static string ActivityElapsed(DateTimeOffset from, DateTimeOffset to)
+    {
+        var s = Math.Max(0, (int)(to - from).TotalSeconds);
+        return s < 60 ? $"{s}s" : $"{s / 60}m {(s % 60).ToString("D2", CultureInfo.InvariantCulture)}s";
     }
 
     /// <summary>The full Markdown report.</summary>
