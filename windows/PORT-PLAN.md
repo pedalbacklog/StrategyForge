@@ -202,12 +202,12 @@ Fase 1 — Scaffolding                 ✅ hecha: Coral.sln, Coral (WinUI3, unpa
 Fase 2 — Núcleo portable             ✅ esencialmente cerrada — ver detalle abajo
                                       (solo queda MissionReport.agentLines(),
                                       diferido a Fase 5 a propósito)
-Fase 3 — Runner de procesos          🔶 en progreso — ClaudeRunner.Stream() ya
-                                      escrito y probado con fakes + un smoke
-                                      test de proceso real (ver detalle abajo);
-                                      falta correr contra `claude` de verdad en
-                                      Windows — el founder lo prueba en su
-                                      máquina; ConPTY para login sigue pendiente
+Fase 3 — Runner de procesos          🔶 en progreso — ClaudeRunner.Stream() YA
+                                      corrió contra `claude` real en Windows
+                                      real (ver detalle abajo) y encontró/
+                                      arregló un bug real (formato culture-
+                                      sensitive); ConPTY para login sigue
+                                      pendiente
 Fase 4 — Secretos + auth             Credential Manager/DPAPI, Google OAuth (loopback)
 Fase 5 — Chat MVP                    ViewModel + XAML mínimo: enviar prompt, ver
                                       streaming, ver activity panel — esto es "P0"
@@ -301,10 +301,11 @@ empezando por lo que es puro y testeable sin spawnear nada):
   **no** se portan todavía — ningún test los ejercita de forma aislada hoy y
   solo tienen sentido junto al runner real (Fase 3's spawn) o a
   `MetaOrchestrator` (fuera de alcance); añadirlos cuando algo los consuma.
-- 🔶 El spawn real → `ClaudeRunner.cs`/`IProcessLauncher.cs`/
-  `RealProcessLauncher.cs`. **Escrito, pero sin correr contra `claude` de
-  verdad todavía** — el founder lo prueba en su máquina Windows (ver nota al
-  final de esta entrada). Diseño:
+- ✅ El spawn real → `ClaudeRunner.cs`/`IProcessLauncher.cs`/
+  `RealProcessLauncher.cs`. **Ya corrió contra `claude` real en Windows real**
+  (`ManualClaudeRunnerSmokeTest`, ver §10 más abajo) — pasó a la primera:
+  `BinaryResolver` encontró `claude` en el PATH, el spawn sin shell funcionó,
+  el stream se parseó bien de punta a punta. Diseño:
   - `IProcessLauncher`/`IChildProcess`: la única frontera no pura (spawn de
     verdad, sin shell — `ArgumentList`, nunca una string concatenada).
     `RealProcessLauncher` es un wrapper fino sobre
@@ -332,7 +333,7 @@ empezando por lo que es puro y testeable sin spawnear nada):
 - ⬜ ConPTY para captura de login OAuth — API solo-Windows, sin equivalente
   probable en Linux; documentar y portar cuando llegue Fase 6
 
-125 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
+128 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
 `dotnet test` real en este entorno además de en `windows-latest`).
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
@@ -374,15 +375,43 @@ Solo queda pendiente, y deliberadamente diferido:
 1. `MissionReport.agentLines()` — depende de `ActivityStep`/`AgentNameMatcher`
    (runtime de chat), se porta junto a Fase 5.
 
-Fase 3 (runner de procesos) tiene ya escrito y probado (con fakes + un smoke
-test de proceso real) todo el camino: parser NDJSON (`ClaudeStreamParser`),
+Fase 3 (runner de procesos) tiene ya escrito y probado — con fakes, un smoke
+test de proceso real, **y ahora una corrida real contra `claude` en Windows
+real** (§10) — todo el camino: parser NDJSON (`ClaudeStreamParser`),
 resolución de binario/PATH (`BinaryResolver`), construcción de argumentos
-(`ClaudeRunArgs`), y ahora el spawn real orquestado por `ClaudeRunner.Stream()`
-(detalle en §6). El founder prueba esto en su máquina Windows con el `claude`
-real instalado — eso es lo que falta para dar Fase 3 por cerrada:
+(`ClaudeRunArgs`), y el spawn real orquestado por `ClaudeRunner.Stream()`
+(detalle en §6). Lo único que queda de Fase 3:
 
-1. Correr `ClaudeRunner.Stream()` contra `claude` de verdad en Windows y
-   confirmar que el formato de su stream, la resolución de PATH y el spawn
-   se comportan como se diseñó — si algo falla, es la primera señal real de
-   dónde el diseño (no solo el código) necesita ajustarse.
-2. ConPTY para login OAuth — API solo-Windows, entra más adelante (Fase 6).
+1. ConPTY para login OAuth — API solo-Windows, entra más adelante (Fase 6).
+
+## 10. Bitácora de verificación en Windows real
+
+Esta sección registra qué se probó de verdad en una máquina Windows (no solo en
+`windows-latest` o en este sandbox Linux), y qué salió de esas corridas — para
+no perder la señal de "esto ya se verificó de verdad" a medida que el plan
+crece.
+
+**2026-08-06 — primera corrida de `ClaudeRunner.Stream()` contra `claude` real**
+(`ManualClaudeRunnerSmokeTest`, ver `windows/README.md` "Testing against the
+real `claude` CLI"): **pasó a la primera.** `BinaryResolver` resolvió `claude`
+en el `PATH`, el spawn sin shell funcionó, y el stream se parseó de punta a
+punta hasta `Finished`. Confirma que el diseño de Fase 3 (no solo el código)
+es correcto para el caso feliz.
+
+Esa misma corrida completa (suite completa + build de la app WinUI3 en Windows
+real, no solo el smoke test) encontró un bug real que ni este sandbox ni
+`windows-latest` podían atrapar: formato de `$`/tokens sensible a la cultura
+del sistema operativo. `$"{costUsd:F2}"` usa `CultureInfo.CurrentCulture`, así
+que en una máquina con locale español (coma decimal) `$0.83` se renderizaba
+como `$0,83` — afectaba `MissionReport.cs`, `CostEstimationHooks.cs`, y el
+propio output de diagnóstico del smoke test (7 sitios en total). Arreglado
+forzando `CultureInfo.InvariantCulture` en los 7; `LocaleRegressionTests.cs`
+(nuevo) fija `CurrentCulture` a `es-ES` dentro de cada test para que una
+regresión futura se atrape aquí mismo, sin necesitar un runner de CI en un
+locale no inglés.
+
+**Lección para lo que sigue:** cualquier lógica portada que formatee números,
+fechas o moneda para mostrar (no solo para JSON/máquina) necesita o bien
+`InvariantCulture` explícito, o un test bajo una cultura no inglesa — no
+asumir que "pasa en CI" cubre esto, porque ni este sandbox ni `windows-latest`
+corren con una locale distinta a la inglesa por defecto.
