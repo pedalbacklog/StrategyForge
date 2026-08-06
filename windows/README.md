@@ -69,9 +69,13 @@ windows/
   `IProcessLauncher` abstraction so its streaming/watchdog/cancellation
   orchestration is unit-tested with a fake, while `RealProcessLauncher` (a thin
   `System.Diagnostics.Process` wrapper — no shell, `ArgumentList` only) is
-  smoke-tested against a genuinely real process (`dotnet` itself). **Not yet run
-  against the actual `claude` CLI or on a real Windows machine** — see Status
-  below.
+  smoke-tested against a genuinely real process (`dotnet` itself) — **confirmed
+  passing against the real `claude` CLI on a real Windows machine** (see Status);
+  and `IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher` (Fase 3): the ConPTY
+  primitive — raw P/Invoke against `kernel32` (no shell-out equivalent exists on
+  Windows the way `openpty` does on macOS), same interface-plus-real-wrapper shape
+  as the process launcher. **Compiles clean; not run anywhere yet** — see "Testing
+  the pieces that need a real Windows machine" below.
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
@@ -122,32 +126,50 @@ gate either direction: changes here never trigger a macOS run, and macOS-only ch
 CI excludes `Category=Manual` (see below) — those tests need a real, logged-in `claude`
 CLI, which the runner doesn't have.
 
-## Testing against the real `claude` CLI
+## Testing the pieces that need a real Windows machine
 
-Everything in `Coral.Core` has been verified with `dotnet test` and, for Fase 3's
-`ClaudeRunner`, against fakes plus a smoke test that spawns a real (non-`claude`)
-process — but **nothing has run against the actual `claude` CLI yet**. Do this on a
-Windows machine with the CLI installed and logged in:
+Some of `Coral.Core` can only be genuinely verified on Windows, with the real CLIs —
+`dotnet test` here and on `windows-latest` proves it compiles and the *logic* is
+right, not that it behaves correctly against the real thing. Two tests exist for
+exactly this gap, both tagged `Category=Manual` and excluded from the normal
+suite/CI:
+
+**`ManualClaudeRunnerSmokeTest`** — ✅ confirmed passing on real Windows
+(2026-08-06, see `PORT-PLAN.md` §10). Install and log in first:
 
 ```
 npm install -g @anthropic-ai/claude-code
 claude   # sign in once, interactively, to your plan
 ```
 
-Then run the one test written for exactly this (excluded from the normal suite/CI
-because it needs that real, logged-in CLI):
+Then:
 
 ```
 dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~ManualClaudeRunnerSmokeTest"
 ```
 
 It resolves `claude` via `BinaryResolver`, sends it a one-word prompt through
-`ClaudeRunner.Stream()`, and prints every `ChatEvent` it streams back — the first
-real, end-to-end exercise of the whole Fase 3 chain (`BinaryResolver` →
-`ClaudeRunArgs` → `RealProcessLauncher` → `ClaudeStreamParser`). A `[FAILED] ...` line
-or a thrown assertion means something in that chain needs fixing; a normal run ends
-with `[usage] ... tokens` and `[finished]`. Point `CORAL_MANUAL_REPO_PATH` at a
-specific folder to run `claude` there instead of the current directory.
+`ClaudeRunner.Stream()`, and prints every `ChatEvent` it streams back — the whole
+Fase 3 chain (`BinaryResolver` → `ClaudeRunArgs` → `RealProcessLauncher` →
+`ClaudeStreamParser`) end to end. A `[FAILED] ...` line or a thrown assertion means
+something in that chain needs fixing; a normal run ends with `[usage] ... tokens`
+and `[finished]`. Point `CORAL_MANUAL_REPO_PATH` at a specific folder to run
+`claude` there instead of the current directory.
+
+**`ManualPseudoConsoleSmokeTest`** — ⬜ **not run anywhere yet.** ConPTY
+(`Win32PseudoConsoleLauncher`) is raw P/Invoke against `kernel32` with no
+cross-platform equivalent, so unlike `ClaudeRunner`'s plumbing (smoke-tested for
+real on Linux via `dotnet` before ever touching Windows), this has only ever
+compiled — never executed successfully anywhere. Run it on Windows:
+
+```
+dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~ManualPseudoConsoleSmokeTest"
+```
+
+It spawns `cmd.exe /c echo hello-from-conpty` attached to a real pseudo-console and
+checks the echoed text comes back through it. If this fails, it fails in genuinely
+new territory — there's no Linux-side signal to fall back on, so report the exact
+output/exception and expect it may take a couple of iterations to get right.
 
 ## Status
 
@@ -167,31 +189,39 @@ into `ChatEvent`s), CLI binary resolution (`BinaryResolver`), the CLI
 argument-list builder (`ClaudeRunArgs`), the pure half of the multi-provider
 one-shot runner (`CLIOneShotRunner`: per-provider command building,
 ANSI/progress-line cleanup, auth-prompt/failure detection, token/cost
-estimation), and the real spawn (`ClaudeRunner.Stream()`,
-`IProcessLauncher`/`RealProcessLauncher`) — 128 xUnit tests, all passing
-(including `TemplatesAreAllValid`, which iterates every template through
-`Strategy.Validate()`, `StrategyWriterTests`, which round-trips real writes to a
-temp directory, `RealProcessLauncherTests`, which spawns a genuinely real
-process to smoke-test the no-shell `Process.Start`/async-stdout/exit-code/`Kill()`
-plumbing, and `LocaleRegressionTests`, added after the first real-Windows run —
-see below). Still not ported: `MissionReport.agentLines()` (needs the
-not-yet-built chat/activity runtime — `ActivityStep`/`AgentNameMatcher` —
-deferred to Fase 5 on purpose) and ConPTY for login (Fase 6). Everything else
-under `Services/` (git, providers, auth, loops — the last one stays vetoed for
-human review per Fase 8) is still unported. The `Coral` WinUI 3 app project
-itself is still just the Fase 1 blank window — no UI wired to any of this yet
+estimation), the real spawn (`ClaudeRunner.Stream()`,
+`IProcessLauncher`/`RealProcessLauncher`), and the ConPTY primitive
+(`IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher`) — 128 automated xUnit
+tests, all passing (including `TemplatesAreAllValid`, which iterates every
+template through `Strategy.Validate()`, `StrategyWriterTests`, which
+round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
+spawns a genuinely real process to smoke-test the no-shell
+`Process.Start`/async-stdout/exit-code/`Kill()` plumbing, and
+`LocaleRegressionTests`, added after the first real-Windows run — see below) —
+plus 2 manual tests excluded from that count and from CI (see "Testing the
+pieces that need a real Windows machine"). Still not ported:
+`MissionReport.agentLines()` (needs the not-yet-built chat/activity runtime —
+`ActivityStep`/`AgentNameMatcher` — deferred to Fase 5 on purpose) and the full
+per-provider login/install flow (`ProviderInstaller.swift` — npm install,
+Gemini's TUI navigation, Antigravity-migration detection — that's Fase 6, built
+on top of the ConPTY primitive that's already here). Everything else under
+`Services/` (git, auth, loops — the last one stays vetoed for human review per
+Fase 8) is still unported. The `Coral` WinUI 3 app project itself is still just
+the Fase 1 blank window — no UI wired to any of this yet
 (Fase 5).
 
 **`ClaudeRunner` has now run against the real `claude` CLI, on a real Windows
-machine** (`ManualClaudeRunnerSmokeTest` — see "Testing against the real `claude`
-CLI" above), and passed on the first try: `BinaryResolver` found `claude` on
-PATH, the no-shell spawn worked, and the stream parsed correctly end to end.
-That same run surfaced one real bug neither this sandbox nor `windows-latest`
-could have caught: `$`/token formatting (`MissionReport`, `CostEstimationHooks`,
-the smoke test's own diagnostic output) used `:F1`/`:F2`/`:F4` string
-interpolation, which is culture-sensitive — on a Spanish-locale Windows machine
-`$0.83` rendered as `$0,83`. Fixed by forcing `CultureInfo.InvariantCulture`
-everywhere a dollar/token figure is formatted, with `LocaleRegressionTests`
-added to catch a repeat by pinning `CurrentCulture` to `es-ES` for the duration
-of each case — no non-English CI runner needed to guard against it going
-forward.
+machine** (`ManualClaudeRunnerSmokeTest` — see "Testing the pieces that need a
+real Windows machine" above), and passed on the first try: `BinaryResolver`
+found `claude` on PATH, the no-shell spawn worked, and the stream parsed
+correctly end to end. That same run surfaced one real bug neither this sandbox
+nor `windows-latest` could have caught: `$`/token formatting (`MissionReport`,
+`CostEstimationHooks`, the smoke test's own diagnostic output) used
+`:F1`/`:F2`/`:F4` string interpolation, which is culture-sensitive — on a
+Spanish-locale Windows machine `$0.83` rendered as `$0,83`. Fixed by forcing
+`CultureInfo.InvariantCulture` everywhere a dollar/token figure is formatted,
+with `LocaleRegressionTests` added to catch a repeat by pinning
+`CurrentCulture` to `es-ES` for the duration of each case — no non-English CI
+runner needed to guard against it going forward. **The ConPTY primitive
+(`Win32PseudoConsoleLauncher`) has NOT run anywhere yet** — that's the one
+piece left before Fase 3 is genuinely closed.

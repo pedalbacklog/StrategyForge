@@ -206,8 +206,10 @@ Fase 3 — Runner de procesos          🔶 en progreso — ClaudeRunner.Stream(
                                       corrió contra `claude` real en Windows
                                       real (ver detalle abajo) y encontró/
                                       arregló un bug real (formato culture-
-                                      sensitive); ConPTY para login sigue
-                                      pendiente
+                                      sensitive); la primitiva ConPTY está
+                                      escrita pero SIN correr en ningún lado
+                                      todavía — falta la prueba en Windows
+                                      para cerrar la fase del todo
 Fase 4 — Secretos + auth             Credential Manager/DPAPI, Google OAuth (loopback)
 Fase 5 — Chat MVP                    ViewModel + XAML mínimo: enviar prompt, ver
                                       streaming, ver activity panel — esto es "P0"
@@ -330,11 +332,41 @@ empezando por lo que es puro y testeable sin spawnear nada):
     verificar es el comportamiento específico de `claude`/`codex`/`gemini`
     en Windows real (rutas, shims `.cmd`, el formato exacto de su stream) —
     exactamente lo que el founder va a probar en su máquina.
-- ⬜ ConPTY para captura de login OAuth — API solo-Windows, sin equivalente
-  probable en Linux; documentar y portar cuando llegue Fase 6
+- 🔶 ConPTY (la PRIMITIVA de pseudo-consola, no el flujo de login completo) →
+  `IPseudoConsoleLauncher.cs`/`Win32PseudoConsoleLauncher.cs`. **Compilado,
+  NO ejecutado con éxito en ningún lado todavía** — a diferencia de
+  `RealProcessLauncher` (que sí se pudo smoke-testear de verdad en Linux
+  spawneando `dotnet`, porque `System.Diagnostics.Process` es
+  multiplataforma), ConPTY es P/Invoke crudo contra `kernel32` sin
+  equivalente en Linux — no hay forma de probar ni parcialmente esta pieza
+  fuera de Windows. Mismo patrón de interfaz que `IProcessLauncher`
+  (`IPseudoConsoleLauncher`/`IPseudoConsoleSession`), para que la lógica de
+  más alto nivel de un futuro flujo de login (leer una URL del output,
+  escribir un código de vuelta) sea testeable con un fake más adelante.
+  Secuencia Win32 estándar (la misma que la muestra oficial de Microsoft):
+  dos pipes (entrada/salida de la consola) → `CreatePseudoConsole` →
+  `STARTUPINFOEX` con el pseudo-console como proc-thread attribute →
+  `CreateProcess`. Incluye construcción manual de la línea de comandos
+  (reglas de escapado de Win32, ya que `CreateProcess` no tiene equivalente a
+  `ArgumentList`) y del bloque de entorno (ordenado, como exige
+  `CREATE_UNICODE_ENVIRONMENT`).
+  - `ManualPseudoConsoleSmokeTest.cs` (Category=Manual, igual que el de
+    `ClaudeRunner`): spawnea `cmd.exe /c echo hello-from-conpty` a través de
+    la pseudo-consola de verdad. **Esta es la primera vez que este código
+    corre, punto** — no una segunda verificación de algo ya probado. Correrlo
+    en Windows es el paso que falta para cerrar Fase 3 del todo; no lo doy
+    por hecho hasta que el founder confirme que pasa (y, si no pasa, hay que
+    depurarlo ahí — no hay atajo posible sin una máquina Windows).
+- ⬜ El flujo de login completo por proveedor (instalar CLI vía npm, navegar
+  el TUI de Gemini, detectar migración a Antigravity, escribir el código de
+  auth) — eso es `Services/ProviderInstaller.swift` completo, y es trabajo de
+  Fase 6 ("Instalación de CLIs"), no de Fase 3. Fase 3 solo necesitaba la
+  PRIMITIVA de pseudo-consola para existir; ya existe.
 
-128 xUnit tests en `Coral.Tests` a día de hoy (todos pasando, verificados con
-`dotnet test` real en este entorno además de en `windows-latest`).
+128 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+verificados con `dotnet test` real en este entorno además de en
+`windows-latest`) más 2 tests manuales (Category=Manual, excluidos del CI):
+uno ya confirmado contra `claude` real, el otro (ConPTY) todavía sin correr.
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
 solo `windows-tests.yml` — nunca el gate de macOS.
@@ -415,3 +447,11 @@ fechas o moneda para mostrar (no solo para JSON/máquina) necesita o bien
 `InvariantCulture` explícito, o un test bajo una cultura no inglesa — no
 asumir que "pasa en CI" cubre esto, porque ni este sandbox ni `windows-latest`
 corren con una locale distinta a la inglesa por defecto.
+
+**Pendiente (próxima entrada de esta bitácora):** `ManualPseudoConsoleSmokeTest`
+(ConPTY) — a diferencia de todo lo anterior, esto es P/Invoke crudo contra
+`kernel32` sin ningún equivalente probable en Linux, así que no hay forma de
+smoke-testearlo aquí ni parcialmente. Compila limpio (0 warnings) pero no ha
+corrido con éxito en NINGÚN lado todavía. Es la única pieza de Fase 3 que
+sigue en ese estado — cuando el founder la corra en Windows y confirme
+resultado, esta entrada se actualiza y Fase 3 queda cerrada del todo.
