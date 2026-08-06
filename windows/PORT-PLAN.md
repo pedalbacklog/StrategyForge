@@ -215,13 +215,15 @@ Fase 4 — Secretos + auth             🔶 ProviderAuth.cs portada (login-fresh
                                       diferidos — solo sirven para CloudKit sync,
                                       no-objetivo de v1 (ver §6/§8)
 Fase 5 — Chat MVP                    🔶 confirmado funcionando en Windows real:
-                                      prompt real enviado, streaming en vivo,
-                                      coste mostrado correctamente — dos bugs
-                                      reales encontrados y arreglados en el
+                                      prompt real, streaming en vivo, UTF-8
+                                      correcto (tildes/ñ), coste bien formateado,
+                                      y Stop cancela un turno en curso — tres
+                                      bugs reales encontrados y arreglados en el
                                       camino (ventana en blanco por un recurso
-                                      mal ubicado; mojibake por no fijar UTF-8
-                                      en RealProcessLauncher). Falta confirmar
-                                      scroll, panel de Activity y botón Stop
+                                      mal ubicado; x:Bind roto en Window; mojibake
+                                      por no fijar UTF-8 en RealProcessLauncher).
+                                      Falta confirmar scroll y que el panel de
+                                      Activity se pueble con pasos reales
                                       (ver §10)
 Fase 6 — Instalación de CLIs         ProviderInstaller equivalente, probado contra
                                       claude/codex/gemini reales
