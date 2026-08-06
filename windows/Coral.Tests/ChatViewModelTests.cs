@@ -1,0 +1,217 @@
+using Coral.Core.Services;
+using Coral.Core.ViewModels;
+using Xunit;
+
+namespace Coral.Tests;
+
+/// <summary>Tests for ChatViewModel's event-handling/state-mutation logic
+/// against a FakeProcessLauncher — mirrors ClaudeRunnerTests's style. No real
+/// process ever spawns; ChatViewModel's own orchestration (dedup between
+/// AssistantDelta/AssistantText, activity mapping, usage formatting,
+/// session-missing retry, cancellation) is what's under test here, not
+/// ClaudeRunner itself (already covered by ClaudeRunnerTests).</summary>
+public class ChatViewModelTests
+{
+    private static ChatViewModel MakeViewModel(IProcessLauncher launcher) =>
+        new(launcher, "/repo", resolveBinary: _ => "/resolved/claude");
+
+    [Fact]
+    public async Task SendAsyncAddsUserMessageThenStreamsAssistantDeltas()
+    {
+        var lines = new List<string>
+        {
+            """{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hel"}}}""",
+            """{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"lo"}}}""",
+            """{"type":"result","subtype":"success","result":"done"}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        Assert.Equal(2, vm.Messages.Count);
+        Assert.Equal(ChatRole.User, vm.Messages[0].Role);
+        Assert.Equal("hi", vm.Messages[0].Text);
+        Assert.Equal(ChatRole.Assistant, vm.Messages[1].Role);
+        Assert.Equal("Hello", vm.Messages[1].Text);
+        Assert.False(vm.IsSending);
+        Assert.Equal("", vm.PromptText);
+    }
+
+    [Fact]
+    public async Task AssistantTextIsIgnoredOnceDeltasHaveStreamed()
+    {
+        // --include-partial-messages means both a delta AND the final full
+        // text block arrive for the same content; only the delta should count,
+        // matching ChatViewModel.swift's gotDelta guard.
+        var lines = new List<string>
+        {
+            """{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}}""",
+            """{"type":"assistant","message":{"content":[{"type":"text","text":"Hi"}]}}""",
+            """{"type":"result","subtype":"success","result":"done"}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        var assistant = Assert.Single(vm.Messages, m => m.Role == ChatRole.Assistant);
+        Assert.Equal("Hi", assistant.Text); // not "HiHi"
+    }
+
+    [Fact]
+    public async Task FallsBackToAssistantTextWhenNoDeltasArrive()
+    {
+        var lines = new List<string>
+        {
+            """{"type":"assistant","message":{"content":[{"type":"text","text":"Hi there"}]}}""",
+            """{"type":"result","subtype":"success","result":"done"}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        var assistant = Assert.Single(vm.Messages, m => m.Role == ChatRole.Assistant);
+        Assert.Equal("Hi there", assistant.Text);
+    }
+
+    [Fact]
+    public async Task ToolAndDelegatedEventsPopulateActivity()
+    {
+        var lines = new List<string>
+        {
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/repo/a.txt"}}]}}""",
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Task","input":{"subagent_type":"reviewer"}}]}}""",
+            """{"type":"result","subtype":"success","result":"done"}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        Assert.Equal(2, vm.Activity.Count);
+        Assert.Equal("Read", vm.Activity[0].Title);
+        Assert.Equal("a.txt", vm.Activity[0].Detail);
+        Assert.Equal("→ reviewer", vm.Activity[1].Title);
+    }
+
+    [Fact]
+    public async Task UsageEventFormatsStatusMessageWithInvariantCulture()
+    {
+        var lines = new List<string>
+        {
+            """{"type":"result","subtype":"success","result":"done","usage":{"input_tokens":100,"output_tokens":200},"total_cost_usd":0.8321}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        var original = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("es-ES");
+        try
+        {
+            vm.PromptText = "hi";
+            await vm.SendAsync();
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = original;
+        }
+
+        Assert.Equal("300 tokens · $0.8321", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task FailedEventSetsStatusMessage()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>(), exitCode: 1, stderr: "boom"));
+        var vm = MakeViewModel(launcher);
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        Assert.Equal("Error: boom", vm.StatusMessage);
+        Assert.False(vm.IsSending);
+    }
+
+    [Fact]
+    public async Task BlankPromptIsANoOp()
+    {
+        var called = false;
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => { called = true; return new FakeChildProcess(new List<string>()); }));
+
+        vm.PromptText = "   ";
+        await vm.SendAsync();
+
+        Assert.False(called);
+        Assert.Empty(vm.Messages);
+    }
+
+    [Fact]
+    public async Task SecondTurnResumesTheSameSession()
+    {
+        var lines = new List<string> { """{"type":"result","subtype":"success","result":"done"}""" };
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(lines));
+        var vm = MakeViewModel(launcher);
+
+        vm.PromptText = "first";
+        await vm.SendAsync();
+        Assert.DoesNotContain("--resume", launcher.LastStart!.Value.Args);
+
+        vm.PromptText = "second";
+        await vm.SendAsync();
+        Assert.Contains("--resume", launcher.LastStart!.Value.Args);
+    }
+
+    [Fact]
+    public async Task RetriesFreshWhenAResumedSessionIsMissing()
+    {
+        var callCount = 0;
+        var launcher = new FakeProcessLauncher((_, _) =>
+        {
+            callCount++;
+            return callCount switch
+            {
+                // Turn 1: succeeds, so turn 2 will try --resume.
+                1 => new FakeChildProcess(new List<string>
+                    { """{"type":"result","subtype":"success","result":"done"}""" }),
+                // Turn 2 (resumed): the session is gone.
+                2 => new FakeChildProcess(new List<string>(), exitCode: 1, stderr: "No conversation found for session"),
+                // Retry as a fresh session: succeeds.
+                _ => new FakeChildProcess(new List<string>
+                {
+                    """{"type":"assistant","message":{"content":[{"type":"text","text":"fresh reply"}]}}""",
+                    """{"type":"result","subtype":"success","result":"done"}""",
+                }),
+            };
+        });
+        var vm = MakeViewModel(launcher);
+
+        vm.PromptText = "first";
+        await vm.SendAsync();
+
+        vm.PromptText = "second";
+        await vm.SendAsync();
+
+        Assert.Equal(3, callCount);
+        Assert.Null(vm.StatusMessage); // the retry succeeded silently, no error surfaced
+        var assistant = Assert.Single(vm.Messages, m => m.Role == ChatRole.Assistant && m.Text == "fresh reply");
+        Assert.NotNull(assistant);
+    }
+
+    [Fact]
+    public async Task CancelCurrentTurnStopsTheStreamAndReportsCancelled()
+    {
+        var launcher = new FakeProcessLauncher((_, _) =>
+            new FakeChildProcess(new List<string>(), hangForever: TimeSpan.FromSeconds(30)));
+        var vm = MakeViewModel(launcher);
+
+        vm.PromptText = "hi";
+        var send = vm.SendAsync();
+        await Task.Delay(50);
+        vm.CancelCurrentTurn();
+        await send;
+
+        Assert.Equal("Cancelled.", vm.StatusMessage);
+        Assert.False(vm.IsSending);
+    }
+}

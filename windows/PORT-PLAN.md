@@ -214,8 +214,13 @@ Fase 4 — Secretos + auth             🔶 ProviderAuth.cs portada (login-fresh
                                       Manager/DPAPI + Google OAuth deliberadamente
                                       diferidos — solo sirven para CloudKit sync,
                                       no-objetivo de v1 (ver §6/§8)
-Fase 5 — Chat MVP                    ViewModel + XAML mínimo: enviar prompt, ver
-                                      streaming, ver activity panel — esto es "P0"
+Fase 5 — Chat MVP                    🔶 ChatViewModel + MainWindow.xaml escritos —
+                                      ViewModel probado de verdad (10 tests con
+                                      fakes, Coral.Core); la UI XAML/Coral.csproj
+                                      NO ha compilado en ningún sitio todavía (no
+                                      hay Windows App SDK en este sandbox) — su
+                                      primera compilación real será en
+                                      windows-latest CI (ver §6)
 Fase 6 — Instalación de CLIs         ProviderInstaller equivalente, probado contra
                                       claude/codex/gemini reales
 Fase 7 — Code mode                   git/diff/PR
@@ -386,7 +391,46 @@ imposible de verificar de extremo a extremo en cualquier plataforma. Se
 retoma cuando haya un backend/CloudKit-equivalente real que lo necesite, o si
 surge otra razón de producto para tener una identidad de usuario en Windows.
 
-139 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+- 🔶 **Fase 5 (Chat MVP), primer corte — `ChatViewModel.cs` + `MainWindow.xaml`.**
+  Puerto MÍNIMO de `ViewModels/ChatViewModel.swift` (1535 líneas en macOS):
+  solo el camino `-p` de un único proveedor — sin modo "Ask" (permisos en
+  vivo), sin `MetaOrchestrator` multi-proveedor, sin historial de turnos
+  persistido; cada uno de esos es su propia función grande, fuera de alcance
+  aquí a propósito. `ChatMessage`/`ActivityStep`/`ChatViewModel` viven en
+  `Coral.Core` (no en el proyecto WinUI3): son POCOs + `ObservableCollection`/
+  `INotifyPropertyChanged` hecho a mano (sin CommunityToolkit.Mvvm — la
+  superficie que hacía falta era mínima y así el ViewModel queda testeable en
+  cualquier plataforma, mismo patrón que el resto de este port), con
+  `IProcessLauncher` inyectado igual que `ClaudeRunner`. Réplica fiel de la
+  lógica de dedup delta/texto-completo del original (`gotDelta`/
+  `separatorPending`) y del reintento cuando `--resume` apunta a una sesión
+  que ya no existe (`sessionMissing`) — comportamiento real ya verificado en
+  el Swift, no una reinvención. 10 tests nuevos contra `FakeProcessLauncher`
+  (streaming, dedup, activity, formato de coste en `InvariantCulture`,
+  reintento de sesión, cancelación).
+
+  `MainWindow.xaml`/`.xaml.cs` (proyecto `Coral`, WinUI3) quedan como la
+  primera UI real: caja de prompt, transcript, panel de actividad, botones
+  Send/Stop. **`Coral.csproj` NO ha compilado en ningún sitio todavía** — el
+  Windows App SDK no existe en este sandbox Linux, así que solo se pudo
+  revisar el XAML/C# a mano y verificar que `Coral.Core` (de donde viene
+  `ChatViewModel`) compila y pasa sus tests; la primera compilación real de
+  este XAML será en `windows-latest` vía CI, y nadie ha visto esta ventana
+  renderizada todavía ni se ha probado un turno real contra `claude`.
+  Repasado a mano con cuidado extra por eso (orden de
+  `InitializeComponent()` vs. asignar `ViewModel`/`RepoPath` antes para que
+  los `x:Bind` en modo `OneTime` no capturen `null`; `UpdateSourceTrigger=
+  PropertyChanged` en el `TextBox` para que Enviar no lea texto obsoleto; un
+  `Border` en vez de `Grid.Padding` para no depender de una propiedad de la
+  que no tenía certeza en esta versión del SDK), pero sigue siendo código
+  sin verificación visual real — no dar Fase 5 por cerrada hasta que el
+  founder la vea correr en Windows.
+
+  Sin selector de repo (usa `%USERPROFILE%` por defecto) ni ajustes de
+  modelo/esfuerzo/permission-mode (valores fijos razonables) — eso es
+  trabajo de seguimiento, no de este corte mínimo.
+
+149 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 2 tests manuales (Category=Manual, excluidos del CI),
 **ambos confirmados pasando en Windows real**: uno contra `claude` real, el
@@ -454,6 +498,16 @@ no-objetivo de v1 (§8), y el client ID de Google ni siquiera está configurado
 de verdad todavía en el propio macOS — construirlo ahora sería trabajo
 dormido e inverificable en cualquier plataforma. Se retoma si/cuando surja
 una razón de producto real para tener identidad de usuario en Windows.
+
+**Fase 5 (Chat MVP) con un primer corte escrito, sin verificar en Windows
+todavía.** `ChatViewModel.cs` (`Coral.Core`) está probado de verdad (10
+tests contra fakes); `MainWindow.xaml`/`.xaml.cs` (`Coral`, WinUI3) es la
+primera UI real del port, pero **no ha compilado en ningún sitio** — este
+sandbox no tiene el Windows App SDK. Su primera compilación real será
+`windows-latest` vía CI; su primera verificación de verdad (¿renderiza?,
+¿manda un prompt real?, ¿hace scroll?) tiene que ser el founder viéndola
+correr en su máquina. No dar Fase 5 por cerrada hasta entonces — detalle en
+§6.
 
 ## 10. Bitácora de verificación en Windows real
 

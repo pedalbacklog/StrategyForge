@@ -98,6 +98,17 @@ windows/
   and `MissionReport` (shareable run headline + Markdown report; the part that
   derives per-agent stats from the live activity timeline isn't ported yet — see
   Status below) — equivalents of `Generators/*.swift`.
+- **ViewModels**: `ChatViewModel`/`ChatMessage`/`ActivityStep` (Fase 5) — a minimal
+  port of `ChatViewModel.swift`'s plain single-provider `-p` path only (no "Ask"
+  live-permission mode, no cross-provider `MetaOrchestrator`, no persisted turn
+  history — each is its own much larger feature). Lives in `Coral.Core`, not the
+  WinUI project: `ObservableCollection`/hand-rolled `INotifyPropertyChanged`
+  (`ObservableObject`) have no WinUI dependency, so the ViewModel is unit-tested
+  the same way as everything else here, with an injected `IProcessLauncher`. 10
+  tests cover the delta/full-text dedup, activity mapping, invariant-culture cost
+  formatting, the resumed-session-missing retry, and cancellation — all real
+  behavior ported from the Swift original, not reinvented. **Not yet confirmed
+  on real Windows** — see Status.
 
 `Coral.Tests` mirrors the matching macOS test files (`GeneratorTests`, `DiffTests`,
 `ModelJSONTests`), plus `ModelCatalogTests` parses the *real* repo-root `models.json`
@@ -114,7 +125,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **139/139**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **149/149**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -192,7 +203,9 @@ test and `PORT-PLAN.md` §10 for the full story.
 ## Status
 
 **Fase 1 (scaffolding) done**; **Fase 2 (portable core) essentially done**;
-**Fase 3 (process runner) done** — see `PORT-PLAN.md` §6 for the live
+**Fase 3 (process runner) done**; **Fase 4 (secretos + auth) started** (scope
+deliberately cut, see below); **Fase 5 (Chat MVP) has a first cut written, not
+yet confirmed on real Windows** — see `PORT-PLAN.md` §6 for the live
 done/remaining checklist. Ported: the full "Strategy → subagent `.md` files +
 CLAUDE.md + dynamic workflow + MCP configs, written to disk" path
 (`AgentRole`/`Strategy`/validation + `Strategy.AutoFixed()` +
@@ -209,29 +222,41 @@ one-shot runner (`CLIOneShotRunner`: per-provider command building,
 ANSI/progress-line cleanup, auth-prompt/failure detection, token/cost
 estimation), the real spawn (`ClaudeRunner.Stream()`,
 `IProcessLauncher`/`RealProcessLauncher`), the ConPTY primitive
-(`IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher`), and — the first piece
-of Fase 4 — `ProviderAuth` (login-freshness check for `claude`/`codex`/`gemini`,
-reading only their own on-disk credentials files) — 139 automated xUnit tests,
-all passing (including `TemplatesAreAllValid`, which iterates every template
-through `Strategy.Validate()`, `StrategyWriterTests`, which round-trips real
-writes to a temp directory, `RealProcessLauncherTests`, which spawns a
-genuinely real process to smoke-test the no-shell
+(`IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher`), `ProviderAuth`
+(login-freshness check for `claude`/`codex`/`gemini`, reading only their own
+on-disk credentials files — the first piece of Fase 4), and the minimal
+`ChatViewModel` (Fase 5, single-provider `-p` path only) — 149 automated
+xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
+every template through `Strategy.Validate()`, `StrategyWriterTests`, which
+round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
+spawns a genuinely real process to smoke-test the no-shell
 `Process.Start`/async-stdout/exit-code/`Kill()` plumbing, `LocaleRegressionTests`,
-added after the first real-Windows run, and `ProviderAuthTests` — see below) —
-plus 2 manual tests excluded from that count and from CI (see "Testing the
-pieces that need a real Windows machine"). Still not ported:
-`MissionReport.agentLines()` (needs the not-yet-built chat/activity runtime —
-`ActivityStep`/`AgentNameMatcher` — deferred to Fase 5 on purpose), the rest of
+added after the first real-Windows run, `ProviderAuthTests`, and
+`ChatViewModelTests` — see below) — plus 2 manual tests excluded from that
+count and from CI (see "Testing the pieces that need a real Windows machine").
+Still not ported: `MissionReport.agentLines()` (needs the not-yet-built
+chat/activity runtime — `ActivityStep`/`AgentNameMatcher` — now that
+`ChatViewModel` exists this is unblocked, just not done yet), the rest of
 Fase 4 (Credential Manager wrapper, `Account`/`AuthProviderKind`, Google
 OAuth+PKCE with a loopback listener — deliberately deferred, see `PORT-PLAN.md`
 §6/§9: it only exists on macOS to gate CloudKit sync, itself a Windows
-non-goal), and the full per-provider login/install flow
-(`ProviderInstaller.swift` — npm install, Gemini's TUI navigation,
-Antigravity-migration detection — that's Fase 6, built on top of the ConPTY
-primitive that's already here). Everything else under `Services/` (git, loops
-— the last one stays vetoed for human review per Fase 8) is still unported.
-The `Coral` WinUI 3 app project itself is still just the Fase 1 blank window —
-no UI wired to any of this yet (Fase 5).
+non-goal), the rest of Fase 5 (repo picker, model/effort/permission-mode
+settings, "Ask" live-permission mode, the cross-provider `MetaOrchestrator`,
+persisted turn history — each its own follow-up), and the full per-provider
+login/install flow (`ProviderInstaller.swift` — npm install, Gemini's TUI
+navigation, Antigravity-migration detection — that's Fase 6, built on top of
+the ConPTY primitive that's already here). Everything else under `Services/`
+(git, loops — the last one stays vetoed for human review per Fase 8) is still
+unported.
+
+**The `Coral` WinUI 3 app project (`MainWindow.xaml`/`.xaml.cs`) now has a
+first real chat UI — prompt box, transcript, activity panel, Send/Stop — but
+`Coral.csproj` has NOT compiled anywhere yet.** This sandbox has no Windows
+App SDK, so only `Coral.Core` (where `ChatViewModel` actually lives) built
+and tested here; the XAML/WinUI-specific code was reviewed by hand but its
+first real compile will be on `windows-latest` CI, and nobody has seen this
+window render or sent a real prompt through it yet. Don't treat Fase 5 as
+done until that happens — see `PORT-PLAN.md` §6/§10.
 
 **`ClaudeRunner` has now run against the real `claude` CLI, on a real Windows
 machine** (`ManualClaudeRunnerSmokeTest` — see "Testing the pieces that need a
