@@ -233,13 +233,13 @@ Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewM
                                       fakes (ver §6); AÚN sin correr contra
                                       npm/claude reales en Windows — lo único
                                       que falta para cerrar esta fase
-Fase 7 — Code mode                   🔶 CodeGit.cs arrancada: parsers puros +
-                                      operaciones de solo lectura (diff/branch/
-                                      changed files) portadas y probadas con
-                                      fakes (ver §6); faltan las operaciones de
-                                      escritura del panel de git (aún sin UI
-                                      que las consuma) y la UI de Code Mode en
-                                      sí (diff viewer, terminal, panel de git)
+Fase 7 — Code mode                   🔶 CodeGit.cs: parsers puros + operaciones
+                                      de solo lectura Y de escritura del panel
+                                      de git (stage/commit/push/branch),
+                                      todas portadas y probadas con fakes
+                                      (ver §6); falta la UI de Code Mode en sí
+                                      (diff viewer, terminal, panel de git) y
+                                      correr contra un repo real en Windows
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -577,19 +577,31 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
     + `GCM_INTERACTIVE=never` (este último, más relevante en Windows que en
     macOS: Git for Windows trae Git Credential Manager instalado por
     defecto, y sin este flag su prompt gráfico podría bloquear el proceso).
-  - ⬜ Diferido a propósito: `fullDiff` (el diff completo con archivos
-    untracked incluidos y límite de tamaño por archivo — solo tiene sentido
-    junto a un revisor automático de diffs, que no está portado todavía);
-    TODAS las operaciones de ESCRITURA (`stage`/`unstage`/`revert`/`commit`/
-    `push`, `clone`/`createBranch`/`checkout`) — son las acciones del panel
-    de git de Code Mode, y no hay UI todavía que las consuma, así que
-    portarlas ahora sería andamiaje inverificable; y TODAS las operaciones de
-    WORKTREE (`addWorktree`/`mergeNoFF`/`commitAll`/`removeWorktree`/
-    `deleteBranch`) — existen solo para aislar loops, la zona explícitamente
-    vetada de Fase 8 (CLAUDE.md: los cambios de loop necesitan lectura humana
-    del diff, no solo tests) — portarlas aquí las sacaría de esa puerta de
-    revisión.
-  - 15 tests nuevos: el caso exacto de `ChatTests.swift`
+  - ✅ **Ampliado el mismo día**: también las operaciones de ESCRITURA del
+    panel de git sobre un repo YA existente (`StageAsync`/`UnstageAsync`/
+    `RevertAsync`/`StagedFilesAsync`/`CommitAsync`/`CommitStagedAsync`/
+    `PushAsync`/`CreateBranchAsync`/`BranchesAsync`/`CheckoutAsync`) —
+    revisando el razonamiento inicial ("sin UI que las consuma, quedarían
+    inverificables"), resultó no sostenerse: un fake prueba la construcción
+    de argumentos y el manejo de exit code exactamente igual de bien que para
+    las operaciones de lectura, tengan o no consumidor todavía. `CombineOutput`
+    aproxima el pipe único fusionado de Swift (stdout+stderr) para los
+    mensajes de error que la UI mostrará más adelante, sin pretender
+    reproducir el interleaving exacto (imposible con dos streams separados).
+  - ⬜ Sigue diferido, y cada uno por una razón real, no por orden de llegada:
+    `fullDiff` (el diff completo con archivos untracked incluidos y límite de
+    tamaño por archivo — solo tiene sentido junto a un revisor automático de
+    diffs, que no está portado todavía, y su forma exacta no está decidida);
+    `clone` (ciclo de vida del repo: nombrado/deduplicado de carpeta local,
+    creación de directorio — forma de código bastante distinta al resto, ya
+    que no hay `-C repo` posible antes de que el repo exista; mejor construirlo
+    junto al flujo real de "añadir un repo" que lo vaya a usar, no
+    especulativamente); y TODAS las operaciones de WORKTREE (`addWorktree`/
+    `mergeNoFF`/`commitAll`/`removeWorktree`/`deleteBranch`) — existen solo
+    para aislar loops, la zona explícitamente vetada de Fase 8 (CLAUDE.md:
+    los cambios de loop necesitan lectura humana del diff, no solo tests) —
+    esto es un límite firme, no una cuestión de agenda.
+  - 25 tests nuevos: el caso exacto de `ChatTests.swift`
     (`diffParserTagsAddsRemovesAndNumbers`) como especificación para `Parse`,
     ruido de cabecera de `diff --git` descartado, clasificación de archivos
     modified/added/deleted/untracked/renamed (incluyendo que un rename
@@ -598,13 +610,13 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
     URL (incluyendo un caso donde el orden real de Swift — comprobar `.git`
     ANTES de recortar la barra final — da un resultado distinto al que
     parecería "más limpio"; documentado como fidelidad al original, no un
-    bug), y las cinco operaciones reales contra un `FakeProcessLauncher` —
-    210 en total.
+    bug), las cinco operaciones de lectura y las diez de escritura, todas
+    contra un `FakeProcessLauncher` — 220 en total.
   - Escrito mientras CI estaba caído por la incidencia de GitHub Actions (ver
     §10) — no depende de Windows para nada de esto, así que no hacía falta
     esperar.
 
-195 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+220 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
 los dos de Fase 3/5 **confirmados pasando en Windows real** (uno contra

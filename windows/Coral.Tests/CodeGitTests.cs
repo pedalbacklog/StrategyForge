@@ -175,4 +175,120 @@ public class CodeGitTests
         Assert.Equal(3, file.Insertions);
         Assert.Equal(2, callCount);
     }
+
+    [Fact]
+    public void IsAvailableReflectsWhetherGitResolves()
+    {
+        Assert.True(CodeGit.IsAvailable(n => n == "git" ? "/usr/bin/git" : null));
+        Assert.False(CodeGit.IsAvailable(_ => null));
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task StageUnstageAndRevertReflectTheExitCode(int exitCode, bool expected)
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>(), exitCode: exitCode));
+        var resolveBinary = (Func<string, string?>)(n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.Equal(expected, await CodeGit.StageAsync(launcher, "/repo", "a.txt", resolveBinary));
+        Assert.Equal(expected, await CodeGit.UnstageAsync(launcher, "/repo", "a.txt", resolveBinary));
+        Assert.Equal(expected, await CodeGit.RevertAsync(launcher, "/repo", "a.txt", resolveBinary));
+    }
+
+    [Fact]
+    public async Task StagedFilesAsyncJoinsNulSeparatedPathsWithTheRepoRoot()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string> { "a.txt\0sub/b.txt\0" }));
+
+        var staged = await CodeGit.StagedFilesAsync(launcher, "/repo", n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.Equal(new HashSet<string> { Path.Combine("/repo", "a.txt"), Path.Combine("/repo", "sub/b.txt") }, staged);
+    }
+
+    [Fact]
+    public async Task CommitAsyncStagesEverythingThenCommits()
+    {
+        var calls = new List<IReadOnlyList<string>>();
+        var launcher = new FakeProcessLauncher((_, args) =>
+        {
+            calls.Add(args);
+            return new FakeChildProcess(new List<string> { "[main abc123] msg" });
+        });
+
+        var (ok, output) = await CodeGit.CommitAsync(launcher, "/repo", "msg", n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.True(ok);
+        Assert.Contains("abc123", output);
+        Assert.Equal(2, calls.Count);
+        Assert.Contains("-A", calls[0]);
+        Assert.Contains("commit", calls[1]);
+    }
+
+    [Fact]
+    public async Task CommitStagedAsyncDoesNotStageFirst()
+    {
+        var calls = new List<IReadOnlyList<string>>();
+        var launcher = new FakeProcessLauncher((_, args) =>
+        {
+            calls.Add(args);
+            return new FakeChildProcess(new List<string>(), exitCode: 1, stderr: "nothing to commit");
+        });
+
+        var (ok, output) = await CodeGit.CommitStagedAsync(launcher, "/repo", "msg", n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.False(ok);
+        Assert.Contains("nothing to commit", output);
+        Assert.Single(calls); // no "add -A" call
+    }
+
+    [Fact]
+    public async Task PushAsyncPushesTheCurrentBranchWithUpstream()
+    {
+        var launcher = new FakeProcessLauncher((_, args) =>
+            args.Contains("rev-parse")
+                ? new FakeChildProcess(new List<string> { "feature-x" })
+                : new FakeChildProcess(new List<string> { "branch set up to track" }));
+
+        var (ok, output) = await CodeGit.PushAsync(launcher, "/repo", n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.True(ok);
+        Assert.Contains("track", output);
+    }
+
+    [Fact]
+    public async Task BranchesAsyncListsNonEmptyTrimmedNames()
+    {
+        var launcher = new FakeProcessLauncher((_, _) =>
+            new FakeChildProcess(new List<string> { "main", "  feature-x  ", "" }));
+
+        var branches = await CodeGit.BranchesAsync(launcher, "/repo", n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.Equal(new List<string> { "main", "feature-x" }, branches);
+    }
+
+    [Fact]
+    public async Task CreateBranchAndCheckoutReflectSuccess()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string> { "Switched" }));
+        var resolveBinary = (Func<string, string?>)(n => n == "git" ? "/usr/bin/git" : null);
+
+        var (createOk, _) = await CodeGit.CreateBranchAsync(launcher, "/repo", "feature-x", resolveBinary);
+        var (checkoutOk, _) = await CodeGit.CheckoutAsync(launcher, "/repo", "main", resolveBinary);
+
+        Assert.True(createOk);
+        Assert.True(checkoutOk);
+    }
+
+    [Fact]
+    public async Task WriteOperationsReportGitNotFoundWhenGitIsMissing()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+
+        Assert.False(await CodeGit.StageAsync(launcher, "/repo", "a.txt", _ => null));
+        var (ok, output) = await CodeGit.CommitAsync(launcher, "/repo", "msg", _ => null);
+        Assert.False(ok);
+        Assert.Equal("git not found", output);
+        Assert.Null(launcher.LastStart);
+    }
 }

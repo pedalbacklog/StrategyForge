@@ -23,30 +23,43 @@ public sealed record BranchStat(string Branch, string Base, int Insertions, int 
 
 /// <summary>
 /// Port of <c>StrategyForge/Services/CodeGit.swift</c> — Fase 7 (Code mode)'s
-/// git helper. SCOPE for this first pass, decided the same way earlier phases
-/// were scoped down (see windows/PORT-PLAN.md §6):
+/// git helper. SCOPE, decided the same way earlier phases were scoped down
+/// (see windows/PORT-PLAN.md §6):
 ///
 /// PORTED — the pure diff/status parsers (<see cref="Parse"/>,
 /// <see cref="ParseChangedFiles"/>, <see cref="ParseShortstat"/>,
-/// <see cref="RepoName"/>), and the READ-ONLY real-git operations
+/// <see cref="RepoName"/>); the READ-ONLY real-git operations
 /// (<see cref="DiffAsync"/>, <see cref="CurrentBranchAsync"/>,
 /// <see cref="BranchStatAsync"/>, <see cref="ChangedFilesAsync"/>,
-/// <see cref="HasUncommittedChangesAsync"/>), all via the existing
-/// <see cref="IProcessLauncher"/> — git is a plain one-shot subprocess, no
-/// new Windows primitive needed here the way ConPTY was for Fase 3.
+/// <see cref="HasUncommittedChangesAsync"/>); and the git-panel WRITE
+/// operations on an existing repo (<see cref="StageAsync"/>,
+/// <see cref="UnstageAsync"/>, <see cref="RevertAsync"/>,
+/// <see cref="StagedFilesAsync"/>, <see cref="CommitAsync"/>,
+/// <see cref="CommitStagedAsync"/>, <see cref="PushAsync"/>,
+/// <see cref="CreateBranchAsync"/>, <see cref="BranchesAsync"/>,
+/// <see cref="CheckoutAsync"/>) — all one-shot subprocess calls via the
+/// existing <see cref="IProcessLauncher"/>, no new Windows primitive needed
+/// the way ConPTY was for Fase 3, and just as unit-testable against a fake as
+/// the read-only half — "no UI consumes this yet" turned out not to be a good
+/// reason to leave these unported when a fake proves the argument-building
+/// and exit-code handling are correct regardless of who calls them.
 ///
-/// DEFERRED, deliberately:
+/// DEFERRED, deliberately, and each for a real reason (not "hasn't gotten to
+/// it yet"):
 /// - <c>fullDiff</c> (the whole uncommitted diff incl. untracked files, with
 ///   per-file size capping) — only has a consumer once an automated diff
-///   reviewer is ported, which hasn't happened yet.
-/// - Every WRITE operation (stage/unstage/revert/commit/push, clone/branch
-///   create/checkout) — the git panel's write actions; no UI consumes them
-///   yet, so they'd be unverifiable dead code today. Add them alongside that UI.
+///   reviewer is ported, which hasn't happened yet; the shape of what it
+///   needs isn't settled.
+/// - <c>clone</c> (repo lifecycle: local folder naming/dedup, directory
+///   creation) — meaningfully different code shape from everything else here
+///   (no existing repo to <c>-C</c> into), best built alongside the actual
+///   "add a repo" UI flow that would drive it rather than speculatively now.
 /// - Every WORKTREE operation (addWorktree/mergeNoFF/commitAll/removeWorktree/
 ///   deleteBranch) — these exist ONLY for loop isolation, which is Fase 8's
 ///   explicitly vetoed zone (CLAUDE.md: loop-related changes need a human
 ///   reading the diff, not just tests). Porting them here would put loop
-///   plumbing outside that review gate.
+///   plumbing outside that review gate — a firm boundary, not a scheduling
+///   choice.
 /// </summary>
 public static class CodeGit
 {
@@ -287,6 +300,134 @@ public static class CodeGit
         var (ok, stdout, _) = await RunGitAsync(launcher, git, repo, new[] { "status", "--porcelain" }, ct);
         return ok && stdout.Trim().Length > 0;
     }
+
+    // MARK: - Write operations (Code Mode git panel)
+
+    /// <summary>Whether <c>git</c> is available at all (for gating clone/push
+    /// UI). Port of <c>CodeGit.swift</c>'s <c>isAvailable</c>.</summary>
+    public static bool IsAvailable(Func<string, string?>? resolveBinary = null) =>
+        (resolveBinary ?? BinaryResolver.Resolve)("git") is not null;
+
+    /// <summary>Discard an agent's changes to one file. Port of
+    /// <c>CodeGit.swift</c>'s <c>revert(repo:file:)</c>.</summary>
+    public static Task<bool> RevertAsync(IProcessLauncher launcher, string repo, string file,
+        Func<string, string?>? resolveBinary = null, CancellationToken ct = default) =>
+        RunSimpleGitAsync(launcher, repo, new[] { "checkout", "--", file }, resolveBinary, ct);
+
+    /// <summary>Stage a file. Port of <c>CodeGit.swift</c>'s <c>stage(repo:file:)</c>.</summary>
+    public static Task<bool> StageAsync(IProcessLauncher launcher, string repo, string file,
+        Func<string, string?>? resolveBinary = null, CancellationToken ct = default) =>
+        RunSimpleGitAsync(launcher, repo, new[] { "add", "--", file }, resolveBinary, ct);
+
+    /// <summary>Unstage a file. Port of <c>CodeGit.swift</c>'s
+    /// <c>unstage(repo:file:)</c>.</summary>
+    public static Task<bool> UnstageAsync(IProcessLauncher launcher, string repo, string file,
+        Func<string, string?>? resolveBinary = null, CancellationToken ct = default) =>
+        RunSimpleGitAsync(launcher, repo, new[] { "restore", "--staged", "--", file }, resolveBinary, ct);
+
+    /// <summary>The set of currently-staged files, as ABSOLUTE paths (to
+    /// match <c>ChangedFile</c>'s repo-relative paths joined with
+    /// <paramref name="repo"/>). Port of <c>CodeGit.swift</c>'s
+    /// <c>stagedFiles(repo:)</c>.</summary>
+    public static async Task<IReadOnlySet<string>> StagedFilesAsync(IProcessLauncher launcher, string repo,
+        Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return new HashSet<string>();
+        var (ok, stdout, _) = await RunGitAsync(launcher, git, repo,
+            new[] { "-c", "core.quotePath=false", "diff", "--cached", "--name-only", "-z" }, ct);
+        if (!ok) return new HashSet<string>();
+        return stdout.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => Path.Combine(repo, p))
+            .ToHashSet();
+    }
+
+    /// <summary>Commit only what's already staged (no <c>add -A</c>). Port of
+    /// <c>CodeGit.swift</c>'s <c>commitStaged(repo:message:)</c>.</summary>
+    public static async Task<(bool Ok, string Output)> CommitStagedAsync(IProcessLauncher launcher, string repo,
+        string message, Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return (false, "git not found");
+        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, repo, new[] { "commit", "-m", message }, ct);
+        return (ok, CombineOutput(stdout, stderr));
+    }
+
+    /// <summary>Stage everything and commit. Port of <c>CodeGit.swift</c>'s
+    /// <c>commit(repo:message:)</c>.</summary>
+    public static async Task<(bool Ok, string Output)> CommitAsync(IProcessLauncher launcher, string repo,
+        string message, Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return (false, "git not found");
+        _ = await RunGitAsync(launcher, git, repo, new[] { "add", "-A" }, ct);
+        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, repo, new[] { "commit", "-m", message }, ct);
+        return (ok, CombineOutput(stdout, stderr));
+    }
+
+    /// <summary>Push the current branch to origin, setting upstream. Port of
+    /// <c>CodeGit.swift</c>'s <c>push(repo:)</c>.</summary>
+    public static async Task<(bool Ok, string Output)> PushAsync(IProcessLauncher launcher, string repo,
+        Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return (false, "git not found");
+        var (_, branchOut, _) = await RunGitAsync(launcher, git, repo, new[] { "rev-parse", "--abbrev-ref", "HEAD" }, ct);
+        var branch = branchOut.Trim();
+        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, repo, new[] { "push", "-u", "origin", branch }, ct);
+        return (ok, CombineOutput(stdout, stderr));
+    }
+
+    /// <summary>Create a branch off HEAD and switch to it. Port of
+    /// <c>CodeGit.swift</c>'s <c>createBranch(repo:name:)</c>.</summary>
+    public static async Task<(bool Ok, string Output)> CreateBranchAsync(IProcessLauncher launcher, string repo,
+        string name, Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return (false, "git not found");
+        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, repo, new[] { "checkout", "-b", name }, ct);
+        return (ok, CombineOutput(stdout, stderr));
+    }
+
+    /// <summary>List local branches (current first, per git's own default
+    /// ordering). Port of <c>CodeGit.swift</c>'s <c>branches(repo:)</c>.</summary>
+    public static async Task<IReadOnlyList<string>> BranchesAsync(IProcessLauncher launcher, string repo,
+        Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return Array.Empty<string>();
+        var (ok, stdout, _) = await RunGitAsync(launcher, git, repo, new[] { "branch", "--format=%(refname:short)" }, ct);
+        if (!ok) return Array.Empty<string>();
+        return stdout.Split('\n').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+    }
+
+    /// <summary>Switch to an existing branch. Port of <c>CodeGit.swift</c>'s
+    /// <c>checkout(repo:branch:)</c>.</summary>
+    public static async Task<(bool Ok, string Output)> CheckoutAsync(IProcessLauncher launcher, string repo,
+        string branch, Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return (false, "git not found");
+        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, repo, new[] { "checkout", branch }, ct);
+        return (ok, CombineOutput(stdout, stderr));
+    }
+
+    private static async Task<bool> RunSimpleGitAsync(IProcessLauncher launcher, string repo,
+        IReadOnlyList<string> args, Func<string, string?>? resolveBinary, CancellationToken ct)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return false;
+        var (ok, _, _) = await RunGitAsync(launcher, git, repo, args, ct);
+        return ok;
+    }
+
+    /// <summary>Approximates Swift's single merged stdout+stderr pipe for
+    /// error-surfacing callers: git's actual error text is almost always on
+    /// stderr, so put it last (after any stdout) rather than trying to
+    /// reproduce exact interleaving, which two separate streams can't give us
+    /// anyway.</summary>
+    private static string CombineOutput(string stdout, string stderr) =>
+        stdout.Length > 0 && stderr.Length > 0 ? $"{stdout}\n{stderr}" : stdout + stderr;
 
     /// <summary>Run git with <c>-C repo</c> prefixed, reading stdout and
     /// stderr CONCURRENTLY (not stdout-then-stderr) — a command with enough

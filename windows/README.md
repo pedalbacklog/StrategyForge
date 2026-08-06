@@ -103,9 +103,14 @@ windows/
   is a one-shot subprocess, no new Windows primitive needed. Reads stdout and
   stderr concurrently rather than merging them into one pipe like the Swift
   original does, to avoid a full-stderr-buffer deadlock on a chatty command.
-  Write operations (stage/commit/push/clone/branch) and worktree operations
-  (loop isolation — Fase 8's explicitly human-reviewed zone) are deliberately
-  not ported yet — see Status.
+  Now also the git-panel WRITE operations on an existing repo
+  (stage/unstage/revert/staged-files/commit/commit-staged/push/create-branch/
+  branches/checkout) — the same fakes-based testing applies just as well to
+  these as to the read-only half, so "no UI consumes it yet" wasn't a strong
+  enough reason to leave them unported. Still deliberately deferred: `clone`
+  (repo lifecycle — different code shape, no existing repo to run inside),
+  and every worktree operation (loop isolation — Fase 8's explicitly
+  human-reviewed zone) — see Status.
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
@@ -152,7 +157,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **210/210**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **220/220**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -282,7 +287,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit` (Fase 7's
-first piece — see below) — 210 automated
+first piece — see below) — 220 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -388,16 +393,23 @@ install check and an opt-in (`CORAL_MANUAL_RUN_SIGNIN=1`), interactive
 sign-in check that's honest about replacing your machine's Claude login when
 run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
 
-**Fase 7 (Code mode) started: `CodeGit`'s pure parsers and read-only git
-operations are ported and unit-tested (15 tests, 210 automated total), but
-Code Mode has no UI yet.** Same scope discipline as Fases 4/6: the diff/
-changed-files parsers and the read-only real-git calls (current branch,
-branch stat, changed files, has-uncommitted-changes) are done, reusing the
-existing `IProcessLauncher` since git is a plain one-shot subprocess with no
-new Windows primitive to build. Deliberately not ported yet: every git WRITE
-operation (stage/commit/push/clone/branch — the git panel's actions, with no
-UI to consume them yet) and every worktree operation (used only for loop
-isolation, which is Fase 8's zone requiring human review of the diff, not
-just green tests — porting worktree logic here would sidestep that gate).
+**Fase 7 (Code mode) started: `CodeGit`'s pure parsers, read-only git
+operations, and the git-panel's write operations are all ported and
+unit-tested (25 tests, 220 automated total), but Code Mode has no UI yet.**
+Same scope discipline as Fases 4/6: the diff/changed-files parsers, the
+read-only real-git calls (current branch, branch stat, changed files,
+has-uncommitted-changes), and now the write actions a git panel would need
+(stage/unstage/revert/staged-files/commit/commit-staged/push/create-branch/
+branches/checkout) are all done, reusing the existing `IProcessLauncher`
+since git is a plain one-shot subprocess with no new Windows primitive to
+build — the initial reasoning for deferring the write half ("no UI consumes
+it yet") turned out not to hold up: a fake proves the write ops' argument
+construction and exit-code handling exactly as well as it does for the read
+ops. Still deliberately deferred, each for a real reason: `clone` (repo
+lifecycle — different code shape, no existing repo to run inside; better
+built alongside the "add a repo" flow that would drive it) and every
+worktree operation (used only for loop isolation, which is Fase 8's zone
+requiring human review of the diff, not just green tests — porting worktree
+logic here would sidestep that gate).
 Written while GitHub Actions was down (see below) — none of this needs
 Windows or CI to build/test, so there was no reason to wait idle.
