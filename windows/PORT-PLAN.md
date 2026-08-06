@@ -227,8 +227,14 @@ Fase 5 — Chat MVP                    ✅ cerrada — confirmado funcionando en
                                       quedó verificado por el founder, no solo
                                       revisado o compilado
                                       (ver §10)
-Fase 6 — Instalación de CLIs         ProviderInstaller equivalente, probado contra
-                                      claude/codex/gemini reales
+Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs portado (install vía
+                                      npm, sign-in headless reutilizando ConPTY,
+                                      flujo connect unificado) y probado con
+                                      fakes (ver §6); AÚN sin correr contra
+                                      npm/claude/codex/gemini reales ni tener
+                                      ViewModel/UI propios — eso sigue siendo
+                                      trabajo de esta misma fase, no cerrada del
+                                      todo
 Fase 7 — Code mode                   git/diff/PR
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
@@ -451,7 +457,72 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
   modelo/esfuerzo/permission-mode (valores fijos razonables) — eso es
   trabajo de seguimiento, no de este corte mínimo.
 
-160 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+- 🔶 **Fase 6 (Instalación de CLIs) — `ProviderInstaller.cs`, primer corte.**
+  Puerto de `Services/ProviderInstaller.swift` (361 líneas), con el mismo
+  criterio de alcance deliberado que Fase 4:
+  - ✅ Portado: `InstallEvent`/`ConnectEvent` (jerarquía cerrada de `record`s,
+    mismo patrón que `ChatEvent`), `LoginInput`, `FirstUrl()` (extractor de URL
+    puro — quita códigos ANSI, recorta puntuación al final, mismo regex que el
+    original), `Install()` (spawna `npm install -g <spec>` vía
+    `IProcessLauncher`, streaming línea a línea — **sin** el workaround de
+    `--prefix` que hace falta en macOS: el prefix global por defecto de npm en
+    Windows, `%APPDATA%\npm`, ya es escribible por el usuario, así lo documenta
+    `BinaryResolver.cs`), `SignIn()` (reutiliza `IPseudoConsoleLauncher` — la
+    contraparte Windows exacta del `openpty` de Swift — para correr el login de
+    cada CLI en una pseudo-consola oculta, detectar la URL de login, disparar
+    `NeedsCode` para Claude, detectar la migración a Antigravity de Gemini, y
+    el nudge-y-detección-por-mtime del TUI de Gemini que no sale solo al
+    autenticar con éxito), y `Connect()` (el flujo unificado: instala si hace
+    falta, luego firma). `AIProvider.cs` ganó `BinaryName()`,
+    `AlternativeBinaries()`, `NpmPackage()`, `PinnedCliVersions`,
+    `NpmInstallSpec()`, `LoginCommand()`, `LoginNeedsTerminal()` (esta última
+    siempre `false`, igual que en el Swift actual — el comentario del propio
+    original dice que ya no hace falta terminal visible para ningún login).
+  - `SignIn()` usa un `Channel<InstallEvent>` en vez de un iterador simple: a
+    diferencia de `Install()`/`ClaudeRunner.Stream()` (un solo productor
+    secuencial), aquí hay DOS productores concurrentes — el bucle normal de
+    lectura-hasta-exit-code, y (solo Gemini) una tarea de fondo que compite
+    detectando el cambio de mtime del fichero de credenciales. Es el
+    equivalente C# más directo al patrón de Swift (una `AsyncStream` cuya
+    `continuation` recibe `yield` desde varios closures a la vez). Un guard con
+    `Interlocked.CompareExchange` asegura que solo el PRIMERO de los dos en
+    llegar escribe el evento terminal — una pequeña mejora deliberada sobre el
+    original, que en esa misma carrera puede llegar a emitir dos eventos
+    terminales seguidos (éxito del watcher, luego un fallo espurio del
+    `terminationHandler` al matar el proceso ya "ganado").
+  - ⬜ Diferido a propósito, cada uno por ser un rediseño de plataforma real y
+    no una traducción mecánica: `installNode()` (bootstrap de Node vía
+    Homebrew) — Windows no tiene un equivalente único de confianza verificado
+    en este port (winget necesita una máquina Windows real para comprobar
+    semántica de elevación y disponibilidad de paquete), así que por ahora cae
+    al mismo estado terminal que usa el propio Swift cuando Homebrew no está:
+    mandar al usuario a `NodeDownloadUrl` (`nodejs.org/en/download`);
+    `launchSignIn` (fallback AppleScript + Terminal.app) — no se porta porque
+    ya es código muerto inalcanzable en el propio Swift hoy (`loginNeedsTerminal`
+    es `false` siempre); abrir el navegador con la URL de login — Swift lo hace
+    él mismo (`NSWorkspace.shared.open`), pero `Coral.Core` se mantiene sin
+    dependencia de WinUI (mismo motivo que `ChatViewModel` no toca navegación),
+    así que este puerto expone la URL como evento (`ConnectEvent.Url`) para que
+    una futura capa de ViewModel/View la abra con la API de Windows que
+    corresponda.
+  - 28 tests nuevos contra fakes (`FakePseudoConsoleLauncher`/
+    `FakePseudoConsoleSession`, nuevo, mismo patrón que `FakeProcessLauncher`):
+    extracción de URL (incluyendo el caso con códigos ANSI), instalación
+    feliz/fallida/sin Node, sign-in con detección de URL y `NeedsCode`,
+    fallo por exit code, detección de migración a Antigravity, éxito de Gemini
+    por cambio de mtime, y el flujo `Connect` completo (salta instalación si
+    la CLI ya existe, instala primero si falta, reenvía el evento de URL) —
+    188 en total.
+  - **AÚN sin verificar en Windows real** — a diferencia de Fase 3/5, esta
+    pieza no se ha corrido ni una vez contra un `npm install` real, un CLI real
+    esperando login, ni una pseudo-consola real (los fakes prueban la
+    ORQUESTACIÓN, no que el `IPseudoConsoleLauncher`/`IProcessLauncher` reales
+    se comporten como esperan estos flujos cuando el proceso al otro lado es
+    `claude auth login`/`codex login`/`gemini` de verdad). Tampoco tiene
+    ViewModel ni UI propios todavía — eso es la siguiente pieza de esta misma
+    fase, no una fase aparte.
+
+188 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 2 tests manuales (Category=Manual, excluidos del CI),
 **ambos confirmados pasando en Windows real**: uno contra `claude` real, el
@@ -526,6 +597,16 @@ automático, texto seleccionable, y Stop cancelando un turno en curso. Cinco
 bugs reales en el camino (compilación rota por `x:Bind` en `Window`, ventana
 en blanco por un recurso mal ubicado, mojibake por no fijar UTF-8, texto no
 seleccionable, scroll que no seguía el streaming) — detalle completo en §10.
+
+**Fase 6 (Instalación de CLIs) en marcha — capa de servicio portada, sin
+verificar en Windows real todavía.** `ProviderInstaller.cs` (instalación vía
+npm, sign-in headless reutilizando la primitiva ConPTY de Fase 3, flujo
+`Connect` unificado) escrito y probado con fakes (28 tests nuevos, 188 en
+total) — detalle en §6. A diferencia de Fase 3/5, ningún test hasta ahora
+llamó a un `npm` real ni a un `claude auth login`/`codex login`/`gemini`
+real esperando autenticación por una pseudo-consola real: eso, más el
+ViewModel/UI que consuma estos eventos, sigue pendiente dentro de esta misma
+fase.
 
 ## 10. Bitácora de verificación en Windows real
 

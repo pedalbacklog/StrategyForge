@@ -85,6 +85,14 @@ windows/
   `VerifyAsync` wire in the real `%USERPROFILE%`. The rest of Fase 4 (Credential
   Manager wrapper, `Account`/`AuthProviderKind`, Google OAuth+PKCE with a loopback
   listener) is deliberately deferred — see `PORT-PLAN.md` §6/§9 for why.
+  `ProviderInstaller` (Fase 6): npm-based CLI install and headless sign-in,
+  reusing the same `IPseudoConsoleLauncher` primitive `ProviderAuth`'s
+  neighbor above relies on — one hidden pseudo-console per login, output
+  streamed as `InstallEvent`s/`ConnectEvent`s (a closed `record` hierarchy,
+  same shape as `ChatEvent`), with a `Channel<InstallEvent>` handling the one
+  case with two concurrent producers (Gemini's TUI-nudge-and-creds-mtime
+  success race). Unit-tested against a new `FakePseudoConsoleLauncher`; not
+  yet run against real Windows/npm/CLI logins — see Status.
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
@@ -95,9 +103,9 @@ windows/
   files, writes the dynamic workflow and MCP configs, and prunes only the
   managed-signature files that fell out of the current strategy, never hand-written
   ones), `CostEstimationHooks` (rough per-strategy $/token estimate, effort-scaled),
-  and `MissionReport` (shareable run headline + Markdown report; the part that
-  derives per-agent stats from the live activity timeline isn't ported yet — see
-  Status below) — equivalents of `Generators/*.swift`.
+  and `MissionReport` (shareable run headline + Markdown report, including
+  `AgentLines`, which derives per-agent stats from the live activity
+  timeline) — equivalents of `Generators/*.swift`.
 - **ViewModels**: `ChatViewModel`/`ChatMessage`/`ActivityStep` (Fase 5) — a minimal
   port of `ChatViewModel.swift`'s plain single-provider `-p` path only (no "Ask"
   live-permission mode, no cross-provider `MetaOrchestrator`, no persisted turn
@@ -125,7 +133,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **160/160**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **188/188**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -226,16 +234,19 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 (`IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher`), `ProviderAuth`
 (login-freshness check for `claude`/`codex`/`gemini`, reading only their own
 on-disk credentials files — the first piece of Fase 4), and the minimal
-`ChatViewModel` (Fase 5, single-provider `-p` path only) — 160 automated
+`ChatViewModel` (Fase 5, single-provider `-p` path only), and
+`ProviderInstaller` (Fase 6, service layer only — see below) — 188 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
 spawns a genuinely real process to smoke-test the no-shell
 `Process.Start`/async-stdout/exit-code/`Kill()` plumbing, `LocaleRegressionTests`,
 added after the first real-Windows run, `ProviderAuthTests`,
-`ChatViewModelTests`, `AgentNameMatcherTests`, and the `MissionReport.AgentLines`
-cases — see below) — plus 2 manual tests excluded from that
-count and from CI (see "Testing the pieces that need a real Windows machine").
+`ChatViewModelTests`, `AgentNameMatcherTests`, `ProviderInstallerTests`
+(against a new `FakePseudoConsoleLauncher`, mirroring `FakeProcessLauncher`),
+and the `MissionReport.AgentLines` cases — see below) — plus 2 manual tests
+excluded from that count and from CI (see "Testing the pieces that need a
+real Windows machine").
 Fase 2's last loose end (`MissionReport.agentLines()`, which needed
 `ActivityStep`/`AgentNameMatcher`) is now closed — `ActivityStep` picked up
 `IsDelegation`/`Agent` fields once `ChatViewModel` existed to populate them,
@@ -247,12 +258,12 @@ OAuth+PKCE with a loopback listener — deliberately deferred, see `PORT-PLAN.md
 §6/§9: it only exists on macOS to gate CloudKit sync, itself a Windows
 non-goal), the rest of Fase 5 (repo picker, model/effort/permission-mode
 settings, "Ask" live-permission mode, the cross-provider `MetaOrchestrator`,
-persisted turn history — each its own follow-up), and the full per-provider
-login/install flow (`ProviderInstaller.swift` — npm install, Gemini's TUI
-navigation, Antigravity-migration detection — that's Fase 6, built on top of
-the ConPTY primitive that's already here). Everything else under `Services/`
-(git, loops — the last one stays vetoed for human review per Fase 8) is still
-unported.
+persisted turn history — each its own follow-up), and the rest of Fase 6 (a
+ViewModel/UI to actually drive `ProviderInstaller` from the app, plus running
+it for real against npm and a real CLI login on Windows — the service layer
+itself is ported and unit-tested, see Status above). Everything else under
+`Services/` (git, loops — the last one stays vetoed for human review per
+Fase 8) is still unported.
 
 **The `Coral` WinUI 3 app project's first real chat UI is confirmed working
 end to end on real Windows** — prompt box, transcript, activity panel,
@@ -287,6 +298,32 @@ Spanish-locale Windows machine `$0.83` rendered as `$0,83`. Fixed by forcing
 `CultureInfo.InvariantCulture` everywhere a dollar/token figure is formatted,
 with `LocaleRegressionTests` added to catch a repeat by pinning
 `CurrentCulture` to `es-ES` for the duration of each case — no non-English CI
-runner needed to guard against it going forward. **The ConPTY primitive
-(`Win32PseudoConsoleLauncher`) has NOT run anywhere yet** — that's the one
-piece left before Fase 3 is genuinely closed.
+runner needed to guard against it going forward.
+
+**The ConPTY primitive (`Win32PseudoConsoleLauncher`) has since also been
+confirmed on real Windows** (`ManualPseudoConsoleSmokeTest`), closing out
+Fase 3 completely. Getting there took two more real bugs: a hang (the ConPTY
+output pipe doesn't EOF on its own when the child process exits — conhost
+keeps its write handle open until `ClosePseudoConsole` is called explicitly)
+and `STATUS_DLL_INIT_FAILED` (`UpdateProcThreadAttribute`'s `lpValue` was a
+pointer to a heap copy of the `HPCON` handle instead of the handle value
+itself). Full story, including a red herring that turned out to be a Windows
+Terminal ConPTY-passthrough artifact rather than a bug, in `PORT-PLAN.md` §10.
+
+**Fase 6 (Instalación de CLIs) is in progress: the service layer
+(`ProviderInstaller.cs`) is ported and unit-tested against fakes, but not yet
+run on real Windows.** It covers npm-based CLI install, headless sign-in
+(reusing the now-confirmed ConPTY primitive the same way the Swift original
+reuses `openpty`), Gemini's TUI-nudge-and-creds-mtime success detection,
+Antigravity-migration detection, and the unified install-then-sign-in
+`Connect()` flow — 28 new tests (188 automated total). Deliberately deferred,
+each for being a platform redesign rather than a missing translation: an
+automated Node.js bootstrap (Swift's `installNode()` shells out to Homebrew;
+Windows has no single trusted equivalent verified in this port, so it falls
+back to sending the user to nodejs.org, the same terminal state Swift itself
+uses when Homebrew isn't present), the Terminal.app/AppleScript fallback
+(already dead code in Swift today — no provider needs a visible terminal
+anymore), and actually opening the sign-in URL in a browser (kept out of
+`Coral.Core` on purpose, same reasoning as `ChatViewModel` not touching
+navigation — it's surfaced as a `ConnectEvent.Url` for a future ViewModel/View
+to act on). See `PORT-PLAN.md` §6/§9 for the full breakdown.
