@@ -202,14 +202,13 @@ Fase 1 — Scaffolding                 ✅ hecha: Coral.sln, Coral (WinUI3, unpa
 Fase 2 — Núcleo portable             ✅ esencialmente cerrada — ver detalle abajo
                                       (solo queda MissionReport.agentLines(),
                                       diferido a Fase 5 a propósito)
-Fase 3 — Runner de procesos          🔶 en progreso — ClaudeRunner.Stream() YA
-                                      corrió contra `claude` real en Windows
-                                      real (ver detalle abajo) y encontró/
-                                      arregló un bug real (formato culture-
-                                      sensitive); la primitiva ConPTY está
-                                      escrita pero SIN correr en ningún lado
-                                      todavía — falta la prueba en Windows
-                                      para cerrar la fase del todo
+Fase 3 — Runner de procesos          ✅ cerrada — ClaudeRunner.Stream() y la
+                                      primitiva ConPTY confirmados en Windows
+                                      real (ver §10); ambos encontraron y
+                                      arreglaron bugs reales en el camino
+                                      (formato culture-sensitive; DLL_INIT_
+                                      FAILED por indirección de más en
+                                      UpdateProcThreadAttribute)
 Fase 4 — Secretos + auth             Credential Manager/DPAPI, Google OAuth (loopback)
 Fase 5 — Chat MVP                    ViewModel + XAML mínimo: enviar prompt, ver
                                       streaming, ver activity panel — esto es "P0"
@@ -332,31 +331,29 @@ empezando por lo que es puro y testeable sin spawnear nada):
     verificar es el comportamiento específico de `claude`/`codex`/`gemini`
     en Windows real (rutas, shims `.cmd`, el formato exacto de su stream) —
     exactamente lo que el founder va a probar en su máquina.
-- 🔶 ConPTY (la PRIMITIVA de pseudo-consola, no el flujo de login completo) →
-  `IPseudoConsoleLauncher.cs`/`Win32PseudoConsoleLauncher.cs`. **Compilado,
-  NO ejecutado con éxito en ningún lado todavía** — a diferencia de
+- ✅ ConPTY (la PRIMITIVA de pseudo-consola, no el flujo de login completo) →
+  `IPseudoConsoleLauncher.cs`/`Win32PseudoConsoleLauncher.cs`. **Confirmado
+  pasando en Windows real (2026-08-06)** tras encontrar y arreglar un bug
+  real (`STATUS_DLL_INIT_FAILED`, ver §10) — a diferencia de
   `RealProcessLauncher` (que sí se pudo smoke-testear de verdad en Linux
   spawneando `dotnet`, porque `System.Diagnostics.Process` es
   multiplataforma), ConPTY es P/Invoke crudo contra `kernel32` sin
-  equivalente en Linux — no hay forma de probar ni parcialmente esta pieza
-  fuera de Windows. Mismo patrón de interfaz que `IProcessLauncher`
-  (`IPseudoConsoleLauncher`/`IPseudoConsoleSession`), para que la lógica de
-  más alto nivel de un futuro flujo de login (leer una URL del output,
-  escribir un código de vuelta) sea testeable con un fake más adelante.
-  Secuencia Win32 estándar (la misma que la muestra oficial de Microsoft):
-  dos pipes (entrada/salida de la consola) → `CreatePseudoConsole` →
-  `STARTUPINFOEX` con el pseudo-console como proc-thread attribute →
-  `CreateProcess`. Incluye construcción manual de la línea de comandos
-  (reglas de escapado de Win32, ya que `CreateProcess` no tiene equivalente a
-  `ArgumentList`) y del bloque de entorno (ordenado, como exige
-  `CREATE_UNICODE_ENVIRONMENT`).
+  equivalente en Linux, así que esta pieza no se pudo probar en absoluto
+  fuera de Windows hasta ahora. Mismo patrón de interfaz que
+  `IProcessLauncher` (`IPseudoConsoleLauncher`/`IPseudoConsoleSession`), para
+  que la lógica de más alto nivel de un futuro flujo de login (leer una URL
+  del output, escribir un código de vuelta) sea testeable con un fake más
+  adelante. Secuencia Win32 estándar (la misma que la muestra oficial de
+  Microsoft): dos pipes (entrada/salida de la consola) →
+  `CreatePseudoConsole` → `STARTUPINFOEX` con el pseudo-console como
+  proc-thread attribute → `CreateProcess`. Incluye construcción manual de la
+  línea de comandos (reglas de escapado de Win32, ya que `CreateProcess` no
+  tiene equivalente a `ArgumentList`) y del bloque de entorno (ordenado, como
+  exige `CREATE_UNICODE_ENVIRONMENT`).
   - `ManualPseudoConsoleSmokeTest.cs` (Category=Manual, igual que el de
     `ClaudeRunner`): spawnea `cmd.exe /c echo hello-from-conpty` a través de
-    la pseudo-consola de verdad. **Esta es la primera vez que este código
-    corre, punto** — no una segunda verificación de algo ya probado. Correrlo
-    en Windows es el paso que falta para cerrar Fase 3 del todo; no lo doy
-    por hecho hasta que el founder confirme que pasa (y, si no pasa, hay que
-    depurarlo ahí — no hay atajo posible sin una máquina Windows).
+    la pseudo-consola de verdad y verifica tanto el texto capturado como el
+    exit code. **Confirmado pasando en Windows real** (§10).
 - ⬜ El flujo de login completo por proveedor (instalar CLI vía npm, navegar
   el TUI de Gemini, detectar migración a Antigravity, escribir el código de
   auth) — eso es `Services/ProviderInstaller.swift` completo, y es trabajo de
@@ -365,8 +362,9 @@ empezando por lo que es puro y testeable sin spawnear nada):
 
 128 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
-`windows-latest`) más 2 tests manuales (Category=Manual, excluidos del CI):
-uno ya confirmado contra `claude` real, el otro (ConPTY) todavía sin correr.
+`windows-latest`) más 2 tests manuales (Category=Manual, excluidos del CI),
+**ambos confirmados pasando en Windows real**: uno contra `claude` real, el
+otro (ConPTY) contra un `cmd.exe` real adjunto a una pseudo-consola real.
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
 solo `windows-tests.yml` — nunca el gate de macOS.
@@ -407,14 +405,18 @@ Solo queda pendiente, y deliberadamente diferido:
 1. `MissionReport.agentLines()` — depende de `ActivityStep`/`AgentNameMatcher`
    (runtime de chat), se porta junto a Fase 5.
 
-Fase 3 (runner de procesos) tiene ya escrito y probado — con fakes, un smoke
-test de proceso real, **y ahora una corrida real contra `claude` en Windows
-real** (§10) — todo el camino: parser NDJSON (`ClaudeStreamParser`),
-resolución de binario/PATH (`BinaryResolver`), construcción de argumentos
-(`ClaudeRunArgs`), y el spawn real orquestado por `ClaudeRunner.Stream()`
-(detalle en §6). Lo único que queda de Fase 3:
-
-1. ConPTY para login OAuth — API solo-Windows, entra más adelante (Fase 6).
+**Fase 3 (runner de procesos) cerrada del todo.** Escrita, probada con
+fakes, con smoke tests de proceso real, y **confirmada en Windows real
+(§10)** tanto para el spawn normal (`ClaudeRunner.Stream()` contra `claude`
+real) como para la primitiva ConPTY (`Win32PseudoConsoleLauncher` contra un
+`cmd.exe` real adjunto a una pseudo-consola real) — todo el camino: parser
+NDJSON (`ClaudeStreamParser`), resolución de binario/PATH (`BinaryResolver`),
+construcción de argumentos (`ClaudeRunArgs`), spawn real
+(`ClaudeRunner.Stream()`), y la primitiva de pseudo-consola (detalle en §6).
+El flujo de login completo por proveedor que USA esta primitiva (instalar
+CLI vía npm, navegar el TUI de Gemini, escribir el código de auth) es trabajo
+de Fase 6, no de Fase 3 — Fase 3 solo necesitaba que la primitiva existiera y
+funcionara de verdad, y ya está.
 
 ## 10. Bitácora de verificación en Windows real
 
@@ -489,11 +491,42 @@ un puntero nuevo; de paso desaparece el pequeño leak intencional de
 (`Action<string>?`) en `Win32PseudoConsoleLauncher`, cableado en el smoke
 test, para tener trazas paso a paso si esta corrección no fuera suficiente.
 
-**Pendiente de verdad:** esta corrección se basa en revisión de código (el
-patrón es un "gotcha" bien documentado del binding de ConPTY, no una
-suposición), pero **todavía no se ha confirmado con una corrida real en
-Windows** — la build local en este sandbox solo prueba que compila y que los
-128 tests automatizados siguen pasando. `ManualPseudoConsoleSmokeTest` debe
-correr en la máquina Windows del founder antes de dar Fase 3 por cerrada del
-todo. Si pasa, borrar `ManualConPtyDiagnosticTest.cs` (scaffolding temporal)
-y actualizar esta entrada con el resultado.
+**Confirmado en Windows real: `CreateProcess OK`, sin crash.** Pero apareció
+un tercer síntoma, distinto del `DLL_INIT_FAILED`: el texto real de
+`echo hello-from-conpty` nunca llegaba por el pipe de salida — solo la
+negociación inicial de ConPTY (`ESC[?9001h ESC[?1004h`, win32-input-mode +
+focus-tracking, 16 bytes) cruzaba el pipe y luego silencio total, mientras el
+texto aparecía impreso directamente en la terminal real del founder, sin
+abrir ninguna ventana nueva. Reproducido de forma idéntica con `cmd.exe` Y
+`powershell.exe` (mismo patrón exacto de 16 bytes), descartando que fuera un
+comportamiento específico de `cmd.exe`. Un volcado de bytes crudos
+(bypaseando el line-splitting de `StreamReader`) confirmó que esos 16 bytes
+son literalmente lo único que el pipe entrega, incluso esperando con calma
+sin forzar el cierre de la pseudo-consola.
+
+**Causa: no era un bug de este código.** Windows Terminal (que alojaba la
+sesión de PowerShell del founder) usa ConPTY para alojar su propia shell; al
+crear NOSOTROS una segunda ConPTY anidada dentro de un proceso que ya corre
+bajo una ConPTY externa, conhost puede decidir "pasar por delante"
+(passthrough/reparenting) el renderizado de la sesión interna directamente a
+la terminal externa, en vez de relayarlo por nuestro pipe — dejando en el
+pipe solo el hand-shake inicial. Confirmado repitiendo la misma prueba desde
+la consola clásica (Win+R → `cmd`, sin Windows Terminal de por medio): ahí
+"hello-from-conpty" sí llegó por el pipe con normalidad. Como la app real
+nunca se lanza desde una terminal (se abre desde el Explorador, sin ningún
+ConPTY por encima en el árbol de procesos), esto no la afecta — es un
+artefacto exclusivo de probar manualmente `dotnet test` dentro de Windows
+Terminal. Documentado como advertencia en el XML doc de
+`ManualPseudoConsoleSmokeTest.cs` para que nadie pierda tiempo con esto otra
+vez.
+
+Todo el scaffolding temporal de esta investigación se retiró tras confirmar
+la corrección: `ManualConPtyDiagnosticTest.cs` (bisección) borrado,
+`ReadRawOutputForDiagnosticsAsync` (volcado de bytes crudos) retirado de
+`Win32PseudoConsoleLauncher.cs`, `Win32PseudoConsoleSession` vuelto a
+`internal`. El `Diagnostics` opcional (`Action<string>?`) se queda —
+utilidad genuina y de coste cero cuando no se usa.
+
+**Fase 3 cerrada del todo: `ManualPseudoConsoleSmokeTest` confirmado pasando
+en Windows real (2026-08-06)**, con las dos aserciones completas (texto
+capturado, exit code 0) — no solo "no crashea".

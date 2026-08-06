@@ -135,7 +135,7 @@ public sealed class Win32PseudoConsoleLauncher : IPseudoConsoleLauncher
 }
 
 [SupportedOSPlatform("windows")]
-public sealed class Win32PseudoConsoleSession : IPseudoConsoleSession
+internal sealed class Win32PseudoConsoleSession : IPseudoConsoleSession
 {
     private readonly IntPtr _hPc;
     private readonly IntPtr _attributeList;
@@ -245,32 +245,6 @@ public sealed class Win32PseudoConsoleSession : IPseudoConsoleSession
     {
         try { NativeMethods.TerminateProcess(_hProcess, 1); }
         catch { /* best-effort */ }
-    }
-
-    /// <summary>TEMPORARY diagnostic-only helper investigating why echoed text
-    /// never shows up via <see cref="ReadOutputLinesAsync"/>: reads raw bytes
-    /// directly off the output pipe, bypassing StreamReader's line-splitting
-    /// entirely, so a caller can see exactly what conhost wrote, unfiltered, byte
-    /// for byte. Delete once that investigation is closed.</summary>
-    public async Task<byte[]> ReadRawOutputForDiagnosticsAsync(int maxBytes, TimeSpan timeout)
-    {
-        var buffer = new byte[maxBytes];
-        using var cts = new CancellationTokenSource(timeout);
-        var total = 0;
-        try
-        {
-            while (total < maxBytes)
-            {
-                var read = await _output.ReadAsync(buffer.AsMemory(total, maxBytes - total), cts.Token);
-                if (read == 0) break;
-                total += read;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Timeout is expected/fine here — we just want whatever arrived.
-        }
-        return buffer[..total];
     }
 
     public void Dispose()

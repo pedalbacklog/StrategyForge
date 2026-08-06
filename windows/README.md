@@ -74,9 +74,9 @@ windows/
   and `IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher` (Fase 3): the ConPTY
   primitive — raw P/Invoke against `kernel32` (no shell-out equivalent exists on
   Windows the way `openpty` does on macOS), same interface-plus-real-wrapper shape
-  as the process launcher. **Hit and fixed two real bugs on real Windows (a hang,
-  then `STATUS_DLL_INIT_FAILED`); fix not yet reconfirmed** — see "Testing
-  the pieces that need a real Windows machine" below.
+  as the process launcher. **Confirmed passing on real Windows** (see Status) after
+  finding and fixing two real bugs along the way (a hang, then `STATUS_DLL_INIT_FAILED`)
+  — see "Testing the pieces that need a real Windows machine" below.
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
@@ -157,31 +157,32 @@ something in that chain needs fixing; a normal run ends with `[usage] ... tokens
 and `[finished]`. Point `CORAL_MANUAL_REPO_PATH` at a specific folder to run
 `claude` there instead of the current directory.
 
-**`ManualPseudoConsoleSmokeTest`** — 🔶 **fix applied, not yet reconfirmed on real
-Windows.** ConPTY (`Win32PseudoConsoleLauncher`) is raw P/Invoke against `kernel32`
-with no cross-platform equivalent, so unlike `ClaudeRunner`'s plumbing, this has no
-Linux-side signal to fall back on. First real run hung (fixed — the ConPTY output
-pipe doesn't EOF on its own when the child exits, see `PORT-PLAN.md` §10), then
-failed with `STATUS_DLL_INIT_FAILED`. Root cause found by code review: the
+**`ManualPseudoConsoleSmokeTest`** — ✅ confirmed passing on real Windows
+(2026-08-06, see `PORT-PLAN.md` §10). ConPTY (`Win32PseudoConsoleLauncher`) is raw
+P/Invoke against `kernel32` with no cross-platform equivalent, so unlike
+`ClaudeRunner`'s plumbing, this had no Linux-side signal to fall back on. Two real
+bugs surfaced and got fixed along the way: a hang (the ConPTY output pipe doesn't EOF
+on its own when the child exits) and `STATUS_DLL_INIT_FAILED` (the
 `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` attribute was being set to a pointer-to-the-handle
-instead of the handle value itself (full writeup in `PORT-PLAN.md` §10). Fixed, but
-needs a real Windows run to confirm. Run it:
+instead of the handle value itself) — full writeup in `PORT-PLAN.md` §10. Run it:
 
 ```
-dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~ManualPseudoConsoleSmokeTest" --logger "console;verbosity=detailed"
+dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~ManualPseudoConsoleSmokeTest"
 ```
 
-(`verbosity=detailed` matters here — `Win32PseudoConsoleLauncher.Diagnostics` prints a
-step-by-step trace of every Win32 call's return value through `ITestOutputHelper`,
-which is otherwise swallowed on success.) It spawns `cmd.exe /c echo hello-from-conpty`
-attached to a real pseudo-console and checks the echoed text comes back through it. If
-it still fails, report the full diagnostic trace verbatim — it pinpoints exactly which
-call returned something unexpected.
+It spawns `cmd.exe /c echo hello-from-conpty` attached to a real pseudo-console and
+checks the echoed text comes back through it. **If it ever seems to fail this way when
+run manually inside Windows Terminal**, re-run it from a legacy `conhost` window
+(Win+R → `cmd`) before assuming it's a regression — Windows Terminal can "pass through"
+a nested ConPTY session's rendering directly to itself instead of relaying it through
+this process's pipe, which looks identical to a real failure but isn't one (doesn't
+affect the real app, which is never launched from a terminal). See the XML doc on the
+test and `PORT-PLAN.md` §10 for the full story.
 
 ## Status
 
 **Fase 1 (scaffolding) done**; **Fase 2 (portable core) essentially done**;
-**Fase 3 (process runner) started** — see `PORT-PLAN.md` §6 for the live
+**Fase 3 (process runner) done** — see `PORT-PLAN.md` §6 for the live
 done/remaining checklist. Ported: the full "Strategy → subagent `.md` files +
 CLAUDE.md + dynamic workflow + MCP configs, written to disk" path
 (`AgentRole`/`Strategy`/validation + `Strategy.AutoFixed()` +
