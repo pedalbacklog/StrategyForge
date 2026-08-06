@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Coral.Core.Generators;
 
 /// <summary>
@@ -21,7 +23,7 @@ public static class MissionReport
     /// <summary>A one-line, shareable headline: "A 4-agent team finished for $0.83."</summary>
     public static string Headline(int agentCount, double costUsd, int tokens)
     {
-        var cost = costUsd > 0 ? $"${costUsd:F2}" : $"{FormatTokens(tokens)} tokens";
+        var cost = costUsd > 0 ? $"${costUsd.ToString("F2", CultureInfo.InvariantCulture)}" : $"{FormatTokens(tokens)} tokens";
         if (agentCount <= 1) return $"A single agent finished for {cost}.";
         return $"A {agentCount}-agent team finished for {cost}.";
     }
@@ -36,7 +38,7 @@ public static class MissionReport
         sb.Append("# Mission report — ").Append(title.Length == 0 ? strategyName : title).Append("\n\n");
         sb.Append("> ").Append(Headline(count, costUsd, tokens)).Append("\n\n");
         sb.Append("**Team:** ").Append(strategyName).Append(" · ").Append(agents.Count).Append(" agents  \n");
-        sb.Append("**Cost:** ").Append(costUsd > 0 ? $"${costUsd:F2}" : "—").Append(" · ");
+        sb.Append("**Cost:** ").Append(costUsd > 0 ? $"${costUsd.ToString("F2", CultureInfo.InvariantCulture)}" : "—").Append(" · ");
         sb.Append("**Tokens:** ").Append(FormatTokens(tokens));
         if (elapsed.Length > 0) sb.Append(" · **Time:** ").Append(elapsed);
         sb.Append("\n\n## Agents\n\n");
@@ -58,8 +60,8 @@ public static class MissionReport
 
     private static string FormatTokens(int n)
     {
-        if (n >= 1_000_000) return $"{n / 1_000_000.0:F1}M";
-        if (n >= 1_000) return $"{n / 1_000.0:F1}k";
+        if (n >= 1_000_000) return $"{(n / 1_000_000.0).ToString("F1", CultureInfo.InvariantCulture)}M";
+        if (n >= 1_000) return $"{(n / 1_000.0).ToString("F1", CultureInfo.InvariantCulture)}k";
         return n.ToString();
     }
 }

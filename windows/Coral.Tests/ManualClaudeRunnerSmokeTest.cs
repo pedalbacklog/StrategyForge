@@ -51,7 +51,7 @@ public class ManualClaudeRunnerSmokeTest
                 ChatEvent.AssistantText t => $"[assistant] {t.Text}",
                 ChatEvent.AssistantDelta d => $"[delta] {d.Text}",
                 ChatEvent.Tool tool => $"[tool] {tool.Name} {tool.Detail}",
-                ChatEvent.Usage u => $"[usage] {u.Tokens} tokens, ${u.CostUsd:F4}",
+                ChatEvent.Usage u => $"[usage] {u.Tokens} tokens, ${u.CostUsd.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)}",
                 ChatEvent.Finished => "[finished]",
                 ChatEvent.Failed f => $"[FAILED] {f.Message}",
                 _ => $"[{evt.GetType().Name}]",

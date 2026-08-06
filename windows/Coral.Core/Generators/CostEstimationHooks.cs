@@ -1,3 +1,4 @@
+using System.Globalization;
 using Coral.Core.Models;
 using Coral.Core.Services;
 
@@ -44,13 +45,13 @@ public readonly struct StrategyCost
     {
         get
         {
-            if (PerRunTokens >= 1_000_000) return $"{PerRunTokens / 1_000_000.0:F1}M";
+            if (PerRunTokens >= 1_000_000) return $"{(PerRunTokens / 1_000_000.0).ToString("F1", CultureInfo.InvariantCulture)}M";
             if (PerRunTokens >= 1_000) return $"{PerRunTokens / 1_000}k";
             return PerRunTokens.ToString();
         }
     }
 
-    public string UsdShort => $"${PerRun:F2}";
+    public string UsdShort => $"${PerRun.ToString("F2", CultureInfo.InvariantCulture)}";
 
     /// <summary>The headline cost, tokens first with the dollar figure in parentheses.</summary>
     public string Headline => $"~{TokensShort} ({UsdShort})";
