@@ -76,7 +76,15 @@ windows/
   Windows the way `openpty` does on macOS), same interface-plus-real-wrapper shape
   as the process launcher. **Confirmed passing on real Windows** (see Status) after
   finding and fixing two real bugs along the way (a hang, then `STATUS_DLL_INIT_FAILED`)
-  — see "Testing the pieces that need a real Windows machine" below.
+  — see "Testing the pieces that need a real Windows machine" below. And `ProviderAuth`
+  (Fase 4): a cheap, no-subprocess check of whether `claude`/`codex`/`gemini`'s stored
+  login still looks usable, reading only each CLI's own on-disk credentials file (never
+  Credential Manager/Keychain — that would prompt at launch). Same `XUncached(...)`
+  pure-plus-real-wrapper shape as `BinaryResolver`: `FreshnessUncached(provider,
+  homeDirectory)` is fully unit-tested against a temp directory, `Freshness`/
+  `VerifyAsync` wire in the real `%USERPROFILE%`. The rest of Fase 4 (Credential
+  Manager wrapper, `Account`/`AuthProviderKind`, Google OAuth+PKCE with a loopback
+  listener) is deliberately deferred — see `PORT-PLAN.md` §6/§9 for why.
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
@@ -106,10 +114,12 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **128/128**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **139/139**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
-> `--filter` excludes one more test, `ManualClaudeRunnerSmokeTest`, that needs a real,
-> logged-in `claude` CLI — see "Testing against the real `claude` CLI" below.) The `Coral`
+> `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
+> `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
+> Windows respectively — see "Testing the pieces that need a real Windows machine"
+> below.) The `Coral`
 > WinUI 3 app project needs the Windows App SDK/Windows 10 SDK and can only be built on
 > Windows — `windows-tests.yml` (below) is its real check, and it passed on the Fase 1
 > scaffold. If a NuGet pin or a WinUI 3 project-file setting turns out to be wrong as the
@@ -198,25 +208,30 @@ argument-list builder (`ClaudeRunArgs`), the pure half of the multi-provider
 one-shot runner (`CLIOneShotRunner`: per-provider command building,
 ANSI/progress-line cleanup, auth-prompt/failure detection, token/cost
 estimation), the real spawn (`ClaudeRunner.Stream()`,
-`IProcessLauncher`/`RealProcessLauncher`), and the ConPTY primitive
-(`IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher`) — 128 automated xUnit
-tests, all passing (including `TemplatesAreAllValid`, which iterates every
-template through `Strategy.Validate()`, `StrategyWriterTests`, which
-round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
-spawns a genuinely real process to smoke-test the no-shell
-`Process.Start`/async-stdout/exit-code/`Kill()` plumbing, and
-`LocaleRegressionTests`, added after the first real-Windows run — see below) —
+`IProcessLauncher`/`RealProcessLauncher`), the ConPTY primitive
+(`IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher`), and — the first piece
+of Fase 4 — `ProviderAuth` (login-freshness check for `claude`/`codex`/`gemini`,
+reading only their own on-disk credentials files) — 139 automated xUnit tests,
+all passing (including `TemplatesAreAllValid`, which iterates every template
+through `Strategy.Validate()`, `StrategyWriterTests`, which round-trips real
+writes to a temp directory, `RealProcessLauncherTests`, which spawns a
+genuinely real process to smoke-test the no-shell
+`Process.Start`/async-stdout/exit-code/`Kill()` plumbing, `LocaleRegressionTests`,
+added after the first real-Windows run, and `ProviderAuthTests` — see below) —
 plus 2 manual tests excluded from that count and from CI (see "Testing the
 pieces that need a real Windows machine"). Still not ported:
 `MissionReport.agentLines()` (needs the not-yet-built chat/activity runtime —
-`ActivityStep`/`AgentNameMatcher` — deferred to Fase 5 on purpose) and the full
-per-provider login/install flow (`ProviderInstaller.swift` — npm install,
-Gemini's TUI navigation, Antigravity-migration detection — that's Fase 6, built
-on top of the ConPTY primitive that's already here). Everything else under
-`Services/` (git, auth, loops — the last one stays vetoed for human review per
-Fase 8) is still unported. The `Coral` WinUI 3 app project itself is still just
-the Fase 1 blank window — no UI wired to any of this yet
-(Fase 5).
+`ActivityStep`/`AgentNameMatcher` — deferred to Fase 5 on purpose), the rest of
+Fase 4 (Credential Manager wrapper, `Account`/`AuthProviderKind`, Google
+OAuth+PKCE with a loopback listener — deliberately deferred, see `PORT-PLAN.md`
+§6/§9: it only exists on macOS to gate CloudKit sync, itself a Windows
+non-goal), and the full per-provider login/install flow
+(`ProviderInstaller.swift` — npm install, Gemini's TUI navigation,
+Antigravity-migration detection — that's Fase 6, built on top of the ConPTY
+primitive that's already here). Everything else under `Services/` (git, loops
+— the last one stays vetoed for human review per Fase 8) is still unported.
+The `Coral` WinUI 3 app project itself is still just the Fase 1 blank window —
+no UI wired to any of this yet (Fase 5).
 
 **`ClaudeRunner` has now run against the real `claude` CLI, on a real Windows
 machine** (`ManualClaudeRunnerSmokeTest` — see "Testing the pieces that need a

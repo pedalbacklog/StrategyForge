@@ -209,7 +209,11 @@ Fase 3 — Runner de procesos          ✅ cerrada — ClaudeRunner.Stream() y l
                                       (formato culture-sensitive; DLL_INIT_
                                       FAILED por indirección de más en
                                       UpdateProcThreadAttribute)
-Fase 4 — Secretos + auth             Credential Manager/DPAPI, Google OAuth (loopback)
+Fase 4 — Secretos + auth             🔶 ProviderAuth.cs portada (login-freshness
+                                      de claude/codex/gemini, ver §6); Credential
+                                      Manager/DPAPI + Google OAuth deliberadamente
+                                      diferidos — solo sirven para CloudKit sync,
+                                      no-objetivo de v1 (ver §6/§8)
 Fase 5 — Chat MVP                    ViewModel + XAML mínimo: enviar prompt, ver
                                       streaming, ver activity panel — esto es "P0"
 Fase 6 — Instalación de CLIs         ProviderInstaller equivalente, probado contra
@@ -360,7 +364,29 @@ empezando por lo que es puro y testeable sin spawnear nada):
   Fase 6 ("Instalación de CLIs"), no de Fase 3. Fase 3 solo necesitaba la
   PRIMITIVA de pseudo-consola para existir; ya existe.
 
-128 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+**Fase 4 (secretos + auth), primera pieza: `ProviderAuth.cs`** —
+✅ portada y probada (11 tests nuevos, todos locales/temp-dir, sin ninguna
+dependencia de Windows real). Puerto directo de `Services/ProviderAuth.swift`:
+comprobación barata de si el login guardado de `claude`/`codex`/`gemini` sigue
+vivo, leyendo solo sus ficheros de credenciales en disco (nunca Credential
+Manager/Keychain, a propósito — tocarlo arrancaría un prompt del SO al
+inicio). Mismo patrón `XUncached(...)` testeable + `X()` real que
+`BinaryResolver`: `FreshnessUncached(provider, homeDirectory)` es pura y se
+prueba contra un directorio temporal que hace de `%USERPROFILE%`;
+`Freshness(provider)`/`VerifyAsync(providers)` son el wiring fino contra el
+`%USERPROFILE%` real.
+
+El resto de Fase 4 (`KeychainStore` → Credential Manager, `Account`/
+`AuthProviderKind`, el flujo Google OAuth 2.0 + PKCE con loopback HTTP) queda
+deliberadamente diferido: en macOS ese flujo solo sirve para activar el sync
+de CloudKit, que ya es un no-objetivo explícito de Windows v1 (§8), y el
+`googleClientID` en `Constants.swift` es un placeholder sin configurar
+todavía incluso en macOS — construirlo ahora sería andamiaje dormido e
+imposible de verificar de extremo a extremo en cualquier plataforma. Se
+retoma cuando haya un backend/CloudKit-equivalente real que lo necesite, o si
+surge otra razón de producto para tener una identidad de usuario en Windows.
+
+139 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 2 tests manuales (Category=Manual, excluidos del CI),
 **ambos confirmados pasando en Windows real**: uno contra `claude` real, el
@@ -417,6 +443,17 @@ El flujo de login completo por proveedor que USA esta primitiva (instalar
 CLI vía npm, navegar el TUI de Gemini, escribir el código de auth) es trabajo
 de Fase 6, no de Fase 3 — Fase 3 solo necesitaba que la primitiva existiera y
 funcionara de verdad, y ya está.
+
+**Fase 4 (secretos + auth) en marcha, con alcance recortado a propósito**:
+`ProviderAuth.cs` (login-freshness de claude/codex/gemini vía sus ficheros de
+credenciales) portada y probada — 11 tests nuevos, 139 en total (detalle en
+§6). El resto de la fase tal como estaba descrita originalmente (Credential
+Manager, `Account`/`AuthProviderKind`, Google OAuth+PKCE con loopback) queda
+diferido: solo existe en macOS para activar CloudKit sync, que ya es
+no-objetivo de v1 (§8), y el client ID de Google ni siquiera está configurado
+de verdad todavía en el propio macOS — construirlo ahora sería trabajo
+dormido e inverificable en cualquier plataforma. Se retoma si/cuando surja
+una razón de producto real para tener identidad de usuario en Windows.
 
 ## 10. Bitácora de verificación en Windows real
 
