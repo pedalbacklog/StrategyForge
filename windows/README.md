@@ -204,8 +204,8 @@ test and `PORT-PLAN.md` §10 for the full story.
 
 **Fase 1 (scaffolding) done**; **Fase 2 (portable core) essentially done**;
 **Fase 3 (process runner) done**; **Fase 4 (secretos + auth) started** (scope
-deliberately cut, see below); **Fase 5 (Chat MVP) has a first cut written, not
-yet confirmed on real Windows** — see `PORT-PLAN.md` §6 for the live
+deliberately cut, see below); **Fase 5 (Chat MVP) done — confirmed end to end
+on real Windows** — see `PORT-PLAN.md` §6 for the live
 done/remaining checklist. Ported: the full "Strategy → subagent `.md` files +
 CLAUDE.md + dynamic workflow + MCP configs, written to disk" path
 (`AgentRole`/`Strategy`/validation + `Strategy.AutoFixed()` +
@@ -249,22 +249,26 @@ the ConPTY primitive that's already here). Everything else under `Services/`
 (git, loops — the last one stays vetoed for human review per Fase 8) is still
 unported.
 
-**The `Coral` WinUI 3 app project's first real chat UI is confirmed working on
-real Windows** — prompt box, transcript, activity panel, Send/Stop, in
-`MainPage.xaml`/`.xaml.cs` hosted by a minimal `MainWindow`. Getting there took
-three real bugs, none of which this sandbox could catch (no Windows App SDK
-here at all): (1) `x:Bind` bindings directly on `MainWindow` failed to compile
-— WinUI 3's `Window` isn't a `FrameworkElement`, unlike UWP's `Page` — fixed by
-moving the actual content/bindings into `MainPage`, the standard WinUI 3
-pattern; (2) a blank window at runtime — `BoolNegationConverter` lived in
-`Border.Resources`, but x:Bind's generated converter lookup expects it in
-`Page.Resources`, so `Bindings.Initialize()` threw before anything rendered;
-(3) mojibake in any accented reply — `RealProcessLauncher` didn't set
-`StandardOutputEncoding`, so .NET decoded the CLI's UTF-8 output using the
-console's active code page instead. All three found via the founder running it
-for real in Visual Studio's debugger, not by review. See `PORT-PLAN.md` §10 for
-the full story. Still to confirm: transcript auto-scroll, the Activity panel
-populating with real steps, and Stop cancelling an in-flight turn.
+**The `Coral` WinUI 3 app project's first real chat UI is confirmed working
+end to end on real Windows** — prompt box, transcript, activity panel,
+Send/Stop, in `MainPage.xaml`/`.xaml.cs` hosted by a minimal `MainWindow`.
+Getting there took five real bugs, none of which this sandbox could catch (no
+Windows App SDK here at all): (1) `x:Bind` bindings directly on `MainWindow`
+failed to compile — WinUI 3's `Window` isn't a `FrameworkElement`, unlike
+UWP's `Page` — fixed by moving the actual content/bindings into `MainPage`,
+the standard WinUI 3 pattern; (2) a blank window at runtime —
+`BoolNegationConverter` lived in `Border.Resources`, but x:Bind's generated
+converter lookup expects it in `Page.Resources`, so `Bindings.Initialize()`
+threw before anything rendered; (3) mojibake in any accented reply —
+`RealProcessLauncher` didn't set `StandardOutputEncoding`, so .NET decoded
+the CLI's UTF-8 output using the console's active code page instead; (4)
+reply text couldn't be selected/copied — `TextBlock.IsTextSelectionEnabled`
+defaults to `false`; (5) the transcript didn't keep following the bottom
+while a reply streamed in — `ScrollIntoView` only guarantees an item is
+visible once, it doesn't track a still-growing item's bottom edge, so this
+needed the ListView's actual `ScrollViewer` and `ChangeView` instead. All
+five found via the founder running it for real (mostly in Visual Studio's
+debugger), not by review. See `PORT-PLAN.md` §10 for the full story.
 
 **`ClaudeRunner` has now run against the real `claude` CLI, on a real Windows
 machine** (`ManualClaudeRunnerSmokeTest` — see "Testing the pieces that need a

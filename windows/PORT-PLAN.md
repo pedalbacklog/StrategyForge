@@ -214,16 +214,18 @@ Fase 4 — Secretos + auth             🔶 ProviderAuth.cs portada (login-fresh
                                       Manager/DPAPI + Google OAuth deliberadamente
                                       diferidos — solo sirven para CloudKit sync,
                                       no-objetivo de v1 (ver §6/§8)
-Fase 5 — Chat MVP                    🔶 confirmado funcionando en Windows real:
-                                      prompt real, streaming en vivo, UTF-8
-                                      correcto (tildes/ñ), coste bien formateado,
-                                      y Stop cancela un turno en curso — tres
-                                      bugs reales encontrados y arreglados en el
-                                      camino (ventana en blanco por un recurso
-                                      mal ubicado; x:Bind roto en Window; mojibake
-                                      por no fijar UTF-8 en RealProcessLauncher).
-                                      Falta confirmar scroll y que el panel de
-                                      Activity se pueble con pasos reales
+Fase 5 — Chat MVP                    ✅ cerrada — confirmado funcionando en
+                                      Windows real de punta a punta: prompt
+                                      real, streaming en vivo, UTF-8 correcto
+                                      (tildes/ñ), coste bien formateado, panel
+                                      de Activity poblándose con pasos reales,
+                                      scroll automático, texto seleccionable,
+                                      y Stop cancelando un turno en curso.
+                                      Cinco bugs reales encontrados y
+                                      arreglados en el camino (ver §10) — todo
+                                      el trabajo de UI de este alcance mínimo
+                                      quedó verificado por el founder, no solo
+                                      revisado o compilado
                                       (ver §10)
 Fase 6 — Instalación de CLIs         ProviderInstaller equivalente, probado contra
                                       claude/codex/gemini reales
@@ -509,17 +511,15 @@ de verdad todavía en el propio macOS — construirlo ahora sería trabajo
 dormido e inverificable en cualquier plataforma. Se retoma si/cuando surja
 una razón de producto real para tener identidad de usuario en Windows.
 
-**Fase 5 (Chat MVP) con un primer corte escrito; compila en CI, sin
-verificar en Windows todavía.** `ChatViewModel.cs` (`Coral.Core`) está
-probado de verdad (10 tests contra fakes); `MainPage.xaml`/`.xaml.cs`
-(`Coral`, WinUI3) es la primera UI real del port. Su primer intento de
-compilación en `windows-latest` CI **falló de verdad** (`x:Bind` puesto
-directamente en `MainWindow.xaml`, que en WinUI3 no es un
-`FrameworkElement` — detalle en §6) — arreglado moviendo el contenido a una
-`Page` separada, patrón estándar de WinUI3. Su primera verificación
-genuina (¿renderiza?, ¿manda un prompt real?, ¿hace scroll?) todavía tiene
-que ser el founder viéndola correr en su máquina. No dar Fase 5 por
-cerrada hasta entonces — detalle en §6.
+**Fase 5 (Chat MVP) cerrada — confirmada en Windows real de punta a punta.**
+`ChatViewModel.cs` (`Coral.Core`) probado de verdad (10 tests contra fakes);
+`MainPage.xaml`/`.xaml.cs` (`Coral`, WinUI3) es la primera UI real del port,
+y el founder la corrió de verdad: prompt real, streaming en vivo, UTF-8
+correcto, panel de Activity con pasos reales, coste bien formateado, scroll
+automático, texto seleccionable, y Stop cancelando un turno en curso. Cinco
+bugs reales en el camino (compilación rota por `x:Bind` en `Window`, ventana
+en blanco por un recurso mal ubicado, mojibake por no fijar UTF-8, texto no
+seleccionable, scroll que no seguía el streaming) — detalle completo en §10.
 
 ## 10. Bitácora de verificación en Windows real
 
@@ -663,6 +663,31 @@ con tildes/ñ).
 
 Con esto, la primera corrida real de principio a fin funcionó: prompt
 enviado, streaming en vivo, coste mostrado (`$0.0657`, con punto decimal
-correcto), sin mojibake. Pendiente de confirmar por el founder: scroll del
-transcript, el panel de Activity poblándose con pasos reales, y el botón
-Stop cancelando un turno en curso.
+correcto), sin mojibake. El founder confirmó a continuación: el panel de
+Activity se puebla de verdad con pasos reales (probado con un prompt que
+dispara herramientas — salieron `Glob`/`Glob`/`Read` con sus detalles) y el
+botón Stop cancela un turno en curso (estado pasa a "Cancelled.", tal como
+está programado).
+
+**Cuarto y quinto bug, en el mismo hilo de pruebas:** el texto de las
+respuestas no se podía seleccionar/copiar (`TextBlock.IsTextSelectionEnabled`
+es `false` por defecto en WinUI3 — arreglado fijándolo a `true`), y el
+transcript no bajaba solo mientras llegaba el streaming. El primer intento de
+arreglar el scroll (`ChatList.ScrollIntoView(lastItem)` en cada
+`PropertyChanged` del mensaje) solo bajaba hasta el borde superior del último
+mensaje una vez, sin seguir el borde inferior mientras ese mismo mensaje
+seguía creciendo — `ScrollIntoView` garantiza que un ítem sea visible, no que
+la vista siga su borde inferior si crece. Arreglado buscando el
+`ScrollViewer` real dentro del `ListView` (vía `VisualTreeHelper`, una vez,
+en `Loaded`) y llamando `ChangeView(null, ScrollableHeight, null)` en cada
+delta de texto — la forma fiable de fijar la vista al final de verdad.
+Confirmado por el founder que ahora sí baja solo.
+
+**Fase 5 (Chat MVP) cerrada.** Con las cinco correcciones de esta bitácora,
+todas las interacciones del alcance mínimo quedaron confirmadas en Windows
+real por el founder: enviar un prompt, streaming en vivo con texto correcto
+(incluyendo tildes/ñ), panel de Activity con pasos reales, coste mostrado
+bien formateado, scroll automático, texto seleccionable, y cancelación con
+Stop. Sigue pendiente, deliberadamente fuera de este alcance mínimo: selector
+de repo, ajustes de modelo/esfuerzo/permission-mode, modo "Ask" de permisos
+en vivo, `MetaOrchestrator` multi-proveedor, historial de turnos persistido.
