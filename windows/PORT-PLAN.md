@@ -214,13 +214,15 @@ Fase 4 — Secretos + auth             🔶 ProviderAuth.cs portada (login-fresh
                                       Manager/DPAPI + Google OAuth deliberadamente
                                       diferidos — solo sirven para CloudKit sync,
                                       no-objetivo de v1 (ver §6/§8)
-Fase 5 — Chat MVP                    🔶 ChatViewModel + MainPage.xaml escritos —
-                                      ViewModel probado de verdad (10 tests con
-                                      fakes, Coral.Core); la UI XAML/Coral.csproj
-                                      NO ha compilado en ningún sitio todavía (no
-                                      hay Windows App SDK en este sandbox) — su
-                                      primera compilación real será en
-                                      windows-latest CI (ver §6)
+Fase 5 — Chat MVP                    🔶 confirmado funcionando en Windows real:
+                                      prompt real enviado, streaming en vivo,
+                                      coste mostrado correctamente — dos bugs
+                                      reales encontrados y arreglados en el
+                                      camino (ventana en blanco por un recurso
+                                      mal ubicado; mojibake por no fijar UTF-8
+                                      en RealProcessLauncher). Falta confirmar
+                                      scroll, panel de Activity y botón Stop
+                                      (ver §10)
 Fase 6 — Instalación de CLIs         ProviderInstaller equivalente, probado contra
                                       claude/codex/gemini reales
 Fase 7 — Code mode                   git/diff/PR
@@ -629,3 +631,36 @@ utilidad genuina y de coste cero cuando no se usa.
 **Fase 3 cerrada del todo: `ManualPseudoConsoleSmokeTest` confirmado pasando
 en Windows real (2026-08-06)**, con las dos aserciones completas (texto
 capturado, exit code 0) — no solo "no crashea".
+
+**2026-08-06 — primera corrida real de la UI de Fase 5, dos bugs reales
+encontrados con el depurador de Visual Studio (no por revisión de código).**
+El founder instaló Visual Studio por primera vez para esto. Primer bug:
+`e.Message` = "Cannot find a resource with the given key: Negate." —
+`COMException` lanzada desde `Bindings.Initialize()` generado por `x:Bind`,
+que tumbaba la ventana entera antes de renderizar nada (de ahí la ventana en
+blanco). Causa: `BoolNegationConverter` vivía en `Border.Resources`
+(anidado dentro de la página), pero la búsqueda de conversores que genera
+`x:Bind` (`LookupConverter`) no recorre el árbol visual como sí hace un
+`{Binding}` normal — espera el recurso en `Page.Resources`. Arreglado
+moviéndolo ahí.
+
+Segundo bug, encontrado en la primera corrida real contra `claude` con un
+prompt con tildes: la respuesta se veía como `Â¿QuÃ©... calorÃas...` — un
+mojibake clásico de leer UTF-8 con la página de códigos equivocada.
+`RealProcessLauncher` no fijaba `StandardOutputEncoding`/
+`StandardErrorEncoding` en el `ProcessStartInfo`, así que .NET usaba la
+página de códigos activa de la consola (no UTF-8) para decodificar la
+salida de `claude` (que sí es UTF-8) — exactamente la misma familia de bug
+que el de formato culture-sensitive de Fase 3, pero en codificación de
+texto en vez de en formato numérico. Arreglado fijando
+`Encoding.UTF8` explícitamente en ambos. Sin test automatizado de
+regresión para esto (requeriría invocar un binario externo con salida UTF-8
+no-ASCII conocida sin usar shell, desproporcionado para lo que es —
+verificado en su lugar con una corrida real contra `claude` con un prompt
+con tildes/ñ).
+
+Con esto, la primera corrida real de principio a fin funcionó: prompt
+enviado, streaming en vivo, coste mostrado (`$0.0657`, con punto decimal
+correcto), sin mojibake. Pendiente de confirmar por el founder: scroll del
+transcript, el panel de Activity poblándose con pasos reales, y el botón
+Stop cancelando un turno en curso.

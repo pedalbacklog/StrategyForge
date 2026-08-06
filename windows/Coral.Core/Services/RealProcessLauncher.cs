@@ -22,6 +22,13 @@ public sealed class RealProcessLauncher : IProcessLauncher
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
+            // Without this, .NET decodes the redirected streams using the
+            // console's active code page (on Windows, often a legacy ANSI/OEM
+            // page, not UTF-8) — the CLIs here (claude/codex/gemini) all write
+            // UTF-8, so anything outside ASCII (á, é, ñ, ¿, …) comes through as
+            // mojibake without an explicit encoding.
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         foreach (var arg in arguments) psi.ArgumentList.Add(arg);
 

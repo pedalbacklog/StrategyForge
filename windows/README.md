@@ -249,17 +249,22 @@ the ConPTY primitive that's already here). Everything else under `Services/`
 (git, loops — the last one stays vetoed for human review per Fase 8) is still
 unported.
 
-**The `Coral` WinUI 3 app project now has a first real chat UI** — prompt box,
-transcript, activity panel, Send/Stop, in `MainPage.xaml`/`.xaml.cs` — hosted
-by a minimal `MainWindow`. It took two tries: the first attempt put its
-`x:Bind` bindings directly on `MainWindow`, which failed to compile on
-`windows-latest` CI (WinUI 3's `Window` isn't a `FrameworkElement`, unlike
-UWP's `Page`, so the XAML compiler's generated code didn't type-check) — fixed
-by moving the actual content/bindings into `MainPage`, the standard WinUI 3
-pattern for this. This sandbox has no Windows App SDK, so `Coral.csproj` can
-still only be verified via CI, not locally; nobody has seen this window
-render or sent a real prompt through it yet. Don't treat Fase 5 as done until
-that happens — see `PORT-PLAN.md` §6/§10.
+**The `Coral` WinUI 3 app project's first real chat UI is confirmed working on
+real Windows** — prompt box, transcript, activity panel, Send/Stop, in
+`MainPage.xaml`/`.xaml.cs` hosted by a minimal `MainWindow`. Getting there took
+three real bugs, none of which this sandbox could catch (no Windows App SDK
+here at all): (1) `x:Bind` bindings directly on `MainWindow` failed to compile
+— WinUI 3's `Window` isn't a `FrameworkElement`, unlike UWP's `Page` — fixed by
+moving the actual content/bindings into `MainPage`, the standard WinUI 3
+pattern; (2) a blank window at runtime — `BoolNegationConverter` lived in
+`Border.Resources`, but x:Bind's generated converter lookup expects it in
+`Page.Resources`, so `Bindings.Initialize()` threw before anything rendered;
+(3) mojibake in any accented reply — `RealProcessLauncher` didn't set
+`StandardOutputEncoding`, so .NET decoded the CLI's UTF-8 output using the
+console's active code page instead. All three found via the founder running it
+for real in Visual Studio's debugger, not by review. See `PORT-PLAN.md` §10 for
+the full story. Still to confirm: transcript auto-scroll, the Activity panel
+populating with real steps, and Stop cancelling an in-flight turn.
 
 **`ClaudeRunner` has now run against the real `claude` CLI, on a real Windows
 machine** (`ManualClaudeRunnerSmokeTest` — see "Testing the pieces that need a
