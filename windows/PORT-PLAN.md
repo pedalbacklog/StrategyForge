@@ -233,7 +233,13 @@ Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewM
                                       fakes (ver §6); AÚN sin correr contra
                                       npm/claude reales en Windows — lo único
                                       que falta para cerrar esta fase
-Fase 7 — Code mode                   git/diff/PR
+Fase 7 — Code mode                   🔶 CodeGit.cs arrancada: parsers puros +
+                                      operaciones de solo lectura (diff/branch/
+                                      changed files) portadas y probadas con
+                                      fakes (ver §6); faltan las operaciones de
+                                      escritura del panel de git (aún sin UI
+                                      que las consuma) y la UI de Code Mode en
+                                      sí (diff viewer, terminal, panel de git)
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -547,6 +553,56 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
     cuando `ProviderInstaller` pide `NeedsCode`). Aún sin correr en Windows
     real — ver windows/README.md "Testing the pieces that need a real
     Windows machine" para cómo lanzarlo.
+
+- 🔶 **Fase 7 (Code mode), primera pieza — `CodeGit.cs`.** Puerto de
+  `Services/CodeGit.swift` (503 líneas), con el mismo criterio de alcance
+  deliberado que Fases 4/6:
+  - ✅ Portado: los parsers puros (`Parse` — diff unificado → líneas
+    renderizables con numeración old/new; `ParseChangedFiles` — `git diff
+    --numstat` + `git status --porcelain -z` → lista de archivos cambiados,
+    tolerante a paths con espacios/no-ASCII vía separación NUL; `ParseShortstat`;
+    `RepoName` — infiere el nombre de carpeta de una URL de clone) y las
+    operaciones de SOLO LECTURA contra git real (`DiffAsync`,
+    `CurrentBranchAsync`, `BranchStatAsync`, `ChangedFilesAsync`,
+    `HasUncommittedChangesAsync`), todas vía el `IProcessLauncher` que YA
+    existe — git es un subproceso "one-shot" normal, sin necesitar ninguna
+    primitiva nueva de Windows (a diferencia de ConPTY en Fase 3). Un detalle
+    de diseño que sí cambia respecto al original: Swift fusiona stdout+stderr
+    en un solo pipe para evitar que un comando con mucha salida de error
+    bloquee el proceso por buffer lleno; `IProcessLauncher` los mantiene
+    separados (más idiomático en .NET), así que `RunGitAsync` drena ambos EN
+    PARALELO (no stdout-y-luego-stderr) para conseguir la misma garantía sin
+    fusionar pipes. También se deja caer `GIT_ASKPASS=/usr/bin/true` (ruta
+    solo-macOS sin equivalente portable) y se mantiene `GIT_TERMINAL_PROMPT=0`
+    + `GCM_INTERACTIVE=never` (este último, más relevante en Windows que en
+    macOS: Git for Windows trae Git Credential Manager instalado por
+    defecto, y sin este flag su prompt gráfico podría bloquear el proceso).
+  - ⬜ Diferido a propósito: `fullDiff` (el diff completo con archivos
+    untracked incluidos y límite de tamaño por archivo — solo tiene sentido
+    junto a un revisor automático de diffs, que no está portado todavía);
+    TODAS las operaciones de ESCRITURA (`stage`/`unstage`/`revert`/`commit`/
+    `push`, `clone`/`createBranch`/`checkout`) — son las acciones del panel
+    de git de Code Mode, y no hay UI todavía que las consuma, así que
+    portarlas ahora sería andamiaje inverificable; y TODAS las operaciones de
+    WORKTREE (`addWorktree`/`mergeNoFF`/`commitAll`/`removeWorktree`/
+    `deleteBranch`) — existen solo para aislar loops, la zona explícitamente
+    vetada de Fase 8 (CLAUDE.md: los cambios de loop necesitan lectura humana
+    del diff, no solo tests) — portarlas aquí las sacaría de esa puerta de
+    revisión.
+  - 15 tests nuevos: el caso exacto de `ChatTests.swift`
+    (`diffParserTagsAddsRemovesAndNumbers`) como especificación para `Parse`,
+    ruido de cabecera de `diff --git` descartado, clasificación de archivos
+    modified/added/deleted/untracked/renamed (incluyendo que un rename
+    consume su registro de "old path" sin generar un sexto archivo fantasma),
+    `ParseShortstat` con y sin coincidencia, `RepoName` con varias formas de
+    URL (incluyendo un caso donde el orden real de Swift — comprobar `.git`
+    ANTES de recortar la barra final — da un resultado distinto al que
+    parecería "más limpio"; documentado como fidelidad al original, no un
+    bug), y las cinco operaciones reales contra un `FakeProcessLauncher` —
+    210 en total.
+  - Escrito mientras CI estaba caído por la incidencia de GitHub Actions (ver
+    §10) — no depende de Windows para nada de esto, así que no hacía falta
+    esperar.
 
 195 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en

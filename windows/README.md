@@ -93,6 +93,19 @@ windows/
   case with two concurrent producers (Gemini's TUI-nudge-and-creds-mtime
   success race). Unit-tested against a new `FakePseudoConsoleLauncher`; not
   yet run against real Windows/npm/CLI logins — see Status.
+  `CodeGit` (Fase 7's first piece): the pure diff/status parsers (`Parse` —
+  unified diff → renderable lines with old/new line numbers; `ParseChangedFiles`
+  — `git diff --numstat` + `git status --porcelain -z` → a changed-file list,
+  NUL-separated so paths with spaces/non-ASCII survive; `ParseShortstat`;
+  `RepoName`) plus the read-only real-git operations (`DiffAsync`,
+  `CurrentBranchAsync`, `BranchStatAsync`, `ChangedFilesAsync`,
+  `HasUncommittedChangesAsync`), all via the existing `IProcessLauncher` — git
+  is a one-shot subprocess, no new Windows primitive needed. Reads stdout and
+  stderr concurrently rather than merging them into one pipe like the Swift
+  original does, to avoid a full-stderr-buffer deadlock on a chatty command.
+  Write operations (stage/commit/push/clone/branch) and worktree operations
+  (loop isolation — Fase 8's explicitly human-reviewed zone) are deliberately
+  not ported yet — see Status.
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
@@ -139,7 +152,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **195/195**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **210/210**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -267,8 +280,9 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 (`IPseudoConsoleLauncher`/`Win32PseudoConsoleLauncher`), `ProviderAuth`
 (login-freshness check for `claude`/`codex`/`gemini`, reading only their own
 on-disk credentials files — the first piece of Fase 4), and the minimal
-`ChatViewModel` (Fase 5, single-provider `-p` path only), and
-`ProviderInstaller`/`ConnectViewModel` (Fase 6 — see below) — 195 automated
+`ChatViewModel` (Fase 5, single-provider `-p` path only),
+`ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit` (Fase 7's
+first piece — see below) — 210 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -277,9 +291,9 @@ spawns a genuinely real process to smoke-test the no-shell
 added after the first real-Windows run, `ProviderAuthTests`,
 `ChatViewModelTests`, `AgentNameMatcherTests`, `ProviderInstallerTests`
 (against a new `FakePseudoConsoleLauncher`, mirroring `FakeProcessLauncher`),
-`ConnectViewModelTests`, and the `MissionReport.AgentLines` cases — see
-below) — plus 4 manual tests excluded from that count and from CI (see
-"Testing the pieces that need a real Windows machine").
+`ConnectViewModelTests`, `CodeGitTests`, and the `MissionReport.AgentLines`
+cases — see below) — plus 4 manual tests excluded from that count and from CI
+(see "Testing the pieces that need a real Windows machine").
 Fase 2's last loose end (`MissionReport.agentLines()`, which needed
 `ActivityStep`/`AgentNameMatcher`) is now closed — `ActivityStep` picked up
 `IsDelegation`/`Agent` fields once `ChatViewModel` existed to populate them,
@@ -373,3 +387,17 @@ the tool for exactly that second piece, split into a safe-to-run-unattended
 install check and an opt-in (`CORAL_MANUAL_RUN_SIGNIN=1`), interactive
 sign-in check that's honest about replacing your machine's Claude login when
 run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
+
+**Fase 7 (Code mode) started: `CodeGit`'s pure parsers and read-only git
+operations are ported and unit-tested (15 tests, 210 automated total), but
+Code Mode has no UI yet.** Same scope discipline as Fases 4/6: the diff/
+changed-files parsers and the read-only real-git calls (current branch,
+branch stat, changed files, has-uncommitted-changes) are done, reusing the
+existing `IProcessLauncher` since git is a plain one-shot subprocess with no
+new Windows primitive to build. Deliberately not ported yet: every git WRITE
+operation (stage/commit/push/clone/branch — the git panel's actions, with no
+UI to consume them yet) and every worktree operation (used only for loop
+isolation, which is Fase 8's zone requiring human review of the diff, not
+just green tests — porting worktree logic here would sidestep that gate).
+Written while GitHub Actions was down (see below) — none of this needs
+Windows or CI to build/test, so there was no reason to wait idle.
