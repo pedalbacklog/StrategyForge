@@ -233,13 +233,12 @@ Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewM
                                       fakes (ver §6); AÚN sin correr contra
                                       npm/claude reales en Windows — lo único
                                       que falta para cerrar esta fase
-Fase 7 — Code mode                   🔶 CodeGit.cs (parsers + lectura/escritura
-                                      de git) y GitPanelViewModel.cs (el panel
-                                      de git entero, sin GitHub/PR/terminal)
+Fase 7 — Code mode                   🔶 CodeGit.cs, GitPanelViewModel.cs y
+                                      GitHubCLI.cs (flujo de PR con `gh`)
                                       portados y probados con fakes (ver §6);
                                       falta la UI de Code Mode en sí (diff
-                                      viewer, terminal, integración de PR) y
-                                      correr contra un repo real en Windows
+                                      viewer, terminal) y correr contra un
+                                      repo/PR real en Windows
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -639,7 +638,38 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
   éxito/fallo, push, crear rama con nombre en blanco como no-op, checkout con
   refresh) — 230 en total.
 
-230 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+- ✅ **`GitHubCLI.cs` — el flujo de PR de un tap con `gh`.** Puerto de
+  `Services/GitHubCLI.swift` (201 líneas), mismo criterio de alcance
+  deliberado que el resto de Fase 7:
+  - ✅ Portado: `IsInstalled`, `IsAuthenticatedAsync`, `CreatePRAsync` (+
+    `LastHttpsLine`, puro — extrae la URL de la PR de la última línea de
+    `gh` que empieza por `https://`, igual que el `.last(where:)` de Swift),
+    `PrInfoAsync` (+ `ParsePRInfo`, puro y tolerante con `System.Text.Json`
+    — nunca lanza excepción ante JSON malformado o incompleto, mismo
+    contrato que el `as?` de Swift), y `MergePRAsync`. De paso, se extrajo
+    `OneShotProcess.cs` (nuevo, `internal`) con el runner "lanza, drena
+    stdout/stderr EN PARALELO, espera el exit code" que `CodeGit.RunGitAsync`
+    ya tenía — duplicado casi textual entre `git` y `gh`, así que se
+    refactorizó `CodeGit` para reutilizarlo (reverificado: los 35 tests de
+    `CodeGit`/`GitPanelViewModel` siguen en verde exactamente igual tras el
+    refactor).
+  - ⬜ Diferido a propósito: `listRepos`/`RepoRef` y `createRepo` (alimentan
+    un selector/lanzador de repos de GitHub que no existe todavía en este
+    port — el selector de repo sigue siendo trabajo pendiente de Fase 5 —
+    portarlos ahora sería especulativo); `searchCommunitySkills`/
+    `RemoteSkill` (área de producto totalmente distinta — catálogo de
+    skills, no Code Mode — con lógica bastante más compleja: varias
+    llamadas a la API encadenadas con límite, ranking por estrellas —
+    merece su propio pase con alcance propio, no un puerto de paso junto al
+    flujo de PR).
+  - 17 tests nuevos: `LastHttpsLine` (URL al final, varias URLs — se queda
+    con la ÚLTIMA en cualquier posición, no solo si la última línea
+    coincide; sin URL), `ParsePRInfo` (payload completo, campos opcionales
+    ausentes con sus valores por defecto, JSON malformado/incompleto → null
+    en los tres casos), y las cuatro operaciones reales contra un
+    `FakeProcessLauncher` — 247 en total.
+
+247 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
 los dos de Fase 3/5 **confirmados pasando en Windows real** (uno contra

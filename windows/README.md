@@ -111,6 +111,19 @@ windows/
   (repo lifecycle — different code shape, no existing repo to run inside),
   and every worktree operation (loop isolation — Fase 8's explicitly
   human-reviewed zone) — see Status.
+  `OneShotProcess` (new, internal) factors out the "launch, drain stdout/
+  stderr concurrently, wait for the exit code" runner `CodeGit` needed —
+  `GitHubCLI` (below) needs the identical shape for `gh`, so it moved out
+  rather than being duplicated a second time; `CodeGit`'s own tests still
+  pass unchanged after the refactor. `GitHubCLI` (Fase 7): the Code Mode
+  one-tap PR flow — `IsInstalled`, `IsAuthenticatedAsync`, `CreatePRAsync`
+  (+ the pure `LastHttpsLine`, extracting the PR url gh prints), `PrInfoAsync`
+  (+ the pure, tolerant `ParsePRInfo`, never throwing on malformed/missing
+  JSON fields — same contract as `ClaudeStreamParser`), and `MergePRAsync`.
+  Deliberately not ported: `listRepos`/`createRepo` (back a repo-picker UI
+  that doesn't exist yet) and `searchCommunitySkills` (a different feature
+  area — skills catalog discovery — with meaningfully more complex logic
+  that deserves its own scoped pass).
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
@@ -168,7 +181,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **230/230**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **247/247**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -297,8 +310,8 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 (login-freshness check for `claude`/`codex`/`gemini`, reading only their own
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
-`ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit` (Fase 7's
-and GitPanelViewModel — see below) — 230 automated
+`ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
+`GitPanelViewModel`/`GitHubCLI` (Fase 7 — see below) — 247 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -307,8 +320,9 @@ spawns a genuinely real process to smoke-test the no-shell
 added after the first real-Windows run, `ProviderAuthTests`,
 `ChatViewModelTests`, `AgentNameMatcherTests`, `ProviderInstallerTests`
 (against a new `FakePseudoConsoleLauncher`, mirroring `FakeProcessLauncher`),
-`ConnectViewModelTests`, `CodeGitTests`, and the `MissionReport.AgentLines`
-cases — see below) — plus 4 manual tests excluded from that count and from CI
+`ConnectViewModelTests`, `CodeGitTests`, `GitPanelViewModelTests`,
+`GitHubCLITests`, and the `MissionReport.AgentLines` cases) — plus 4 manual
+tests excluded from that count and from CI
 (see "Testing the pieces that need a real Windows machine").
 Fase 2's last loose end (`MissionReport.agentLines()`, which needed
 `ActivityStep`/`AgentNameMatcher`) is now closed — `ActivityStep` picked up
@@ -404,9 +418,9 @@ install check and an opt-in (`CORAL_MANUAL_RUN_SIGNIN=1`), interactive
 sign-in check that's honest about replacing your machine's Claude login when
 run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
 
-**Fase 7 (Code mode) started: `CodeGit`'s pure parsers, all its real-git
-operations (read AND write), and `GitPanelViewModel` are ported and
-unit-tested (35 tests, 230 automated total), but Code Mode still has no
+**Fase 7 (Code mode) started: `CodeGit` (all its real-git operations, read
+AND write), `GitPanelViewModel`, and now `GitHubCLI`'s one-tap PR flow are
+all ported and unit-tested (247 automated total), but Code Mode still has no
 actual UI.** Same scope discipline as Fases 4/6: the diff/changed-files
 parsers, the read-only real-git calls (current branch, branch stat, changed
 files, has-uncommitted-changes), and the write actions a git panel needs
@@ -420,13 +434,17 @@ ops. `GitPanelViewModel` then wraps all of it into the actual git-panel
 state a UI would bind to (changed files, selected file's diff, staging,
 commit, push, branches) — a fresh design, since `CodeModeView.swift` keeps
 this state as plain `@State` on the View rather than a separate ViewModel
-type. Still deliberately deferred, each for a real reason: `clone` (repo
-lifecycle — different code shape, no existing repo to run inside; better
-built alongside the "add a repo" flow that would drive it), the GitHub PR
-integration and Auto-PR (`GitHubCLI.swift`, wraps the `gh` CLI, not ported
-at all), the terminal panel, and every worktree operation (used only for
-loop isolation, which is Fase 8's zone requiring human review of the diff,
-not just green tests — porting worktree logic here would sidestep that
-gate).
+type. `GitHubCLI` adds the "one tap PR" half: install/auth checks, opening
+a PR, reading its status, merging it — the same one-shot-subprocess shape as
+`CodeGit`, sharing the new `OneShotProcess` runner both now use instead of
+duplicating it. Still deliberately deferred, each for a real reason: `clone`
+(repo lifecycle — different code shape, no existing repo to run inside;
+better built alongside the "add a repo" flow that would drive it),
+`GitHubCLI`'s repo-picker/skills-discovery pieces (`listRepos`/`createRepo`/
+`searchCommunitySkills` — each backs a different, unbuilt UI or feature
+area), Auto-PR, the terminal panel, and every worktree operation (used only
+for loop isolation, which is Fase 8's zone requiring human review of the
+diff, not just green tests — porting worktree logic here would sidestep
+that gate).
 Written while GitHub Actions was down (see below) — none of this needs
 Windows or CI to build/test, so there was no reason to wait idle.
