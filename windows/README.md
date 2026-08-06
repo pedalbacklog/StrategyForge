@@ -140,7 +140,18 @@ windows/
   observable `Phase`/`LogLines`/`NeedsCode`/`StatusMessage` state, with an
   injectable `openUrl` delegate (default: `Process.Start(UseShellExecute:
   true)`) so opening the login link is still unit-testable. 7 tests; **not
-  yet confirmed on real Windows** — see Status.
+  yet confirmed on real Windows** — see Status. And `GitPanelViewModel` (Fase
+  7): Code Mode's git panel — changed files, the selected file's diff,
+  stage/unstage/revert, commit (all or just staged), push, branch
+  create/checkout — wrapping `CodeGit` the same interface-plus-fake way as
+  the others. Unlike `ChatViewModel`/`ConnectViewModel`, there's no 1:1 Swift
+  type behind it: `CodeModeView.swift` keeps this state as plain `@State` on
+  the View itself, SwiftUI's norm, not a separate ViewModel class — so this
+  is a fresh design in the same shape this port already established, not a
+  translation. Deliberately excludes the GitHub PR integration (`GitHubCLI`
+  in Swift, not ported), Auto-PR, and the terminal panel — none has a C#
+  service behind it yet. 10 tests; **not yet confirmed on real Windows** —
+  see Status.
 
 `Coral.Tests` mirrors the matching macOS test files (`GeneratorTests`, `DiffTests`,
 `ModelJSONTests`), plus `ModelCatalogTests` parses the *real* repo-root `models.json`
@@ -157,7 +168,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **220/220**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **230/230**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -287,7 +298,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit` (Fase 7's
-first piece — see below) — 220 automated
+and GitPanelViewModel — see below) — 230 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -393,23 +404,29 @@ install check and an opt-in (`CORAL_MANUAL_RUN_SIGNIN=1`), interactive
 sign-in check that's honest about replacing your machine's Claude login when
 run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
 
-**Fase 7 (Code mode) started: `CodeGit`'s pure parsers, read-only git
-operations, and the git-panel's write operations are all ported and
-unit-tested (25 tests, 220 automated total), but Code Mode has no UI yet.**
-Same scope discipline as Fases 4/6: the diff/changed-files parsers, the
-read-only real-git calls (current branch, branch stat, changed files,
-has-uncommitted-changes), and now the write actions a git panel would need
+**Fase 7 (Code mode) started: `CodeGit`'s pure parsers, all its real-git
+operations (read AND write), and `GitPanelViewModel` are ported and
+unit-tested (35 tests, 230 automated total), but Code Mode still has no
+actual UI.** Same scope discipline as Fases 4/6: the diff/changed-files
+parsers, the read-only real-git calls (current branch, branch stat, changed
+files, has-uncommitted-changes), and the write actions a git panel needs
 (stage/unstage/revert/staged-files/commit/commit-staged/push/create-branch/
 branches/checkout) are all done, reusing the existing `IProcessLauncher`
 since git is a plain one-shot subprocess with no new Windows primitive to
 build — the initial reasoning for deferring the write half ("no UI consumes
 it yet") turned out not to hold up: a fake proves the write ops' argument
 construction and exit-code handling exactly as well as it does for the read
-ops. Still deliberately deferred, each for a real reason: `clone` (repo
+ops. `GitPanelViewModel` then wraps all of it into the actual git-panel
+state a UI would bind to (changed files, selected file's diff, staging,
+commit, push, branches) — a fresh design, since `CodeModeView.swift` keeps
+this state as plain `@State` on the View rather than a separate ViewModel
+type. Still deliberately deferred, each for a real reason: `clone` (repo
 lifecycle — different code shape, no existing repo to run inside; better
-built alongside the "add a repo" flow that would drive it) and every
-worktree operation (used only for loop isolation, which is Fase 8's zone
-requiring human review of the diff, not just green tests — porting worktree
-logic here would sidestep that gate).
+built alongside the "add a repo" flow that would drive it), the GitHub PR
+integration and Auto-PR (`GitHubCLI.swift`, wraps the `gh` CLI, not ported
+at all), the terminal panel, and every worktree operation (used only for
+loop isolation, which is Fase 8's zone requiring human review of the diff,
+not just green tests — porting worktree logic here would sidestep that
+gate).
 Written while GitHub Actions was down (see below) — none of this needs
 Windows or CI to build/test, so there was no reason to wait idle.

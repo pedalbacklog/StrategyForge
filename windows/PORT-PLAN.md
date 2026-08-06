@@ -233,12 +233,12 @@ Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewM
                                       fakes (ver §6); AÚN sin correr contra
                                       npm/claude reales en Windows — lo único
                                       que falta para cerrar esta fase
-Fase 7 — Code mode                   🔶 CodeGit.cs: parsers puros + operaciones
-                                      de solo lectura Y de escritura del panel
-                                      de git (stage/commit/push/branch),
-                                      todas portadas y probadas con fakes
-                                      (ver §6); falta la UI de Code Mode en sí
-                                      (diff viewer, terminal, panel de git) y
+Fase 7 — Code mode                   🔶 CodeGit.cs (parsers + lectura/escritura
+                                      de git) y GitPanelViewModel.cs (el panel
+                                      de git entero, sin GitHub/PR/terminal)
+                                      portados y probados con fakes (ver §6);
+                                      falta la UI de Code Mode en sí (diff
+                                      viewer, terminal, integración de PR) y
                                       correr contra un repo real en Windows
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
@@ -616,7 +616,30 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
     §10) — no depende de Windows para nada de esto, así que no hacía falta
     esperar.
 
-220 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+- ✅ **`GitPanelViewModel.cs` (`Coral.Core.ViewModels`) — el panel de git
+  entero de Code Mode, sin GitHub/PR/terminal.** `CodeModeView.swift` guarda
+  su estado como `@State` directamente en la View (norma de SwiftUI), no en
+  una clase ViewModel separada, así que no hay un tipo Swift 1:1 que traducir
+  — diseño nuevo con la misma forma que `ChatViewModel`/`ConnectViewModel` ya
+  establecieron para este port (vive en `Coral.Core`, sin dependencia de
+  WinUI, `IProcessLauncher` inyectado). Envuelve exactamente lo que `CodeGit`
+  ya expone: lista de archivos cambiados, diff del archivo seleccionado,
+  stage/unstage/revert por archivo, commit (todo o solo lo staged), push, y
+  crear/cambiar de rama — cada acción con su propio `IsBusy`/`StatusMessage`
+  y, cuando aplica, un `RefreshAsync()` automático después. Deliberadamente
+  fuera: la integración con GitHub (`GitHubCLI.swift` envuelve el CLI `gh`,
+  no portado en absoluto todavía), Auto-PR, y el panel de terminal — cada uno
+  es su propia pieza sin servicio C# detrás, así que cablear estado de UI
+  para ellos ahora sería especulativo. Tampoco carga el contenido de archivo
+  para el modo "file" (no-diff) de `CodeModeView.swift` — este ViewModel es
+  el panel de git específicamente, no todo el workspace de Code Mode.
+  10 tests nuevos contra fakes (refresh que puebla archivos/rama/selección,
+  carga de diff al seleccionar, stage↔unstage del mismo archivo, revert con
+  refresh automático, commit con mensaje en blanco como no-op, commit con
+  éxito/fallo, push, crear rama con nombre en blanco como no-op, checkout con
+  refresh) — 230 en total.
+
+230 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
 los dos de Fase 3/5 **confirmados pasando en Windows real** (uno contra
