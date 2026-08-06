@@ -6,10 +6,15 @@
     xmlns:vm="using:Coral.Core.ViewModels"
     xmlns:converters="using:Coral.Converters">
 
+    <Page.Resources>
+        <!-- x:Bind's generated Converter={StaticResource ...} lookup expects the
+             resource at the Page level, not nested in a child element's own
+             Resources dictionary (unlike a plain {Binding}, which does walk the
+             visual tree) — keep converters here, not on Border/Grid. -->
+        <converters:BoolNegationConverter x:Key="Negate" />
+    </Page.Resources>
+
     <Border Padding="16">
-        <Border.Resources>
-            <converters:BoolNegationConverter x:Key="Negate" />
-        </Border.Resources>
         <Grid RowSpacing="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
