@@ -89,6 +89,8 @@ public sealed partial class MainPage : Page
 
     private async void OnSubmitCodeClick(object sender, RoutedEventArgs e) => await ConnectViewModel.SubmitCodeAsync();
 
+    private void OnCodeModeClick(object sender, RoutedEventArgs e) => new CodeModeWindow(RepoPath).Activate();
+
     /// <summary>Scroll all the way to the bottom of the ListView's real
     /// scrollable content. Deliberately NOT ChatList.ScrollIntoView(lastItem):
     /// that only guarantees the item is visible, which for one tall item that's

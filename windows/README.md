@@ -423,7 +423,9 @@ run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
 **Fase 7 (Code mode) started: the whole service layer — `CodeGit` (all
 real-git operations, read/write/clone), `GitPanelViewModel`, and `GitHubCLI`
 (PR flow + repo browse/create) — is ported and unit-tested (258 automated
-total), but Code Mode still has no actual UI.** Same scope discipline as
+total), and Code Mode now has a first real UI: `CodeModePage` in its own
+`CodeModeWindow`, opened from a new "Code Mode" button in `MainPage`.** Same
+scope discipline as
 Fases 4/6: the diff/changed-files parsers, the read-only real-git calls
 (current branch, branch stat, changed files, has-uncommitted-changes), the
 write actions a git panel needs (stage/unstage/revert/staged-files/commit/
@@ -448,5 +450,23 @@ Auto-PR, the terminal panel, and every worktree operation (used only for
 loop isolation, which is Fase 8's zone requiring human review of the diff,
 not just green tests — porting worktree logic here would sidestep that
 gate).
-Written while GitHub Actions was down (see below) — none of this needs
-Windows or CI to build/test, so there was no reason to wait idle.
+
+`CodeModePage` is a fresh design (not a port — `CodeModeView.swift` is 900
+lines including the terminal panel and PR integration this pass deliberately
+excludes): changed files with per-file Stage/Revert on the left, the
+selected file's diff on the right (a `+`/`-`/`@@` glyph gutter via the new
+`DiffLineKindToGlyphConverter`), a branch bar (switch via `ComboBox`, create
+via a `Flyout`), and a commit message box with Commit/Push. Deliberately in
+its **own window** (`CodeModeWindow`, same thin-shell pattern as
+`MainWindow`/`MainPage`) rather than embedded in `MainPage`, so this
+not-yet-real-Windows-verified UI can't put the already-confirmed Fase 5/6
+chat flow at risk. **Not yet run on real Windows** — written with the same
+patterns already confirmed working (converters in `Page.Resources`,
+`ViewModel` set before `InitializeComponent()`, `UpdateSourceTrigger=
+PropertyChanged` on the commit box), but as with every prior XAML addition
+in this port, that's not a substitute for a real compile + a founder actually
+looking at it.
+Written while GitHub Actions was down (see below) — none of the service
+layer needs Windows or CI to build/test, so there was no reason to wait
+idle for it; the UI piece, unlike the service layer, DOES need a real
+Windows/CI check before it can be called done.

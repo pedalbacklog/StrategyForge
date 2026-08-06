@@ -233,13 +233,13 @@ Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewM
                                       fakes (ver §6); AÚN sin correr contra
                                       npm/claude reales en Windows — lo único
                                       que falta para cerrar esta fase
-Fase 7 — Code mode                   🔶 Toda la capa de servicio (CodeGit.cs
-                                      incl. clone, GitPanelViewModel.cs,
-                                      GitHubCLI.cs incl. listar/crear repos)
-                                      portada y probada con fakes (ver §6);
-                                      falta la UI de Code Mode en sí (diff
-                                      viewer, terminal) y correr contra un
-                                      repo/PR real en Windows
+Fase 7 — Code mode                   🔶 Capa de servicio completa (ver §6) +
+                                      primera UI real (CodeModePage: panel de
+                                      git + diff viewer, en una ventana propia
+                                      para no arriesgar la UI de Fase 5/6 ya
+                                      confirmada) — sin verificar en Windows
+                                      real todavía; falta terminal, PR en la
+                                      UI, y correr contra un repo real
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -686,6 +686,33 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
     ahora por una razón más nítida: `searchCommunitySkills` (área de
     producto distinta, lógica bastante más compleja) y todo lo de
     worktrees (límite firme de Fase 8).
+
+- 🔶 **Primera UI real de Fase 7 — `CodeModePage.xaml`/`.xaml.cs` (proyecto
+  `Coral`), en `CodeModeWindow` propia.** Con toda la capa de servicio de
+  `CodeGit`/`GitPanelViewModel` ya lista, tocaba construir algo que la
+  ejercite de verdad — igual que Fase 6 necesitó `ConnectViewModel` +
+  botón en `MainPage` para que `ProviderInstaller` dejara de ser código sin
+  consumidor. Panel de git a la izquierda (rama actual + selector +
+  "New branch" en un `Flyout`, lista de archivos cambiados con
+  Stage/Revert por archivo, caja de mensaje de commit + botones Commit/Push)
+  y visor de diff a la derecha (glyph +/-/@@  por línea vía
+  `DiffLineKindToGlyphConverter`, nuevo, en `Page.Resources` — no anidado,
+  la lección de Fase 5). Deliberadamente en una **ventana separada**
+  (`CodeModeWindow`, mismo patrón shell-delgado que `MainWindow`/`MainPage`)
+  en vez de embebida en `MainPage`, para que este código nuevo — sin
+  verificar en Windows real ni una vez — no pueda arriesgar la UI de Fase
+  5/6 que el founder ya confirmó funcionando de punta a punta. `MainPage`
+  gana solo un botón "Code Mode" que abre la ventana.
+  Deliberadamente NO en esta UI (ver el doc comment de `GitPanelViewModel`):
+  integración con GitHub/PR, Auto-PR, panel de terminal, ni cargar el
+  contenido crudo (no-diff) de un archivo.
+  **Sin verificar en Windows real todavía** — escrito con la misma
+  disciplina de las fases anteriores (patrones ya confirmados: converters en
+  `Page.Resources`, `ViewModel` asignado antes de `InitializeComponent()`,
+  `UpdateSourceTrigger=PropertyChanged` en el `TextBox` de commit) pero,
+  igual que toda la UI de Fase 5 antes de que el founder la corriera, eso no
+  sustituye una compilación real contra el Windows App SDK ni una
+  verificación visual.
 
 258 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en

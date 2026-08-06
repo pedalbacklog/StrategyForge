@@ -51,6 +51,7 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
+                <Button Content="Code Mode" VerticalAlignment="Center" Click="OnCodeModeClick" />
             </StackPanel>
 
             <!-- Transcript + activity -->
