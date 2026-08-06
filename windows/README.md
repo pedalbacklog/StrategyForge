@@ -214,6 +214,33 @@ this process's pipe, which looks identical to a real failure but isn't one (does
 affect the real app, which is never launched from a terminal). See the XML doc on the
 test and `PORT-PLAN.md` §10 for the full story.
 
+**`ManualProviderInstallerSmokeTest`** — not yet run on real Windows (see
+Status below). Fase 6's `ProviderInstaller` has only ever been exercised
+against fakes; this is the first real check against actual npm/CLI. Two
+independent pieces, split because they carry very different risk:
+
+```
+dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~InstallsTheClaudeCliForReal"
+```
+
+`InstallsTheClaudeCliForReal` runs `npm install -g @anthropic-ai/claude-code`
+for real and checks it reports `Finished`. Safe to run unattended — npm
+install is idempotent, so if `claude` is already installed (likely, since
+`ManualClaudeRunnerSmokeTest` needs it too) this just confirms npm reports
+it up to date.
+
+```
+CORAL_MANUAL_RUN_SIGNIN=1 dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~SignsInForReal"
+```
+
+`SignsInForReal` runs `claude auth login --claudeai` for real, through a
+hidden pseudo-console — this starts a REAL browser OAuth flow and, if
+completed, **replaces your machine's current Claude login**. It's gated
+behind the `CORAL_MANUAL_RUN_SIGNIN=1` env var on purpose (skips with a
+warning otherwise, even when the test itself is selected), and it's
+interactive: it prints the login URL and, if Claude asks for a pasted
+browser code, reads one from stdin.
+
 ## Status
 
 **Fase 1 (scaffolding) done**; **Fase 2 (portable core) done**;
@@ -251,7 +278,7 @@ added after the first real-Windows run, `ProviderAuthTests`,
 `ChatViewModelTests`, `AgentNameMatcherTests`, `ProviderInstallerTests`
 (against a new `FakePseudoConsoleLauncher`, mirroring `FakeProcessLauncher`),
 `ConnectViewModelTests`, and the `MissionReport.AgentLines` cases — see
-below) — plus 2 manual tests excluded from that count and from CI (see
+below) — plus 4 manual tests excluded from that count and from CI (see
 "Testing the pieces that need a real Windows machine").
 Fase 2's last loose end (`MissionReport.agentLines()`, which needed
 `ActivityStep`/`AgentNameMatcher`) is now closed — `ActivityStep` picked up
@@ -340,5 +367,9 @@ Windows machine before this phase can close: the `Flyout` with `x:Bind`
 content (a pattern not used elsewhere in this project yet, though the same
 underlying mechanism already works for `ChatList`'s `DataTemplate`), and —
 the actual point of this phase — clicking "Connect Claude" against a real
-npm install and a real `claude auth login`. See `PORT-PLAN.md` §6/§9 for the
-full breakdown.
+npm install and a real `claude auth login`. `ManualProviderInstallerSmokeTest`
+(new — see "Testing the pieces that need a real Windows machine" above) is
+the tool for exactly that second piece, split into a safe-to-run-unattended
+install check and an opt-in (`CORAL_MANUAL_RUN_SIGNIN=1`), interactive
+sign-in check that's honest about replacing your machine's Claude login when
+run. See `PORT-PLAN.md` §6/§9 for the full breakdown.

@@ -531,12 +531,30 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
     mecanismo ya funciona para los `DataTemplate` de `ChatList`/Activity), ni
     — sobre todo — el flujo de instalación/login real contra `npm`/`claude
     auth login` de verdad.
+  - ✅ **`ManualProviderInstallerSmokeTest.cs` (nuevo, Category=Manual)** — la
+    herramienta para esa última verificación pendiente, escrita mientras CI
+    estaba caído (incidencia real de GitHub Actions, ver §10) para no
+    quedarse parado esperando. Dos piezas independientes por el riesgo tan
+    distinto que tienen: `InstallsTheClaudeCliForReal` corre `npm install -g
+    @anthropic-ai/claude-code` de verdad (seguro de correr sin supervisión —
+    `npm install -g` es idempotente) y comprueba que termina en `Finished`;
+    `SignsInForReal` corre `claude auth login --claudeai` de verdad contra
+    una pseudo-consola oculta — esto dispara un OAuth de navegador real y, si
+    se completa, **reemplaza el login de Claude ya guardado en la máquina**,
+    así que queda detrás de un opt-in explícito (`CORAL_MANUAL_RUN_SIGNIN=1`;
+    sin él, se salta con un aviso incluso si el test se selecciona por
+    nombre) y es interactivo (lee el código pegado del navegador por stdin
+    cuando `ProviderInstaller` pide `NeedsCode`). Aún sin correr en Windows
+    real — ver windows/README.md "Testing the pieces that need a real
+    Windows machine" para cómo lanzarlo.
 
 195 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
-`windows-latest`) más 2 tests manuales (Category=Manual, excluidos del CI),
-**ambos confirmados pasando en Windows real**: uno contra `claude` real, el
-otro (ConPTY) contra un `cmd.exe` real adjunto a una pseudo-consola real.
+`windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
+los dos de Fase 3/5 **confirmados pasando en Windows real** (uno contra
+`claude` real, el otro — ConPTY — contra un `cmd.exe` real adjunto a una
+pseudo-consola real), y los dos nuevos de Fase 6
+(`ManualProviderInstallerSmokeTest`) aún sin correr en Windows real.
 
 Cada fase debería ser su propio PR (o pocos), contra `windows/**`, disparando
 solo `windows-tests.yml` — nunca el gate de macOS.
@@ -619,7 +637,9 @@ A diferencia de Fase 3/5, ningún test hasta ahora llamó a un `npm` real ni a
 un `claude auth login` real esperando autenticación por una pseudo-consola
 real, y la UI nueva (un `Flyout` con contenido `x:Bind`, patrón no usado
 antes en este proyecto) tampoco se ha visto correr — eso es lo único que
-falta para cerrar esta fase del todo.
+falta para cerrar esta fase del todo. `ManualProviderInstallerSmokeTest.cs`
+(nuevo, detalle en §6) ya existe para esa verificación en cuanto haya
+oportunidad de correrla en Windows real.
 
 ## 10. Bitácora de verificación en Windows real
 
@@ -791,3 +811,23 @@ bien formateado, scroll automático, texto seleccionable, y cancelación con
 Stop. Sigue pendiente, deliberadamente fuera de este alcance mínimo: selector
 de repo, ajustes de modelo/esfuerzo/permission-mode, modo "Ask" de permisos
 en vivo, `MetaOrchestrator` multi-proveedor, historial de turnos persistido.
+
+**2026-08-06 — incidencia real de GitHub Actions bloqueó la verificación de
+CI de Fase 6 durante horas, no un problema del código.** Tras empujar
+`983c022` (ConnectViewModel + UI), el run de `windows-tests.yml` se quedó en
+`queued` sin que ningún runner lo recogiera (`runner_id: 0`) durante ~15
+minutos, y GitHub lo canceló solo, marcando el run como `failure` aunque
+ningún paso llegó a ejecutarse. Un rerun tuvo el mismo problema, esta vez sin
+ni siquiera crear una entrada de job (`list_workflow_jobs` devolvía
+`total_count: 0` durante más de una hora). Confirmado como incidencia real
+(no conjetura): githubstatus.com reportó un incidente desde las 15:22 UTC
+("workflow runs delayed or failing to start/complete, Actions REST API
+errors, unexpected rate limiting"), todavía sin resolver a las 17:40 UTC
+("rolling out a further fix across all affected systems"), lo bastante
+grande como para que The Register publicara sobre ello. Mientras tanto se
+siguió trabajando en local (`dotnet test`/`dotnet build` de `Coral.Core`/
+`Coral.Tests` no dependen de GitHub en absoluto) — se escribió
+`ManualProviderInstallerSmokeTest.cs` (detalle en §6) en ese hueco, en vez
+de quedarse esperando sin avanzar. Lección: una incidencia de infraestructura
+de GitHub no bloquea el desarrollo local, solo la verificación remota — hay
+trabajo real que seguir haciendo mientras se resuelve.
