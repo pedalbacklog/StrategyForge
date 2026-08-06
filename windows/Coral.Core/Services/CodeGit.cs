@@ -37,12 +37,14 @@ public sealed record BranchStat(string Branch, string Base, int Insertions, int 
 /// <see cref="StagedFilesAsync"/>, <see cref="CommitAsync"/>,
 /// <see cref="CommitStagedAsync"/>, <see cref="PushAsync"/>,
 /// <see cref="CreateBranchAsync"/>, <see cref="BranchesAsync"/>,
-/// <see cref="CheckoutAsync"/>) — all one-shot subprocess calls via the
-/// existing <see cref="IProcessLauncher"/>, no new Windows primitive needed
-/// the way ConPTY was for Fase 3, and just as unit-testable against a fake as
-/// the read-only half — "no UI consumes this yet" turned out not to be a good
-/// reason to leave these unported when a fake proves the argument-building
-/// and exit-code handling are correct regardless of who calls them.
+/// <see cref="CheckoutAsync"/>); and now <see cref="CloneAsync"/> too — all
+/// one-shot subprocess calls via the existing <see cref="IProcessLauncher"/>,
+/// no new Windows primitive needed the way ConPTY was for Fase 3, and just as
+/// unit-testable against a fake as the read-only half — "no UI consumes this
+/// yet" turned out not to be a good reason to leave any of these unported
+/// when a fake proves the argument-building and exit-code handling are
+/// correct regardless of who calls them (the same reversal that already
+/// applied to the write operations applies here too).
 ///
 /// DEFERRED, deliberately, and each for a real reason (not "hasn't gotten to
 /// it yet"):
@@ -50,10 +52,6 @@ public sealed record BranchStat(string Branch, string Base, int Insertions, int 
 ///   per-file size capping) — only has a consumer once an automated diff
 ///   reviewer is ported, which hasn't happened yet; the shape of what it
 ///   needs isn't settled.
-/// - <c>clone</c> (repo lifecycle: local folder naming/dedup, directory
-///   creation) — meaningfully different code shape from everything else here
-///   (no existing repo to <c>-C</c> into), best built alongside the actual
-///   "add a repo" UI flow that would drive it rather than speculatively now.
 /// - Every WORKTREE operation (addWorktree/mergeNoFF/commitAll/removeWorktree/
 ///   deleteBranch) — these exist ONLY for loop isolation, which is Fase 8's
 ///   explicitly vetoed zone (CLAUDE.md: loop-related changes need a human
@@ -307,6 +305,36 @@ public static class CodeGit
     /// UI). Port of <c>CodeGit.swift</c>'s <c>isAvailable</c>.</summary>
     public static bool IsAvailable(Func<string, string?>? resolveBinary = null) =>
         (resolveBinary ?? BinaryResolver.Resolve)("git") is not null;
+
+    // MARK: - Repo lifecycle (clone)
+
+    /// <summary>Clone <paramref name="url"/> into <c>parentDir/&lt;name&gt;</c>
+    /// (never clobbering an existing folder — appends <c>-2</c>, <c>-3</c>, …
+    /// until the destination is free). Returns the local path on success.
+    /// Relies on the user's own git credentials. Port of <c>CodeGit.swift</c>'s
+    /// <c>clone(url:into:)</c>. <paramref name="createDirectory"/>/
+    /// <paramref name="pathExists"/> are injectable so the folder-dedup logic
+    /// is testable without touching real disk; default to real
+    /// <see cref="Directory"/> calls.</summary>
+    public static async Task<(bool Ok, string? Path, string Output)> CloneAsync(IProcessLauncher launcher,
+        string url, string parentDir, Func<string, string?>? resolveBinary = null,
+        Action<string>? createDirectory = null, Func<string, bool>? pathExists = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return (false, null, "git not found");
+
+        createDirectory ??= p => Directory.CreateDirectory(p);
+        pathExists ??= p => Directory.Exists(p) || File.Exists(p);
+        try { createDirectory(parentDir); } catch { /* best-effort, matches Swift's try? */ }
+
+        var basePath = Path.Combine(parentDir, RepoName(url));
+        var dest = basePath;
+        var n = 2;
+        while (pathExists(dest)) { dest = $"{basePath}-{n}"; n++; }
+
+        var (ok, stdout, stderr) = await OneShotProcess.RunAsync(launcher, git, new[] { "clone", "--", url, dest }, parentDir, ct: ct);
+        return (ok, ok ? dest : null, OneShotProcess.CombineOutput(stdout, stderr));
+    }
 
     /// <summary>Discard an agent's changes to one file. Port of
     /// <c>CodeGit.swift</c>'s <c>revert(repo:file:)</c>.</summary>

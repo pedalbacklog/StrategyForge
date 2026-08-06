@@ -291,4 +291,46 @@ public class CodeGitTests
         Assert.Equal("git not found", output);
         Assert.Null(launcher.LastStart);
     }
+
+    [Fact]
+    public async Task CloneAsyncClonesIntoTheRepoNameFromTheUrl()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string> { "Cloning..." }));
+
+        var (ok, path, output) = await CodeGit.CloneAsync(launcher, "git@github.com:owner/foo.git", "/parent",
+            resolveBinary: n => n == "git" ? "/usr/bin/git" : null,
+            createDirectory: _ => { }, pathExists: _ => false);
+
+        Assert.True(ok);
+        Assert.Equal(Path.Combine("/parent", "foo"), path);
+        Assert.Contains("Cloning...", output);
+    }
+
+    [Fact]
+    public async Task CloneAsyncDedupesAnExistingDestinationFolder()
+    {
+        var launcher = new FakeProcessLauncher((_, args) => new FakeChildProcess(new List<string>()));
+        var basePath = Path.Combine("/parent", "foo");
+
+        var (_, path, _) = await CodeGit.CloneAsync(launcher, "git@github.com:owner/foo.git", "/parent",
+            resolveBinary: n => n == "git" ? "/usr/bin/git" : null,
+            createDirectory: _ => { },
+            // "foo" and "foo-2" are taken; "foo-3" is free.
+            pathExists: p => p == basePath || p == $"{basePath}-2");
+
+        Assert.Equal($"{basePath}-3", path);
+    }
+
+    [Fact]
+    public async Task CloneAsyncReportsGitNotFound()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+
+        var (ok, path, output) = await CodeGit.CloneAsync(launcher, "u", "/parent", resolveBinary: _ => null);
+
+        Assert.False(ok);
+        Assert.Null(path);
+        Assert.Equal("git not found", output);
+        Assert.Null(launcher.LastStart);
+    }
 }

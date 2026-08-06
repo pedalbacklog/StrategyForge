@@ -153,4 +153,96 @@ public class GitHubCLITests
         Assert.Contains("--merge", launcher.LastStart!.Value.Args);
         Assert.DoesNotContain("--squash", launcher.LastStart.Value.Args);
     }
+
+    [Fact]
+    public void ParseRepoListSkipsEntriesMissingNameWithOwnerAndFillsDefaults()
+    {
+        var json = """
+        [
+          {"nameWithOwner":"o/r1","description":"First","isPrivate":true,"url":"https://github.com/o/r1"},
+          {"nameWithOwner":"o/r2"},
+          {"description":"no name, skipped"}
+        ]
+        """;
+
+        var repos = GitHubCLI.ParseRepoList(json);
+
+        Assert.Equal(2, repos.Count);
+        Assert.Equal("First", repos[0].Description);
+        Assert.True(repos[0].IsPrivate);
+        Assert.Equal("r1", repos[0].Name);
+        Assert.Equal("", repos[1].Description);
+        Assert.False(repos[1].IsPrivate);
+        Assert.Equal("https://github.com/o/r2", repos[1].Url); // defaulted, not in the payload
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("""{"nameWithOwner":"o/r"}""")] // an object, not an array
+    public void ParseRepoListReturnsEmptyForMalformedJson(string json) =>
+        Assert.Empty(GitHubCLI.ParseRepoList(json));
+
+    [Fact]
+    public async Task ListReposAsyncReturnsEmptyWhenGhIsMissing()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+
+        var repos = await GitHubCLI.ListReposAsync(launcher, resolveBinary: _ => null);
+
+        Assert.Empty(repos);
+        Assert.Null(launcher.LastStart);
+    }
+
+    [Fact]
+    public async Task ListReposAsyncParsesARealSuccessResponse()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>
+        {
+            """[{"nameWithOwner":"o/r","description":"","isPrivate":false,"url":"https://github.com/o/r"}]""",
+        }));
+
+        var repos = await GitHubCLI.ListReposAsync(launcher, resolveBinary: ResolveGh);
+
+        Assert.Single(repos);
+        Assert.Equal("o/r", repos[0].NameWithOwner);
+    }
+
+    [Fact]
+    public async Task CreateRepoAsyncSucceedsWhenGhExitsCleanAndThePathExists()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string> { "Created" }));
+
+        var (ok, path, output) = await GitHubCLI.CreateRepoAsync(launcher, "my-repo", isPrivate: true, "/parent",
+            resolveBinary: ResolveGh, createDirectory: _ => { }, pathExists: _ => true);
+
+        Assert.True(ok);
+        Assert.Equal(Path.Combine("/parent", "my-repo"), path);
+        Assert.Contains("Created", output);
+        Assert.Contains("--private", launcher.LastStart!.Value.Args);
+    }
+
+    [Fact]
+    public async Task CreateRepoAsyncFailsWhenTheClonedPathNeverAppears()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>())); // exit 0
+
+        var (ok, path, _) = await GitHubCLI.CreateRepoAsync(launcher, "my-repo", isPrivate: false, "/parent",
+            resolveBinary: ResolveGh, createDirectory: _ => { }, pathExists: _ => false);
+
+        Assert.False(ok);
+        Assert.Null(path);
+    }
+
+    [Fact]
+    public async Task CreateRepoAsyncReportsGhNotFound()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+
+        var (ok, path, output) = await GitHubCLI.CreateRepoAsync(launcher, "n", false, "/parent", resolveBinary: _ => null);
+
+        Assert.False(ok);
+        Assert.Null(path);
+        Assert.Equal("GitHub CLI (gh) not found", output);
+        Assert.Null(launcher.LastStart);
+    }
 }

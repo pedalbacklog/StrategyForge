@@ -105,12 +105,13 @@ windows/
   original does, to avoid a full-stderr-buffer deadlock on a chatty command.
   Now also the git-panel WRITE operations on an existing repo
   (stage/unstage/revert/staged-files/commit/commit-staged/push/create-branch/
-  branches/checkout) — the same fakes-based testing applies just as well to
-  these as to the read-only half, so "no UI consumes it yet" wasn't a strong
-  enough reason to leave them unported. Still deliberately deferred: `clone`
-  (repo lifecycle — different code shape, no existing repo to run inside),
-  and every worktree operation (loop isolation — Fase 8's explicitly
-  human-reviewed zone) — see Status.
+  branches/checkout) AND `CloneAsync` (repo lifecycle, with injectable
+  folder-dedup so it's just as fake-testable as everything else) — the same
+  fakes-based testing applies just as well to all of these as to the
+  read-only half, so "no UI consumes it yet" wasn't a strong enough reason
+  to leave any of them unported. Still deliberately deferred: every worktree
+  operation (loop isolation — Fase 8's explicitly human-reviewed zone) — see
+  Status.
   `OneShotProcess` (new, internal) factors out the "launch, drain stdout/
   stderr concurrently, wait for the exit code" runner `CodeGit` needed —
   `GitHubCLI` (below) needs the identical shape for `gh`, so it moved out
@@ -120,10 +121,11 @@ windows/
   (+ the pure `LastHttpsLine`, extracting the PR url gh prints), `PrInfoAsync`
   (+ the pure, tolerant `ParsePRInfo`, never throwing on malformed/missing
   JSON fields — same contract as `ClaudeStreamParser`), and `MergePRAsync`.
-  Deliberately not ported: `listRepos`/`createRepo` (back a repo-picker UI
-  that doesn't exist yet) and `searchCommunitySkills` (a different feature
-  area — skills catalog discovery — with meaningfully more complex logic
-  that deserves its own scoped pass).
+  Also `ListReposAsync`/`RepoRef` and `CreateRepoAsync` — browsing/creating
+  GitHub repos, same injectable-folder-dedup pattern as `CodeGit.CloneAsync`.
+  Deliberately not ported: `searchCommunitySkills` (a different feature area
+  — skills catalog discovery — with meaningfully more complex logic that
+  deserves its own scoped pass).
 - **Generators**: `AgentFileGenerator` (Strategy → `.claude/agents/*.md`),
   `ClaudeMdGenerator` (idempotent, marker-delimited CLAUDE.md merge),
   `LaunchCommandGenerator`, `WorkflowGenerator` (team topology → a runnable
@@ -181,7 +183,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **247/247**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **258/258**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -311,7 +313,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI` (Fase 7 — see below) — 247 automated
+`GitPanelViewModel`/`GitHubCLI` (Fase 7 — see below) — 258 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -418,33 +420,33 @@ install check and an opt-in (`CORAL_MANUAL_RUN_SIGNIN=1`), interactive
 sign-in check that's honest about replacing your machine's Claude login when
 run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
 
-**Fase 7 (Code mode) started: `CodeGit` (all its real-git operations, read
-AND write), `GitPanelViewModel`, and now `GitHubCLI`'s one-tap PR flow are
-all ported and unit-tested (247 automated total), but Code Mode still has no
-actual UI.** Same scope discipline as Fases 4/6: the diff/changed-files
-parsers, the read-only real-git calls (current branch, branch stat, changed
-files, has-uncommitted-changes), and the write actions a git panel needs
-(stage/unstage/revert/staged-files/commit/commit-staged/push/create-branch/
-branches/checkout) are all done, reusing the existing `IProcessLauncher`
-since git is a plain one-shot subprocess with no new Windows primitive to
-build — the initial reasoning for deferring the write half ("no UI consumes
-it yet") turned out not to hold up: a fake proves the write ops' argument
-construction and exit-code handling exactly as well as it does for the read
-ops. `GitPanelViewModel` then wraps all of it into the actual git-panel
-state a UI would bind to (changed files, selected file's diff, staging,
-commit, push, branches) — a fresh design, since `CodeModeView.swift` keeps
-this state as plain `@State` on the View rather than a separate ViewModel
-type. `GitHubCLI` adds the "one tap PR" half: install/auth checks, opening
-a PR, reading its status, merging it — the same one-shot-subprocess shape as
-`CodeGit`, sharing the new `OneShotProcess` runner both now use instead of
-duplicating it. Still deliberately deferred, each for a real reason: `clone`
-(repo lifecycle — different code shape, no existing repo to run inside;
-better built alongside the "add a repo" flow that would drive it),
-`GitHubCLI`'s repo-picker/skills-discovery pieces (`listRepos`/`createRepo`/
-`searchCommunitySkills` — each backs a different, unbuilt UI or feature
-area), Auto-PR, the terminal panel, and every worktree operation (used only
-for loop isolation, which is Fase 8's zone requiring human review of the
-diff, not just green tests — porting worktree logic here would sidestep
-that gate).
+**Fase 7 (Code mode) started: the whole service layer — `CodeGit` (all
+real-git operations, read/write/clone), `GitPanelViewModel`, and `GitHubCLI`
+(PR flow + repo browse/create) — is ported and unit-tested (258 automated
+total), but Code Mode still has no actual UI.** Same scope discipline as
+Fases 4/6: the diff/changed-files parsers, the read-only real-git calls
+(current branch, branch stat, changed files, has-uncommitted-changes), the
+write actions a git panel needs (stage/unstage/revert/staged-files/commit/
+commit-staged/push/create-branch/branches/checkout), and `CloneAsync` are
+all done, reusing the existing `IProcessLauncher` since git is a plain
+one-shot subprocess with no new Windows primitive to build — the initial
+reasoning for deferring each of these in turn ("no UI consumes it yet")
+kept not holding up: a fake proves the argument construction and exit-code
+handling exactly as well regardless of who calls it, so each got un-deferred
+once that was noticed. `GitPanelViewModel` then wraps the git half into the
+actual git-panel state a UI would bind to (changed files, selected file's
+diff, staging, commit, push, branches) — a fresh design, since
+`CodeModeView.swift` keeps this state as plain `@State` on the View rather
+than a separate ViewModel type. `GitHubCLI` adds the GitHub half: install/
+auth checks, opening/reading/merging a PR, and now also browsing/creating
+repos (`ListReposAsync`/`RepoRef`/`CreateRepoAsync`) — the same
+one-shot-subprocess shape as `CodeGit`, sharing the new `OneShotProcess`
+runner both now use instead of duplicating it. Still deliberately deferred:
+`searchCommunitySkills` (a different feature area — skills catalog discovery
+— with meaningfully more complex logic deserving its own scoped pass),
+Auto-PR, the terminal panel, and every worktree operation (used only for
+loop isolation, which is Fase 8's zone requiring human review of the diff,
+not just green tests — porting worktree logic here would sidestep that
+gate).
 Written while GitHub Actions was down (see below) — none of this needs
 Windows or CI to build/test, so there was no reason to wait idle.

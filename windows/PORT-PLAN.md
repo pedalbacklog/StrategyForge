@@ -233,9 +233,10 @@ Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewM
                                       fakes (ver §6); AÚN sin correr contra
                                       npm/claude reales en Windows — lo único
                                       que falta para cerrar esta fase
-Fase 7 — Code mode                   🔶 CodeGit.cs, GitPanelViewModel.cs y
-                                      GitHubCLI.cs (flujo de PR con `gh`)
-                                      portados y probados con fakes (ver §6);
+Fase 7 — Code mode                   🔶 Toda la capa de servicio (CodeGit.cs
+                                      incl. clone, GitPanelViewModel.cs,
+                                      GitHubCLI.cs incl. listar/crear repos)
+                                      portada y probada con fakes (ver §6);
                                       falta la UI de Code Mode en sí (diff
                                       viewer, terminal) y correr contra un
                                       repo/PR real en Windows
@@ -668,8 +669,25 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
     ausentes con sus valores por defecto, JSON malformado/incompleto → null
     en los tres casos), y las cuatro operaciones reales contra un
     `FakeProcessLauncher` — 247 en total.
+  - ✅ **Ampliado el mismo día, otra vez revisando el propio razonamiento
+    inicial**: `CodeGit.CloneAsync` (antes diferido con "forma de código
+    distinta, sin repo existente donde correr" — pero resulta que
+    `createDirectory`/`pathExists` inyectables lo hacen igual de testeable
+    con un fake que todo lo demás, así que no había razón real para
+    dejarlo fuera) y, en `GitHubCLI.cs`, `ListReposAsync`/`RepoRef` +
+    `CreateRepoAsync` (antes diferidos con "sin selector de repo que los
+    consuma" — mismo razonamiento que ya se abandonó para las operaciones
+    de escritura de `CodeGit`). Ambos usan el mismo patrón de deduplicación
+    de carpeta (`base`, `base-2`, `base-3`, …) que ya tenía `RepoName`.
+    11 tests nuevos (clone con/sin carpeta ocupada, git no encontrado;
+    `ParseRepoList` con entradas sin `nameWithOwner` descartadas y valores
+    por defecto rellenados, JSON malformado → lista vacía; listRepos/
+    createRepo reales contra fakes) — 258 en total. Sigue diferido, y
+    ahora por una razón más nítida: `searchCommunitySkills` (área de
+    producto distinta, lógica bastante más compleja) y todo lo de
+    worktrees (límite firme de Fase 8).
 
-247 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+258 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
 los dos de Fase 3/5 **confirmados pasando en Windows real** (uno contra

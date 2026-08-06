@@ -6,6 +6,15 @@ namespace Coral.Core.Services;
 /// <c>GitHubCLI.swift</c>'s <c>PRInfo</c>.</summary>
 public sealed record PRInfo(int Number, string State, string Url, string Title, bool IsDraft);
 
+/// <summary>A GitHub repository the signed-in user can open (for the Code
+/// launcher list). Port of <c>GitHubCLI.swift</c>'s <c>RepoRef</c>.</summary>
+public sealed record RepoRef(string NameWithOwner, string Description, bool IsPrivate, string Url)
+{
+    public string Name => NameWithOwner.Contains('/')
+        ? NameWithOwner[(NameWithOwner.LastIndexOf('/') + 1)..]
+        : NameWithOwner;
+}
+
 /// <summary>
 /// Port of <c>StrategyForge/Services/GitHubCLI.swift</c> — a tiny wrapper
 /// around the <c>gh</c> CLI so Code Mode can open a pull request in one tap,
@@ -14,23 +23,22 @@ public sealed record PRInfo(int Number, string State, string Url, string Title, 
 /// decided the same way earlier phases were scoped down (see
 /// windows/PORT-PLAN.md §6):
 ///
-/// PORTED — the Code Mode PR flow itself: <see cref="IsInstalled"/>,
+/// PORTED — the Code Mode PR flow: <see cref="IsInstalled"/>,
 /// <see cref="IsAuthenticatedAsync"/>, <see cref="CreatePRAsync"/>,
-/// <see cref="PrInfoAsync"/>, <see cref="MergePRAsync"/>, all one-shot
-/// subprocess calls via the shared <see cref="OneShotProcess"/> runner (also
-/// used by <see cref="CodeGit"/>) — no new Windows primitive needed.
+/// <see cref="PrInfoAsync"/>, <see cref="MergePRAsync"/>; and the repo
+/// browse/create flow: <see cref="ListReposAsync"/>, <see cref="CreateRepoAsync"/>
+/// — all one-shot subprocess calls via the shared <see cref="OneShotProcess"/>
+/// runner (also used by <see cref="CodeGit"/>) — no new Windows primitive
+/// needed, and just as fake-testable regardless of whether a repo-picker UI
+/// consumes them yet (same reversal already applied to <see cref="CodeGit"/>'s
+/// write operations and <c>clone</c>).
 ///
 /// DEFERRED, deliberately:
-/// - <c>listRepos</c>/<c>RepoRef</c> and <c>createRepo</c> — these back a
-///   repo-picker/launcher UI ("browse my GitHub repos", "create one from
-///   scratch") that doesn't exist in this port yet (Fase 5's repo picker is
-///   still its own pending follow-up); porting them now would be
-///   speculative.
 /// - <c>searchCommunitySkills</c>/<c>RemoteSkill</c> — an entirely different
 ///   feature area (skills catalog discovery, not Code Mode) with
 ///   meaningfully more complex logic (bounded multi-round-trip API calls,
 ///   star-based ranking) that deserves its own scoped pass, not a drive-by
-///   port alongside the PR flow.
+///   port alongside the PR/repo flow.
 /// </summary>
 public static class GitHubCLI
 {
@@ -125,6 +133,74 @@ public static class GitHubCLI
         var (ok, stdout, stderr) = await RunAsync(launcher, gh, repo,
             new[] { "pr", "merge", branch, squash ? "--squash" : "--merge", "--delete-branch=false" }, ct);
         return (ok, OneShotProcess.CombineOutput(stdout, stderr));
+    }
+
+    /// <summary>The signed-in user's repositories (newest first), via
+    /// <c>gh repo list</c>. Empty when <c>gh</c> is missing/unauthenticated —
+    /// the caller shows the manual clone field instead. Port of
+    /// <c>GitHubCLI.swift</c>'s <c>listRepos(limit:)</c>.</summary>
+    public static async Task<IReadOnlyList<RepoRef>> ListReposAsync(IProcessLauncher launcher, int limit = 50,
+        Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var gh = (resolveBinary ?? BinaryResolver.Resolve)("gh");
+        if (gh is null) return Array.Empty<RepoRef>();
+        var (ok, stdout, _) = await RunAsync(launcher, gh, null,
+            new[] { "repo", "list", "--limit", limit.ToString(), "--json", "nameWithOwner,description,isPrivate,url" }, ct);
+        return ok ? ParseRepoList(stdout) : Array.Empty<RepoRef>();
+    }
+
+    /// <summary>Pure, tolerant parser for <c>gh repo list --json ...</c>'s
+    /// output — skips any entry missing <c>nameWithOwner</c> rather than
+    /// throwing. Port of the parsing inside <c>listRepos(limit:)</c>.</summary>
+    public static IReadOnlyList<RepoRef> ParseRepoList(string json)
+    {
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<RepoRef>();
+        }
+        using (doc)
+        {
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<RepoRef>();
+            var results = new List<RepoRef>();
+            foreach (var entry in doc.RootElement.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object) continue;
+                var nwo = GetString(entry, "nameWithOwner");
+                if (string.IsNullOrEmpty(nwo)) continue;
+                results.Add(new RepoRef(nwo, GetString(entry, "description") ?? "", GetBool(entry, "isPrivate"),
+                    GetString(entry, "url") ?? $"https://github.com/{nwo}"));
+            }
+            return results;
+        }
+    }
+
+    /// <summary>Create a NEW repo on GitHub under the signed-in account and
+    /// clone it into <c>parentDir/&lt;name&gt;</c> — so you never have to
+    /// leave for github.com to start one. Port of <c>GitHubCLI.swift</c>'s
+    /// <c>createRepo(name:isPrivate:into:)</c>. <paramref name="createDirectory"/>/
+    /// <paramref name="pathExists"/> are injectable the same way
+    /// <see cref="CodeGit.CloneAsync"/>'s are, for testability without real disk.</summary>
+    public static async Task<(bool Ok, string? Path, string Output)> CreateRepoAsync(IProcessLauncher launcher,
+        string name, bool isPrivate, string parentDir, Func<string, string?>? resolveBinary = null,
+        Action<string>? createDirectory = null, Func<string, bool>? pathExists = null, CancellationToken ct = default)
+    {
+        var gh = (resolveBinary ?? BinaryResolver.Resolve)("gh");
+        if (gh is null) return (false, null, "GitHub CLI (gh) not found");
+
+        createDirectory ??= p => Directory.CreateDirectory(p);
+        pathExists ??= p => Directory.Exists(p) || File.Exists(p);
+        try { createDirectory(parentDir); } catch { /* best-effort, matches Swift's try? */ }
+
+        var (ok, stdout, stderr) = await RunAsync(launcher, gh, parentDir,
+            new[] { "repo", "create", name, isPrivate ? "--private" : "--public", "--clone", "--add-readme" }, ct);
+        var path = Path.Combine(parentDir, name);
+        var success = ok && pathExists(path);
+        return (success, success ? path : null, OneShotProcess.CombineOutput(stdout, stderr));
     }
 
     private static Task<(bool Ok, string Stdout, string Stderr)> RunAsync(IProcessLauncher launcher, string ghPath,
