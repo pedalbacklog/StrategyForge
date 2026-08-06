@@ -5,6 +5,7 @@ using Coral.Core.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 
 namespace Coral;
@@ -24,6 +25,8 @@ public sealed partial class MainPage : Page
 {
     public string RepoPath { get; }
     public ChatViewModel ViewModel { get; }
+
+    private ScrollViewer? _chatScrollViewer;
 
     public MainPage()
     {
@@ -58,6 +61,8 @@ public sealed partial class MainPage : Page
 
     private void OnMessagePropertyChanged(object? sender, PropertyChangedEventArgs e) => ScrollChatToEnd();
 
+    private void OnChatListLoaded(object sender, RoutedEventArgs e) => _chatScrollViewer ??= FindScrollViewer(ChatList);
+
     private async void OnSendClick(object sender, RoutedEventArgs e) => await ViewModel.SendAsync();
 
     private async void OnPromptBoxKeyDown(object sender, KeyRoutedEventArgs e)
@@ -69,9 +74,26 @@ public sealed partial class MainPage : Page
 
     private void OnStopClick(object sender, RoutedEventArgs e) => ViewModel.CancelCurrentTurn();
 
+    /// <summary>Scroll all the way to the bottom of the ListView's real
+    /// scrollable content. Deliberately NOT ChatList.ScrollIntoView(lastItem):
+    /// that only guarantees the item is visible, which for one tall item that's
+    /// still growing (mid-stream) can mean "just its top edge," not "follow the
+    /// bottom as it grows" — going straight to the ScrollViewer is the reliable
+    /// way to pin to the end.</summary>
     private void ScrollChatToEnd()
     {
-        if (ViewModel.Messages.Count == 0) return;
-        ChatList.ScrollIntoView(ViewModel.Messages[^1]);
+        if (_chatScrollViewer is null || ViewModel.Messages.Count == 0) return;
+        _chatScrollViewer.ChangeView(null, _chatScrollViewer.ScrollableHeight, null, disableAnimation: true);
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is ScrollViewer scrollViewer) return scrollViewer;
+            if (FindScrollViewer(child) is { } found) return found;
+        }
+        return null;
     }
 }

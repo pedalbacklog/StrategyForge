@@ -37,7 +37,8 @@
 
                 <ListView x:Name="ChatList" Grid.Column="0" Margin="0,0,8,0"
                           ItemsSource="{x:Bind ViewModel.Messages}"
-                          SelectionMode="None" IsItemClickEnabled="False">
+                          SelectionMode="None" IsItemClickEnabled="False"
+                          Loaded="OnChatListLoaded">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="vm:ChatMessage">
                             <StackPanel Margin="0,4" MaxWidth="640">
