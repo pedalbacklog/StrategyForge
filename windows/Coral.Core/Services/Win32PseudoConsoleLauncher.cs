@@ -134,15 +134,61 @@ internal sealed class Win32PseudoConsoleSession : IPseudoConsoleSession
         _output = new FileStream(_outputRead, FileAccess.Read);
     }
 
+    private int _pseudoConsoleClosed;
+
+    /// <summary>The output pipe does NOT naturally EOF when the child process
+    /// exits: conhost (which ConPTY spins up internally) keeps its write handle
+    /// to the pipe open until <c>ClosePseudoConsole</c> is called — a pseudo
+    /// console can outlive any one attached process, by design. Left alone, a
+    /// plain "run a command and read its output" reader would hang forever
+    /// after the child exits, waiting for a pipe close that never comes. So:
+    /// race reading against the process actually exiting, and once it has,
+    /// force the pseudo console closed (after a short grace delay to let
+    /// already-buffered output drain) to unblock the pending read.</summary>
     public async IAsyncEnumerable<string> ReadOutputLinesAsync([EnumeratorCancellation] CancellationToken ct)
     {
         using var reader = new StreamReader(_output, Encoding.UTF8, detectEncodingFromByteOrderMarks: false,
             bufferSize: 4096, leaveOpen: true);
+        _ = WatchForExitAndUnblockReadAsync();
+
         while (true)
         {
-            var line = await reader.ReadLineAsync(ct);
-            if (line is null) yield break;
+            string? line = null;
+            var unblockedByExit = false;
+            try
+            {
+                line = await reader.ReadLineAsync(ct);
+            }
+            catch (IOException) when (Volatile.Read(ref _pseudoConsoleClosed) != 0)
+            {
+                unblockedByExit = true;
+            }
+            if (unblockedByExit || line is null) yield break;
             yield return line;
+        }
+    }
+
+    private async Task WatchForExitAndUnblockReadAsync()
+    {
+        try
+        {
+            await WaitForExitAsync(CancellationToken.None);
+            await Task.Delay(200);
+        }
+        catch
+        {
+            // Best-effort watcher — a failure here just means the read loop
+            // relies on natural EOF (or the caller's own cancellation) instead.
+            return;
+        }
+        CloseUnderlyingPseudoConsoleOnce();
+    }
+
+    private void CloseUnderlyingPseudoConsoleOnce()
+    {
+        if (Interlocked.Exchange(ref _pseudoConsoleClosed, 1) == 0)
+        {
+            NativeMethods.ClosePseudoConsole(_hPc);
         }
     }
 
@@ -185,7 +231,7 @@ internal sealed class Win32PseudoConsoleSession : IPseudoConsoleSession
             NativeMethods.DeleteProcThreadAttributeList(_attributeList);
             Marshal.FreeHGlobal(_attributeList);
         }
-        NativeMethods.ClosePseudoConsole(_hPc);
+        CloseUnderlyingPseudoConsoleOnce();
         if (_hProcess != IntPtr.Zero) NativeMethods.CloseHandle(_hProcess);
     }
 }
