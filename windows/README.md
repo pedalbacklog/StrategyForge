@@ -456,9 +456,16 @@ change) the instant the sign-in browser window opens and steals focus — and
 `Closed` was wired straight to `ConnectViewModel.CancelConnect()`, so the
 whole connect flow aborted right as the user was sent to the browser.
 `ProviderConnectSheet.swift`'s modal `.sheet` never had this problem (macOS
-sheets don't auto-dismiss on focus loss). Fixed by no longer cancelling on
-`Closed` — see `PORT-PLAN.md` §10 for the full writeup. Pending
-reconfirmation on real Windows after the fix.
+sheets don't auto-dismiss on focus loss). First fix — no longer cancelling on
+`Closed` — was necessary but incomplete: the Flyout still visually
+light-dismissed when the browser stole focus, so the "paste the code" box
+kept vanishing before the user could reach it (confirmed the hard way — the
+founder ended up pasting the auth code into the main chat prompt box
+instead, since the login one wasn't visible). Real fix: a `Closing` handler
+(cancellable, unlike `Closed`) that blocks the light-dismiss outright while
+`ConnectViewModel.IsConnecting` is true, bounded by `RunSignInAsync`'s
+existing 150s sign-in timeout. See `PORT-PLAN.md` §10 for the full writeup.
+Pending reconfirmation on real Windows after this second fix.
 
 **Fase 7 (Code mode) started: the whole service layer — `CodeGit` (all
 real-git operations, read/write/clone) and `GitHubCLI` (PR flow + repo

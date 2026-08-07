@@ -37,8 +37,11 @@
                              one thing it's asking them to do. ConnectViewModel's state
                              (LogLines/Phase/NeedsCode) lives independently of whether
                              this popup is visible, so reopening it just shows the live
-                             progress where it left off. -->
-                        <Flyout Placement="Bottom" Opened="OnConnectFlyoutOpened">
+                             progress where it left off. Closing (not Closed — this one's
+                             cancellable) additionally BLOCKS the light-dismiss outright
+                             while IsConnecting, so the "paste the code" box can't vanish
+                             out from under the user the moment the browser steals focus. -->
+                        <Flyout Placement="Bottom" Opened="OnConnectFlyoutOpened" Closing="OnConnectFlyoutClosing">
                             <StackPanel Width="380" Spacing="6">
                                 <TextBlock Text="{x:Bind ConnectViewModel.PhaseLabel, Mode=OneWay}"
                                            FontWeight="SemiBold" />

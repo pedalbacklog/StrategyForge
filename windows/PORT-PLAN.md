@@ -879,20 +879,36 @@ existiendo como API pública (cubierta por tests) para un futuro botón
 "Cancel" explícito — simplemente ya no está cableada al cierre implícito
 del flyout.
 
-**Confirmado en CI y en Windows real.** Commit `7b94969`, run
+**Confirmado en CI (pero el fix estaba incompleto).** Commit `7b94969`, run
 [31193766949](https://github.com/pedalbacklog/StrategyForge/actions/runs/31193766949)
 (`windows-latest`, `workflow_dispatch`) verde a nivel de step:
 `Test Coral.Core (via Coral.Tests)` → success (293/293) y `Build the WinUI 3
-app (Coral)` → success. El founder reprodujo el flujo tras el fix y el
-sign-in terminó con éxito — esta vez sin pedir código (el CLI resolvió el
-login vía loopback en lugar del camino de pegar código manualmente; ambos
-son comportamientos legítimos de `claude auth login`, no algo que este port
-controle). Queda pendiente reconfirmar específicamente el camino CON código
-(cerrando sesión del CLI primero, borrando/renombrando
-`%USERPROFILE%\.claude\.credentials.json`) para verificar que la caja
-"Paste the code from the browser" + Submit aparece y funciona una vez
-arreglado el auto-cierre del flyout — es la parte del fix que aún no se ha
-visto renderizada de verdad.
+app (Coral)` → success. El founder reprodujo el flujo tras ese fix y el
+primer sign-in terminó con éxito sin pedir código (el CLI resolvió el login
+vía loopback esa vez — un camino legítimo de `claude auth login`, no algo
+que este port controle). Pero al repetirlo cerrando sesión primero para
+forzar el camino CON código, apareció un **segundo bug, más profundo, del
+mismo síntoma**: quitar `Closed → CancelConnect()` evitó que cerrar el
+flyout cancelara la operación de FONDO, pero no evitó que el propio flyout
+se **cerrara visualmente** en cuanto el navegador robaba el foco — solo dejó
+de abortar el proceso, no lo mantuvo a la vista. El founder vio la caja de
+pegar código "un instante" al reabrir el flyout y luego desaparecer de
+nuevo, y — la prueba definitiva de que esto es un problema de UX real, no
+solo de estado interno — acabó pegando el código sin querer en la caja de
+chat principal ("Ask Coral…") en vez de en la caja de login (porque esta
+última no estaba visible en ese momento), lo que la app respondió
+correctamente con "Not logged in · Please run /login" desde el CLI. **Fix
+definitivo**: nuevo handler `Closing` (distinto de `Closed` — este sí es
+cancelable) en el `Flyout`, que llama `e.Cancel = true` mientras
+`ConnectViewModel.IsConnecting` sea true — bloquea el *light-dismiss* del
+todo mientras el login está en curso, en vez de solo dejar de reaccionar a
+él. Esto es lo más parecido a cómo `ProviderConnectSheet.swift` nunca tuvo
+este problema: una `.sheet` modal de macOS simplemente no se auto-cierra por
+perder el foco, así que nunca necesitó una defensa explícita — WinUI3 sí, y
+ahora la tiene. Acotado por el timeout de 150s ya existente en
+`RunSignInAsync`: si el login se cuelga, `IsConnecting` vuelve a `false` al
+fallar y el flyout puede volver a cerrarse con normalidad. Pendiente de
+reconfirmación real en Windows (CI todavía no disparado para este commit).
 
 293 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en

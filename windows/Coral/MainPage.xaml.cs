@@ -5,6 +5,7 @@ using Coral.Core.Services;
 using Coral.Core.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.System;
@@ -92,6 +93,17 @@ public sealed partial class MainPage : Page
     private void OnStopClick(object sender, RoutedEventArgs e) => ViewModel.CancelCurrentTurn();
 
     private async void OnConnectFlyoutOpened(object sender, object e) => await ConnectViewModel.ConnectAsync();
+
+    /// <summary>Stop the Flyout from light-dismissing (its default: any
+    /// outside click or window-focus change closes it) while a connect is in
+    /// flight — otherwise the sign-in browser window stealing focus hides the
+    /// "paste the code" box the instant it appears, often before the user can
+    /// even see it. The macOS original doesn't need this: a modal `.sheet`
+    /// never auto-dismisses on focus loss in the first place.</summary>
+    private void OnConnectFlyoutClosing(FlyoutBase sender, FlyoutBaseClosingEventArgs e)
+    {
+        if (ConnectViewModel.IsConnecting) e.Cancel = true;
+    }
 
     private async void OnSubmitCodeClick(object sender, RoutedEventArgs e) => await ConnectViewModel.SubmitCodeAsync();
 
