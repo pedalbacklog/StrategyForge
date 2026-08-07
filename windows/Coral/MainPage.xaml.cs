@@ -97,7 +97,7 @@ public sealed partial class MainPage : Page
 
     private async void OnSubmitCodeClick(object sender, RoutedEventArgs e) => await ConnectViewModel.SubmitCodeAsync();
 
-    private void OnCodeModeClick(object sender, RoutedEventArgs e) => new CodeModeWindow(RepoPath).Activate();
+    private void OnCodeModeClick(object sender, RoutedEventArgs e) => new CodeModeWindow(RepoPath, ViewModel).Activate();
 
     private async void OnOpenRepoFlyoutOpened(object sender, object e) => await RepoPickerViewModel.LoadReposAsync();
 

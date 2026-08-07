@@ -244,4 +244,97 @@ public class ChatViewModelTests
         Assert.Equal("Cancelled.", vm.StatusMessage);
         Assert.False(vm.IsSending);
     }
+
+    [Fact]
+    public async Task BashCommandOutputIsPairedWithItsCommandInTheCommandLog()
+    {
+        var lines = new List<string>
+        {
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"echo hi"}}]}}""",
+            """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"hi\n"}]}}""",
+            """{"type":"result","subtype":"success","result":"done"}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        var run = Assert.Single(vm.CommandLog);
+        Assert.Equal("echo hi", run.Command);
+        Assert.Equal("hi\n", run.Output);
+    }
+
+    [Fact]
+    public async Task ToolResultsForUntrackedIdsAreIgnored()
+    {
+        // A tool_result with no matching CommandStarted (e.g. Read/Grep's own
+        // tool_result) shouldn't show up in the terminal panel.
+        var lines = new List<string>
+        {
+            """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/repo/a.txt"}}]}}""",
+            """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"file contents"}]}}""",
+            """{"type":"result","subtype":"success","result":"done"}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        Assert.Empty(vm.CommandLog);
+    }
+
+    [Fact]
+    public async Task CommandLogAccumulatesAcrossTurnsButPendingCommandsResetPerTurn()
+    {
+        var callCount = 0;
+        var launcher = new FakeProcessLauncher((_, _) =>
+        {
+            callCount++;
+            return callCount switch
+            {
+                // Turn 1: starts a command but never gets its output (e.g. cancelled).
+                1 => new FakeChildProcess(new List<string>
+                {
+                    """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"first"}}]}}""",
+                    """{"type":"result","subtype":"success","result":"done"}""",
+                }),
+                // Turn 2: a DIFFERENT command reuses the same tool_use id "t1" —
+                // its output must not be paired with turn 1's stale "first" entry.
+                _ => new FakeChildProcess(new List<string>
+                {
+                    """{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"second"}}]}}""",
+                    """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"second output"}]}}""",
+                    """{"type":"result","subtype":"success","result":"done"}""",
+                }),
+            };
+        });
+        var vm = MakeViewModel(launcher);
+
+        vm.PromptText = "first";
+        await vm.SendAsync();
+        vm.PromptText = "second";
+        await vm.SendAsync();
+
+        var run = Assert.Single(vm.CommandLog);
+        Assert.Equal("second", run.Command);
+        Assert.Equal("second output", run.Output);
+    }
+
+    [Fact]
+    public void TrimmedPassesShortStringsThrough()
+    {
+        Assert.Equal("short", ChatViewModel.Trimmed("short", limit: 100));
+    }
+
+    [Fact]
+    public void TrimmedElidesTheMiddleOfLongStrings()
+    {
+        var s = new string('a', 12_000) + new string('b', 12_000);
+        var result = ChatViewModel.Trimmed(s, limit: 12_000);
+
+        Assert.StartsWith(new string('a', 100), result);
+        Assert.EndsWith(new string('b', 100), result);
+        Assert.Contains("chars elided", result);
+        Assert.True(result.Length < s.Length);
+    }
 }

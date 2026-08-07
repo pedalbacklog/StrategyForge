@@ -1,3 +1,4 @@
+using Coral.Core.ViewModels;
 using Microsoft.UI.Xaml;
 
 namespace Coral;
@@ -10,10 +11,14 @@ namespace Coral;
 /// can't destabilize the chat flow already confirmed working.</summary>
 public sealed partial class CodeModeWindow : Window
 {
-    public CodeModeWindow(string repoPath)
+    /// <param name="chatViewModel">The SAME instance driving <see cref="MainPage"/>'s
+    /// chat — matches CodeModeView.swift, which takes the chat's own ChatViewModel
+    /// rather than a new one, so the terminal panel shows commands from that
+    /// live session.</param>
+    public CodeModeWindow(string repoPath, ChatViewModel chatViewModel)
     {
         InitializeComponent();
         Title = "Coral — Code Mode";
-        Content = new CodeModePage(repoPath);
+        Content = new CodeModePage(repoPath, chatViewModel);
     }
 }

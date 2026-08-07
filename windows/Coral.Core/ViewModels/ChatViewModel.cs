@@ -45,6 +45,10 @@ public sealed record ActivityStep(string Title, string? Detail, DateTimeOffset A
     public string DetailOrEmpty => Detail ?? "";
 }
 
+/// <summary>One shell command the agent ran, with its output (for the
+/// code-mode terminal). Port of <c>ChatViewModel.swift</c>'s <c>CommandRun</c>.</summary>
+public sealed record CommandRun(string Command, string Output, DateTimeOffset At);
+
 /// <summary>
 /// Drives one repo's headless-Claude chat: sends a turn, streams the reply,
 /// and keeps a message list + activity timeline. Minimal P0 port of
@@ -72,8 +76,21 @@ public sealed class ChatViewModel : ObservableObject
     /// added while a subagent is active gets attributed to it.</summary>
     private string? _activeSubagent;
 
+    /// <summary>Bash commands started this turn, keyed by their tool_use id,
+    /// awaiting the matching tool_result. Cleared at the start of each turn,
+    /// same as <see cref="_activeSubagent"/> — a stray unmatched entry from a
+    /// cancelled/failed turn shouldn't bleed into the next one.</summary>
+    private readonly Dictionary<string, string> _pendingCommands = new();
+
     public ObservableCollection<ChatMessage> Messages { get; } = new();
     public ObservableCollection<ActivityStep> Activity { get; } = new();
+
+    /// <summary>Commands run this session, for Code Mode's terminal panel.
+    /// Port of <c>ChatViewModel.swift</c>'s <c>commandLog</c>. Unlike Swift
+    /// (which clears this per turn), kept accumulating for the whole session —
+    /// matching the convention <see cref="Activity"/> already established in
+    /// this port, for internal consistency.</summary>
+    public ObservableCollection<CommandRun> CommandLog { get; } = new();
 
     private string _promptText = "";
     public string PromptText { get => _promptText; set => SetProperty(ref _promptText, value); }
@@ -141,6 +158,7 @@ public sealed class ChatViewModel : ObservableObject
         var cts = new CancellationTokenSource();
         _cts = cts;
         _activeSubagent = null;
+        _pendingCommands.Clear();
 
         try
         {
@@ -184,6 +202,17 @@ public sealed class ChatViewModel : ObservableObject
                     case ChatEvent.CommandStarted cmd:
                         Activity.Add(new ActivityStep("Ran a command", cmd.Command, DateTimeOffset.Now,
                             Agent: _activeSubagent));
+                        _pendingCommands[cmd.Id] = cmd.Command;
+                        break;
+
+                    case ChatEvent.CommandOutput output:
+                        // Only surface output for commands we tracked (Bash),
+                        // not every tool_result (e.g. Read/Grep also flow
+                        // through here).
+                        if (_pendingCommands.Remove(output.Id, out var command))
+                        {
+                            CommandLog.Add(new CommandRun(command, Trimmed(output.Output), DateTimeOffset.Now));
+                        }
                         break;
 
                     case ChatEvent.FileEdited f:
@@ -238,5 +267,21 @@ public sealed class ChatViewModel : ObservableObject
         var m = new ChatMessage(ChatRole.Assistant, "");
         Messages.Add(m);
         return m;
+    }
+
+    /// <summary>Port of <c>ChatViewModel.swift</c>'s <c>trimmed(_:limit:)</c>: a
+    /// build/test can emit hundreds of KB; kept verbatim ×50 turns ×every
+    /// resident chat that adds up fast. Keeps head+tail (~<paramref name="limit"/>
+    /// chars total), enough to read the gist, and elides the middle. Uses plain
+    /// UTF-16 code-unit slicing rather than Swift's Character-boundary
+    /// counting — a pragmatic difference that doesn't matter for a truncation
+    /// heuristic.</summary>
+    public static string Trimmed(string s, int limit = 12_000)
+    {
+        if (s.Length <= limit) return s;
+        var head = s[..(limit * 2 / 3)];
+        var tail = s[^(limit / 3)..];
+        var elided = s.Length - head.Length - tail.Length;
+        return $"{head}\n… [{elided} chars elided] …\n{tail}";
     }
 }

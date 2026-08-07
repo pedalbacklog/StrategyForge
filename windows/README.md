@@ -145,9 +145,17 @@ windows/
   history — each is its own much larger feature). Lives in `Coral.Core`, not the
   WinUI project: `ObservableCollection`/hand-rolled `INotifyPropertyChanged`
   (`ObservableObject`) have no WinUI dependency, so the ViewModel is unit-tested
-  the same way as everything here, with an injected `IProcessLauncher`. 10
+  the same way as everything here, with an injected `IProcessLauncher`. Also
+  carries `CommandLog`/`CommandRun` (Code Mode's terminal panel): pairs Bash's
+  `CommandStarted`/`CommandOutput` events by tool_use id via a `_pendingCommands`
+  dictionary (reset per turn, like `_activeSubagent`), trims long output with a
+  `Trimmed(string, limit: 12_000)` head+tail port of the Swift original's
+  `trimmed(_:limit:)`. Unlike Swift, `CommandLog` accumulates for the whole
+  session rather than clearing per turn — matching the convention `Activity`
+  already established in this port, for internal consistency. 15
   tests cover the delta/full-text dedup, activity mapping, invariant-culture cost
-  formatting, the resumed-session-missing retry, and cancellation — all real
+  formatting, the resumed-session-missing retry, cancellation, and the
+  command-log pairing/trimming. All real
   behavior ported from the Swift original, not reinvented. **Confirmed working
   end to end on real Windows** — see Status. And `ConnectViewModel` (Fase 6):
   drives one provider's "Connect" flow — install-if-missing, then sign in —
@@ -163,8 +171,8 @@ windows/
   type behind it: `CodeModeView.swift` keeps this state as plain `@State` on
   the View itself, SwiftUI's norm, not a separate ViewModel class — so this
   is a fresh design in the same shape this port already established, not a
-  translation. Deliberately excludes Auto-PR and the terminal panel — neither
-  has a C# service behind it yet. 10 tests; **not yet confirmed on real
+  translation. Deliberately excludes Auto-PR — no C# service behind it yet.
+  10 tests; **not yet confirmed on real
   Windows** — see Status. And `PullRequestViewModel` (Fase 7): the one-tap PR
   flow, kept as its own ViewModel rather than folded into
   `GitPanelViewModel` — same one-ViewModel-one-concern separation as
@@ -178,7 +186,12 @@ windows/
   CreateRepoAsync`. Deliberately doesn't try to hot-swap an already-open
   session's repo — on success it hands `ResultRepoPath` to the caller,
   which opens a fresh `MainWindow` pointed at it rather than mutating the
-  current page's `OneTime`-bound `RepoPath`. 8 tests. **All of Fase 6/7's
+  current page's `OneTime`-bound `RepoPath`. 8 tests. `CodeModePage` now also
+  renders a collapsible terminal panel (shell commands + output), fed by
+  `ChatViewModel.CommandLog` — matching `CodeModeView.swift`, which takes the
+  SAME `ChatViewModel` as the main chat rather than a Code-Mode-local copy;
+  `CodeModeWindow`/`CodeModePage` both gained a `chatViewModel` constructor
+  parameter for this, threaded from `MainPage.OnCodeModeClick`. **All of Fase 6/7's
   UI — `ConnectViewModel`'s flyout, `CodeModePage`, the "Open Repo"
   flyout — is now CONFIRMED compiling against the real Windows App SDK on
   `windows-latest` CI** (2026-08-07, see Status) — not yet run on a real
@@ -199,7 +212,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **273/273**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **278/278**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -329,7 +342,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel` (Fase 7 — see below) — 273 automated
+`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel` (Fase 7 — see below) — 278 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -440,7 +453,7 @@ run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
 real-git operations, read/write/clone) and `GitHubCLI` (PR flow + repo
 browse/create) — plus all three ViewModels (`GitPanelViewModel`,
 `PullRequestViewModel`, `RepoPickerViewModel`) are ported and unit-tested
-(273 automated total), and Code Mode now has a first real UI: `CodeModePage`
+(278 automated total), and Code Mode now has a first real UI: `CodeModePage`
 in its own `CodeModeWindow`, opened from a new "Code Mode" button in
 `MainPage`, plus an "Open Repo" flyout on `MainPage` itself (the repo
 picker that had been a standing Fase 5 leftover).** Same scope discipline as
@@ -467,19 +480,32 @@ from `GitPanelViewModel` rather than merged in, the same one-ViewModel-
 one-concern split as `ChatViewModel`/`ConnectViewModel`. Still deliberately
 deferred: `searchCommunitySkills` (a different feature area — skills catalog
 discovery — with meaningfully more complex logic deserving its own scoped
-pass), Auto-PR, the terminal panel, and every worktree operation (used only
+pass), Auto-PR, and every worktree operation (used only
 for loop isolation, which is Fase 8's zone requiring human review of the
 diff, not just green tests — porting worktree logic here would sidestep
 that gate).
 
+The terminal panel followed: `ChatViewModel` gained `CommandLog`/`CommandRun`
+(pairing Bash's `CommandStarted`/`CommandOutput` events by tool_use id, with
+a `Trimmed` head+tail truncation port of Swift's `trimmed(_:limit:)`), and
+`CodeModePage` renders it as a collapsible panel — no new C# service needed,
+since `ClaudeStreamParser` already emitted both events from Fase 3, the
+current minimal `ChatViewModel` just wasn't consuming `CommandOutput` yet.
+`CodeModeWindow`/`CodeModePage` take the SAME `ChatViewModel` instance as
+`MainPage`'s chat (matching `CodeModeView.swift`, which does the same) rather
+than constructing a Code-Mode-local one, so the terminal reflects the live
+session.
+
 `CodeModePage` is a fresh design (not a port — `CodeModeView.swift` is 900
-lines including the terminal panel and Auto-PR this pass deliberately
-excludes): changed files with per-file Stage/Revert on the left, the
+lines including Auto-PR, which this pass still excludes): changed files with
+per-file Stage/Revert on the left, the
 selected file's diff on the right (a `+`/`-`/`@@` glyph gutter via the new
 `DiffLineKindToGlyphConverter`), a branch bar (switch via `ComboBox`, create
 via a `Flyout`), a "Pull Request" `Flyout` (same pattern as MainPage's
-"Connect Claude") wired to `PullRequestViewModel`, and a commit message box
-with Commit/Push. Deliberately in its **own window** (`CodeModeWindow`, same
+"Connect Claude") wired to `PullRequestViewModel`, a commit message box
+with Commit/Push, and now a collapsible terminal panel across the bottom
+(command + trimmed output, toggled via a plain code-behind click handler —
+no ViewModel-bound bool needed for pure UI state). Deliberately in its **own window** (`CodeModeWindow`, same
 thin-shell pattern as `MainWindow`/`MainPage`) rather than embedded in
 `MainPage`, so this UI can't put the already-confirmed Fase 5/6 chat flow at
 risk. The "Open Repo" flyout on `MainPage` (`RepoPickerViewModel`) browses/

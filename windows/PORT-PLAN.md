@@ -237,10 +237,12 @@ Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewM
                                       cerrar esta fase
 Fase 7 — Code mode                   🔶 Capa de servicio completa + UI real
                                       (git panel, diff viewer, flujo de PR,
-                                      selector de repo) — CONFIRMADO
-                                      compilando en windows-latest CI (ver
-                                      §10); falta terminal y verificación
-                                      visual real en Windows
+                                      selector de repo, panel de terminal) —
+                                      lo anterior CONFIRMADO compilando en
+                                      windows-latest CI (ver §10); el panel de
+                                      terminal es nuevo y aún sin esa
+                                      confirmación; falta verificación visual
+                                      real en Windows
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -705,8 +707,9 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
   5/6 que el founder ya confirmó funcionando de punta a punta. `MainPage`
   gana solo un botón "Code Mode" que abre la ventana.
   Deliberadamente NO en esta UI (ver el doc comment de `GitPanelViewModel`):
-  Auto-PR, panel de terminal, ni cargar el contenido crudo (no-diff) de un
-  archivo.
+  Auto-PR, ni cargar el contenido crudo (no-diff) de un archivo. (El panel de
+  terminal, mencionado aquí como pendiente en versiones anteriores de este
+  párrafo, se portó después — ver la entrada más abajo.)
   **Sin verificar en Windows real todavía** — escrito con la misma
   disciplina de las fases anteriores (patrones ya confirmados: converters en
   `Page.Resources`, `ViewModel` asignado antes de `InitializeComponent()`,
@@ -748,6 +751,35 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
   más simple y de menor riesgo que hacerlos reasignables en caliente.
   8 tests nuevos — 273 en total.
 
+- ✅ **Panel de terminal de Code Mode — `ChatViewModel.CommandLog` +
+  `CodeModePage`.** Investigado primero: no es un terminal PTY en vivo (no
+  hace falta ningún primitivo Windows nuevo), es un log de solo lectura —
+  `CodeModeView.swift`'s `terminalPane`, colapsable, alimentado por
+  `vm.commandLog: [CommandRun]`. `ClaudeStreamParser` (Fase 3) ya emitía
+  `ChatEvent.CommandStarted`/`CommandOutput`; el `ChatViewModel.cs` mínimo
+  solo manejaba el primero. Añadido: record `CommandRun(Command, Output, At)`,
+  `Trimmed(string, limit: 12_000)` — puerto directo de `trimmed(_:limit:)` de
+  Swift (head+tail ~12KB, elide el medio; usa slicing UTF-16 de C# en vez de
+  slicing por Character de Swift, una diferencia de plataforma aceptada sin
+  más ceremonia para una heurística de truncado) — y `_pendingCommands`
+  (diccionario id→command, resetado cada turno igual que `_activeSubagent`)
+  para emparejar el `CommandStarted` de un Bash con su `CommandOutput`
+  posterior. Divergencia real y deliberada de Swift: el original limpia
+  `commandLog`/`pendingCommands`/`activity` en CADA turno; este port deja
+  `CommandLog` acumulando toda la sesión, igual que `Activity` ya hace en
+  este port — consistencia interna con lo ya construido, no un intento de
+  replicar Swift línea por línea. En la UI, `CodeModePage` gana un panel
+  colapsable (toggle por code-behind plano, sin estado en el ViewModel) que
+  lista cada `CommandRun`; para eso, `CodeModeWindow`/`CodeModePage` ahora
+  reciben el MISMO `ChatViewModel` que usa el chat de `MainPage` (no uno
+  nuevo) — igual que `CodeModeView.swift`, que recibe el `ChatViewModel` del
+  chat en vez de construir uno propio — así el panel refleja la sesión viva,
+  no una copia local. `MainPage.OnCodeModeClick` pasa `ViewModel` al abrir la
+  ventana. 5 tests nuevos (pairing command↔output, tool_results de ids no
+  rastreados se ignoran, que `CommandLog` sobrevive entre turnos mientras
+  `_pendingCommands` no arrastra entradas obsoletas de un turno cancelado, y
+  el truncado puro de `Trimmed`) — 278 en total.
+
 **Hito: primer run de CI de verdad, con la incidencia de GitHub ya resuelta
 (2026-08-07, ~05:26 UTC).** El run para el commit `465085f` pasó completo,
 incluyendo por primera vez el paso "Build the WinUI 3 app (Coral)" — hasta
@@ -765,9 +797,11 @@ corridas locales seguidas antes de repushear. Con esto, TODO el trabajo
 acumulado de Fase 6/7 de hoy —`ProviderInstaller`, `ConnectViewModel`, el
 flyout "Connect Claude", `CodeGit`, `GitHubCLI`, `GitPanelViewModel`,
 `PullRequestViewModel`, `CodeModePage`/`CodeModeWindow`— está confirmado
-compilando de verdad contra el Windows App SDK, no solo en teoría.
+compilando de verdad contra el Windows App SDK, no solo en teoría. (El
+panel de terminal — bloque anterior — se escribió DESPUÉS de este run
+verde y todavía no tiene su propia confirmación de CI; ver el próximo push.)
 
-273 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+278 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
 los dos de Fase 3/5 **confirmados pasando en Windows real** (uno contra

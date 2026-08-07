@@ -8,25 +8,27 @@ namespace Coral;
 /// <summary>
 /// Code Mode's git panel (Fase 7): changed files on the left with per-file
 /// stage/revert, the selected file's diff on the right, a branch bar,
-/// commit/push, and a "Pull Request" flyout — wired to
-/// <see cref="GitPanelViewModel"/> and <see cref="PullRequestViewModel"/>
+/// commit/push, a "Pull Request" flyout, and a collapsible terminal panel —
+/// wired to <see cref="GitPanelViewModel"/>, <see cref="PullRequestViewModel"/>,
+/// and the chat's own <see cref="ChatViewModel"/> (for <c>CommandLog</c>)
 /// respectively (kept separate ViewModels on purpose — see each one's own
-/// doc comment). Deliberately NOT here: Auto-PR, the terminal panel, repo
-/// browse/create, and loading a file's raw (non-diff) contents — each is
-/// its own unported piece.
+/// doc comment). Deliberately NOT here: Auto-PR, repo browse/create, and
+/// loading a file's raw (non-diff) contents — each is its own unported piece.
 /// </summary>
 public sealed partial class CodeModePage : Page
 {
     public GitPanelViewModel ViewModel { get; }
     public PullRequestViewModel PullRequestViewModel { get; }
+    public ChatViewModel ChatViewModel { get; }
 
-    public CodeModePage(string repoPath)
+    public CodeModePage(string repoPath, ChatViewModel chatViewModel)
     {
         // Set before InitializeComponent(): default (OneTime) x:Bind
         // expressions evaluate during that call — see MainPage.xaml.cs for
         // the same ordering requirement.
         ViewModel = new GitPanelViewModel(new RealProcessLauncher(), repoPath);
         PullRequestViewModel = new PullRequestViewModel(new RealProcessLauncher(), repoPath);
+        ChatViewModel = chatViewModel;
 
         InitializeComponent();
     }
@@ -79,4 +81,12 @@ public sealed partial class CodeModePage : Page
 
     private async void OnCreateBranchClick(object sender, RoutedEventArgs e) =>
         await ViewModel.CreateBranchAsync(NewBranchBox.Text);
+
+    /// <summary>Mirrors CodeModeView.swift's collapsible terminal — plain
+    /// code-behind toggle rather than a bound bool, since it's pure UI state
+    /// with no ViewModel consumer.</summary>
+    private void OnToggleTerminalClick(object sender, RoutedEventArgs e) =>
+        TerminalLog.Visibility = TerminalLog.Visibility == Visibility.Visible
+            ? Visibility.Collapsed
+            : Visibility.Visible;
 }
