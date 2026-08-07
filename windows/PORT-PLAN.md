@@ -238,11 +238,9 @@ Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewM
 Fase 7 — Code mode                   🔶 Capa de servicio completa + UI real
                                       (git panel, diff viewer, flujo de PR,
                                       selector de repo, panel de terminal) —
-                                      lo anterior CONFIRMADO compilando en
-                                      windows-latest CI (ver §10); el panel de
-                                      terminal es nuevo y aún sin esa
-                                      confirmación; falta verificación visual
-                                      real en Windows
+                                      TODO CONFIRMADO compilando en
+                                      windows-latest CI (ver §10); falta
+                                      verificación visual real en Windows
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -797,9 +795,19 @@ corridas locales seguidas antes de repushear. Con esto, TODO el trabajo
 acumulado de Fase 6/7 de hoy —`ProviderInstaller`, `ConnectViewModel`, el
 flyout "Connect Claude", `CodeGit`, `GitHubCLI`, `GitPanelViewModel`,
 `PullRequestViewModel`, `CodeModePage`/`CodeModeWindow`— está confirmado
-compilando de verdad contra el Windows App SDK, no solo en teoría. (El
-panel de terminal — bloque anterior — se escribió DESPUÉS de este run
-verde y todavía no tiene su propia confirmación de CI; ver el próximo push.)
+compilando de verdad contra el Windows App SDK, no solo en teoría.
+
+**Hito: panel de terminal (`ChatViewModel.CommandLog` + `CodeModePage`)
+confirmado en CI.** Commit `fc21820`, run
+[31156454867](https://github.com/pedalbacklog/StrategyForge/actions/runs/31156454867)
+(`windows-latest`, disparado por `workflow_dispatch`), verde a nivel de
+run Y a nivel de step: `Test Coral.Core (via Coral.Tests)` → success
+(278/278) y `Build the WinUI 3 app (Coral)` → success (no skipped) —
+confirma que el `CodeModeWindow`/`CodeModePage` con el `chatViewModel`
+compartido, el nuevo `xmlns:vm`, y el `ListView`/`DataTemplate` del panel
+de terminal en `CodeModePage.xaml` compilan de verdad contra el Windows
+App SDK, no solo localmente en Linux (donde el proyecto `Coral` en sí no
+puede compilarse). Todavía sin verificación visual real en Windows.
 
 278 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
