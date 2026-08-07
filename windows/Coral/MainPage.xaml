@@ -30,7 +30,15 @@
                 <TextBlock Text="{x:Bind RepoPath}" Opacity="0.6" VerticalAlignment="Center" />
                 <Button Content="Connect Claude" VerticalAlignment="Center">
                     <Button.Flyout>
-                        <Flyout Placement="Bottom" Opened="OnConnectFlyoutOpened" Closed="OnConnectFlyoutClosed">
+                        <!-- No Closed handler: a Flyout light-dismisses on any outside
+                             click or window-focus change — including the browser Coral
+                             itself opens for sign-in — so wiring Closed to CancelConnect
+                             would abort the connect flow the instant the user does the
+                             one thing it's asking them to do. ConnectViewModel's state
+                             (LogLines/Phase/NeedsCode) lives independently of whether
+                             this popup is visible, so reopening it just shows the live
+                             progress where it left off. -->
+                        <Flyout Placement="Bottom" Opened="OnConnectFlyoutOpened">
                             <StackPanel Width="380" Spacing="6">
                                 <TextBlock Text="{x:Bind ConnectViewModel.PhaseLabel, Mode=OneWay}"
                                            FontWeight="SemiBold" />

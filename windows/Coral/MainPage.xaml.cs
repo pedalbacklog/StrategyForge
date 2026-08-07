@@ -93,8 +93,6 @@ public sealed partial class MainPage : Page
 
     private async void OnConnectFlyoutOpened(object sender, object e) => await ConnectViewModel.ConnectAsync();
 
-    private void OnConnectFlyoutClosed(object sender, object e) => ConnectViewModel.CancelConnect();
-
     private async void OnSubmitCodeClick(object sender, RoutedEventArgs e) => await ConnectViewModel.SubmitCodeAsync();
 
     private void OnCodeModeClick(object sender, RoutedEventArgs e) => new CodeModeWindow(RepoPath, ViewModel).Activate();

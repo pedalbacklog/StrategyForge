@@ -449,6 +449,17 @@ install check and an opt-in (`CORAL_MANUAL_RUN_SIGNIN=1`), interactive
 sign-in check that's honest about replacing your machine's Claude login when
 run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
 
+**Update (2026-08-07): the `Flyout` concern above was real.** Clicking
+"Connect Claude" for real surfaced a genuine bug: the `Flyout` auto-dismisses
+(WinUI3's default "light dismiss" on any outside click or window-focus
+change) the instant the sign-in browser window opens and steals focus — and
+`Closed` was wired straight to `ConnectViewModel.CancelConnect()`, so the
+whole connect flow aborted right as the user was sent to the browser.
+`ProviderConnectSheet.swift`'s modal `.sheet` never had this problem (macOS
+sheets don't auto-dismiss on focus loss). Fixed by no longer cancelling on
+`Closed` — see `PORT-PLAN.md` §10 for the full writeup. Pending
+reconfirmation on real Windows after the fix.
+
 **Fase 7 (Code mode) started: the whole service layer — `CodeGit` (all
 real-git operations, read/write/clone) and `GitHubCLI` (PR flow + repo
 browse/create) — plus all three ViewModels (`GitPanelViewModel`,

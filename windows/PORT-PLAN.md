@@ -850,6 +850,35 @@ nuevo recurso `BoolNegationConverter x:Key="Negate"` y el botón "Commit + PR"
 en `CodeModePage.xaml` compilan de verdad contra el Windows App SDK.
 Todavía sin verificación visual real en Windows.
 
+**Primer bug real de Fase 6 encontrado en Windows real (2026-08-07): el
+`Flyout` de "Connect Claude" se auto-cancelaba al abrirse el navegador.**
+El founder confirmó `dotnet test` (293/293) en su propia máquina por primera
+vez (no solo en este sandbox ni en `windows-latest`), y al probar "Connect
+Claude" de verdad: el CLI ya estaba instalado, el navegador se abrió solo
+para el login, pero al volver a la app el flyout aparecía vacío/cerrado, sin
+la caja para pegar el código — pese a que la página de `platform.claude.com`
+sí mostraba el código a pegar. Causa raíz: `MainPage.xaml`'s `Flyout` tenía
+`Closed="OnConnectFlyoutClosed"` → `ConnectViewModel.CancelConnect()` — pero
+un `Flyout` de WinUI3 hace *light-dismiss* automático ante cualquier clic o
+cambio de foco de ventana fuera de él, y abrir el navegador (con
+`Process.Start`) es exactamente eso: la ventana pierde el foco, el flyout se
+cierra solo, y ese cierre cancelaba TODO el flujo de conexión justo en el
+paso en el que se le pide al usuario ir al navegador. Confirmado comparando
+con el original de macOS (`ProviderConnectSheet.swift`): allí es una
+`.sheet` modal que solo se cierra con un botón "Done" explícito — las
+sheets de macOS no se auto-descartan por perder el foco de la ventana, así
+que este comportamiento nunca existió en el original; es un efecto
+secundario de portar a un primitivo de UI (`Flyout`) con semántica de
+descarte distinta, no un fallo de lógica del ViewModel. **Arreglado**
+quitando el `Closed="OnConnectFlyoutClosed"` del `Flyout` (y el método,
+ahora sin uso) — el estado (`LogLines`/`Phase`/`NeedsCode`/`StatusMessage`)
+vive en `ConnectViewModel` independientemente de si el popup está visible,
+así que reabrir el flyout ahora debería mostrar el progreso real donde se
+quedó, en vez de cancelarlo. `ConnectViewModel.CancelConnect()` sigue
+existiendo como API pública (cubierta por tests) para un futuro botón
+"Cancel" explícito — simplemente ya no está cableada al cierre implícito
+del flyout. Pendiente de reconfirmación real tras este fix.
+
 293 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
