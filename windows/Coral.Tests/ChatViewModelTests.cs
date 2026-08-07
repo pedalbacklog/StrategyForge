@@ -321,6 +321,73 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task DraftCommitMessageUsesTheFirstLineOfTheLastAssistantReply()
+    {
+        var lines = new List<string>
+        {
+            """{"type":"assistant","message":{"content":[{"type":"text","text":"Fixed the bug\n\nMore detail here."}]}}""",
+            """{"type":"result","subtype":"success","result":"done"}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        Assert.Equal("Fixed the bug", vm.DraftCommitMessage());
+    }
+
+    [Fact]
+    public void DraftCommitMessageIsBlankWithNoAssistantReplyYet()
+    {
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>())));
+
+        Assert.Equal("", vm.DraftCommitMessage());
+    }
+
+    [Fact]
+    public async Task DraftCommitMessageCapsAtSixtyFourChars()
+    {
+        var longLine = new string('a', 80);
+        var lines = new List<string>
+        {
+            "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"" + longLine + "\"}]}}",
+            """{"type":"result","subtype":"success","result":"done"}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        var drafted = vm.DraftCommitMessage();
+        Assert.Equal(65, drafted.Length); // 64 chars + the ellipsis
+        Assert.EndsWith("…", drafted);
+    }
+
+    [Fact]
+    public void DraftPrBodyFallsBackToAFixedFooterWithNoAssistantReplyYet()
+    {
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>())));
+
+        Assert.Equal("Opened from Coral.", vm.DraftPrBody());
+    }
+
+    [Fact]
+    public async Task DraftPrBodyAppendsAFooterToTheLastAssistantReply()
+    {
+        var lines = new List<string>
+        {
+            """{"type":"assistant","message":{"content":[{"type":"text","text":"Did the thing."}]}}""",
+            """{"type":"result","subtype":"success","result":"done"}""",
+        };
+        var vm = MakeViewModel(new FakeProcessLauncher((_, _) => new FakeChildProcess(lines)));
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        Assert.Equal("Did the thing.\n\n— Opened from Coral.", vm.DraftPrBody());
+    }
+
+    [Fact]
     public void TrimmedPassesShortStringsThrough()
     {
         Assert.Equal("short", ChatViewModel.Trimmed("short", limit: 100));

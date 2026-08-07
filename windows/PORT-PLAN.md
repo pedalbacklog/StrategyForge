@@ -237,10 +237,13 @@ Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewM
                                       cerrar esta fase
 Fase 7 — Code mode                   🔶 Capa de servicio completa + UI real
                                       (git panel, diff viewer, flujo de PR,
-                                      selector de repo, panel de terminal) —
-                                      TODO CONFIRMADO compilando en
-                                      windows-latest CI (ver §10); falta
-                                      verificación visual real en Windows
+                                      selector de repo, panel de terminal,
+                                      "Commit + PR") — todo menos ShipFlow/
+                                      "Commit + PR" CONFIRMADO compilando en
+                                      windows-latest CI (ver §10); ShipFlow es
+                                      nuevo y aún sin esa confirmación; falta
+                                      verificación visual real en Windows y
+                                      el toggle opt-in de Auto-PR
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -778,6 +781,37 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
   `_pendingCommands` no arrastra entradas obsoletas de un turno cancelado, y
   el truncado puro de `Trimmed`) — 278 en total.
 
+- ✅ **`ShipFlow.cs` + botón "Commit + PR" — el motor de `commitAndPR(auto:)`
+  de `CodeModeView.swift`, sin su disparo automático.** Servicio nuevo,
+  hermano de `CodeGit`/`GitHubCLI`, no otro ViewModel: commit (todo, o solo
+  lo staged si algo está staged y no es el flujo auto) → push → abrir un PR,
+  o saltarse abrirlo y reportar "actualizado" si la rama ya tenía uno abierto
+  (un segundo push ya deja al PR existente de `gh` al día; llamar `gh pr
+  create` otra vez daría error). Tolera un fallo "nothing to commit" — puede
+  que ya haya commits locales listos para el push/PR. Recibe un
+  `IProcessLauncher` directamente en vez de depender de ninguno de los dos
+  ViewModels, así que sigue siendo testeable con fakes por sí solo sin
+  acoplar `GitPanelViewModel` a `PullRequestViewModel` — el acoplamiento que
+  Fase 7 ha evitado deliberadamente todo este tiempo.
+  `PullRequestViewModel.ShipAsync` es el envoltorio fino que lo llama y
+  actualiza `Info`/`Title`/`Body`/`StatusMessage`. `ChatViewModel` gana
+  `DraftCommitMessage()`/`DraftPrBody()` (puertos de `draftMessage()`/
+  `prBody()`) para cuando la caja de commit / título / descripción del PR
+  están en blanco. `CodeModePage` gana un botón "Commit + PR" junto a
+  Commit/Push. Deliberadamente SIN portar todavía: el toggle opt-in de
+  Auto-PR que dispara esto solo al terminar un run — Swift lo persiste con
+  `@AppStorage`, y este port no tiene ningún mecanismo de settings-storage
+  aún; además, cablear el disparo automático significaría meter la mano en
+  el ciclo de vida de turnos de `ChatViewModel` desde Code Mode, un límite
+  que Fase 5 dejó confirmado funcionando y que este pase prefiere no
+  arriesgar sin que un humano lo corra. 15 tests nuevos: 7 de `ShipFlow`
+  (commit+push+PR de punta a punta, salta crear un segundo PR si ya había
+  uno, tolera "nothing to commit", un fallo real de commit/push detiene el
+  flujo antes de tiempo, `stagedOnly` respeta auto vs. staged), 3 de
+  `PullRequestViewModel.ShipAsync`, y 5 de `ChatViewModel.DraftCommitMessage`/
+  `DraftPrBody` (primera línea, límite de 64 chars, fallback sin respuesta
+  del agente todavía) — 293 en total.
+
 **Hito: primer run de CI de verdad, con la incidencia de GitHub ya resuelta
 (2026-08-07, ~05:26 UTC).** El run para el commit `465085f` pasó completo,
 incluyendo por primera vez el paso "Build the WinUI 3 app (Coral)" — hasta
@@ -809,7 +843,7 @@ de terminal en `CodeModePage.xaml` compilan de verdad contra el Windows
 App SDK, no solo localmente en Linux (donde el proyecto `Coral` en sí no
 puede compilarse). Todavía sin verificación visual real en Windows.
 
-278 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+293 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
 los dos de Fase 3/5 **confirmados pasando en Windows real** (uno contra

@@ -212,7 +212,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **278/278**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **293/293**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -342,7 +342,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel` (Fase 7 — see below) — 278 automated
+`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow` (Fase 7 — see below) — 293 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -496,14 +496,37 @@ current minimal `ChatViewModel` just wasn't consuming `CommandOutput` yet.
 than constructing a Code-Mode-local one, so the terminal reflects the live
 session.
 
+Then the one-tap "Commit + PR" button — `CodeModeView.swift`'s
+`commitAndPR(auto:)` engine, minus its opt-in Auto-PR auto-trigger (see
+below). New `ShipFlow` service (a peer to `CodeGit`/`GitHubCLI`, not another
+ViewModel): commit (everything, or just what's staged, depending on whether
+anything's staged) → push → open a PR, or skip opening one and just report
+"updated" if the branch already had one open (a second push alone brings
+gh's existing PR up to date; calling `gh pr create` again would just error).
+Tolerates a "nothing to commit" failure — there may already be local commits
+to ship. Takes an `IProcessLauncher` directly rather than depending on
+either ViewModel, so it stays fake-testable on its own without coupling
+`GitPanelViewModel` to `PullRequestViewModel` — a coupling Fase 7 has kept
+deliberately absent throughout. `PullRequestViewModel.ShipAsync` is the thin
+wrapper that calls it and updates `Info`/`Title`/`Body`/`StatusMessage`;
+`ChatViewModel` gained `DraftCommitMessage()`/`DraftPrBody()` (ports of
+`draftMessage()`/`prBody()`) so the button has something to fall back to
+when the commit box/PR title/body are blank. Deliberately NOT wired: the
+opt-in Auto-PR toggle that fires this automatically when a run finishes —
+Swift persists it with `@AppStorage`, and this port has no settings-storage
+mechanism yet; wiring the auto-trigger would also mean reaching into
+`ChatViewModel`'s turn lifecycle from Code Mode, a boundary Fase 5 confirmed
+working that this pass isn't willing to risk without a human running it.
+
 `CodeModePage` is a fresh design (not a port — `CodeModeView.swift` is 900
-lines including Auto-PR, which this pass still excludes): changed files with
-per-file Stage/Revert on the left, the
+lines including the Auto-PR toggle, which this pass still excludes): changed
+files with per-file Stage/Revert on the left, the
 selected file's diff on the right (a `+`/`-`/`@@` glyph gutter via the new
 `DiffLineKindToGlyphConverter`), a branch bar (switch via `ComboBox`, create
 via a `Flyout`), a "Pull Request" `Flyout` (same pattern as MainPage's
 "Connect Claude") wired to `PullRequestViewModel`, a commit message box
-with Commit/Push, and now a collapsible terminal panel across the bottom
+with Commit/Push/**Commit + PR**, and a collapsible terminal panel across
+the bottom
 (command + trimmed output, toggled via a plain code-behind click handler —
 no ViewModel-bound bool needed for pure UI state). Deliberately in its **own window** (`CodeModeWindow`, same
 thin-shell pattern as `MainWindow`/`MainPage`) rather than embedded in

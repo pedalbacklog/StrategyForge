@@ -15,11 +15,19 @@ namespace Coral.Core.ViewModels;
 /// SCOPE: only what <see cref="GitHubCLI"/> already ports —
 /// <see cref="RefreshAsync"/> (read the PR for a branch),
 /// <see cref="CreateAsync"/> (open one), <see cref="MergeAsync"/> (merge
-/// it). Deliberately NOT here: Auto-PR (auto-commit + push + open/update a
-/// PR when a run finishes — a policy decision layered on top of these
-/// primitives, not a primitive itself) and repo browse/create
-/// (<c>GitHubCLI.ListReposAsync</c>/<c>CreateRepoAsync</c> back a repo-picker
-/// flow, a different screen entirely).
+/// it), and now <see cref="ShipAsync"/> — the one-tap "Commit + PR" engine
+/// (commit → push → open-or-skip a PR), delegating the actual git+gh calls
+/// to <see cref="ShipFlow"/> rather than duplicating them here, so
+/// this ViewModel still doesn't take a dependency on
+/// <see cref="GitPanelViewModel"/> (its caller passes in whatever git state
+/// it needs — repo path, branch, staged-ness). Deliberately NOT here yet:
+/// wiring <see cref="ShipAsync"/> to auto-fire when a run finishes (Auto-PR's
+/// opt-in toggle) — that needs a settings-persistence mechanism this port
+/// hasn't built yet, and reaching into <see cref="ChatViewModel"/>'s turn
+/// lifecycle from here would cross a boundary Fase 5 confirmed working and
+/// this pass isn't willing to risk without a human running it — and repo
+/// browse/create (<c>GitHubCLI.ListReposAsync</c>/<c>CreateRepoAsync</c> back
+/// a repo-picker flow, a different screen entirely).
 /// </summary>
 public sealed class PullRequestViewModel : ObservableObject
 {
@@ -88,6 +96,42 @@ public sealed class PullRequestViewModel : ObservableObject
             {
                 StatusMessage = $"Error: {output}";
             }
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>Commit, push, and open a PR for <paramref name="branch"/> —
+    /// or, if one's already open, just report it as updated (the push alone
+    /// brings gh's existing PR up to date). <paramref name="repoPath"/>/
+    /// <paramref name="anyStaged"/> are passed in by the caller (ultimately
+    /// <see cref="GitPanelViewModel"/>) rather than read from it directly —
+    /// see this type's doc comment. On a freshly-created PR, clears
+    /// <see cref="Title"/>/<see cref="Body"/> same as <see cref="CreateAsync"/>
+    /// does.</summary>
+    public async Task ShipAsync(string repoPath, string branch, string commitMessage, string prTitle,
+        string prBody, bool anyStaged, bool auto = false, CancellationToken ct = default)
+    {
+        if (IsBusy) return;
+        IsBusy = true;
+        try
+        {
+            var result = await ShipFlow.RunAsync(_launcher, repoPath, commitMessage, prTitle, prBody,
+                auto, anyStaged, hadPR: Info != null, _resolveBinary, ct);
+            if (!result.Ok)
+            {
+                StatusMessage = $"Error: {result.Error}";
+                return;
+            }
+            StatusMessage = result.PrWasCreated ? "Pull request opened." : "Pull request updated.";
+            if (result.PrWasCreated)
+            {
+                Title = "";
+                Body = "";
+            }
+            await RefreshAsync(branch, ct);
         }
         finally
         {

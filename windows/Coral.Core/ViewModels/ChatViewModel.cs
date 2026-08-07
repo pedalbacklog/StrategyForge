@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Linq;
 using Coral.Core.Services;
 
 namespace Coral.Core.ViewModels;
@@ -267,6 +268,30 @@ public sealed class ChatViewModel : ObservableObject
         var m = new ChatMessage(ChatRole.Assistant, "");
         Messages.Add(m);
         return m;
+    }
+
+    /// <summary>Draft a commit message from the agent's last reply — its first
+    /// line, capped at 64 chars. Empty if no assistant message has arrived
+    /// yet. Port of <c>CodeModeView.swift</c>'s <c>draftMessage()</c>, moved
+    /// here (rather than Code Mode's own ViewModel) since it only needs
+    /// <see cref="Messages"/>, which this type already owns.</summary>
+    public string DraftCommitMessage()
+    {
+        var last = Messages.LastOrDefault(m => m.Role == ChatRole.Assistant)?.Text;
+        if (string.IsNullOrEmpty(last)) return "";
+        var firstLine = last.Split('\n')[0].Trim();
+        return firstLine.Length > 64 ? firstLine[..64] + "…" : firstLine;
+    }
+
+    /// <summary>Draft a PR body from the agent's last reply, capped at 1200
+    /// chars, with a footer. Port of <c>CodeModeView.swift</c>'s <c>prBody()</c>.</summary>
+    public string DraftPrBody()
+    {
+        const string footer = "\n\n— Opened from Coral.";
+        var last = (Messages.LastOrDefault(m => m.Role == ChatRole.Assistant)?.Text ?? "").Trim();
+        if (last.Length == 0) return "Opened from Coral.";
+        var capped = last.Length > 1200 ? last[..1200] + "…" : last;
+        return capped + footer;
     }
 
     /// <summary>Port of <c>ChatViewModel.swift</c>'s <c>trimmed(_:limit:)</c>: a

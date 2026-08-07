@@ -117,4 +117,62 @@ public class PullRequestViewModelTests
 
         Assert.Equal("Error: checks have not passed", vm.StatusMessage);
     }
+
+    private static readonly Func<string, string?> ResolveGitAndGh =
+        n => n switch { "git" => "/usr/bin/git", "gh" => "/usr/bin/gh", _ => null };
+
+    [Fact]
+    public async Task ShipAsyncCommitsPushesAndOpensAPrWhenNoneExistedYet()
+    {
+        var launcher = new FakeProcessLauncher((file, args) =>
+        {
+            if (file.EndsWith("gh")) return new FakeChildProcess(new List<string> { "https://github.com/o/r/pull/9" });
+            if (args.Contains("commit")) return new FakeChildProcess(new List<string> { "[main abc] msg" });
+            return new FakeChildProcess(new List<string> { "main" });
+        });
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGitAndGh);
+
+        await vm.ShipAsync("/repo", "feature-x", "fix the bug", "Fix the bug", "details", anyStaged: false);
+
+        Assert.Equal("Pull request opened.", vm.StatusMessage);
+        Assert.False(vm.IsBusy);
+    }
+
+    [Fact]
+    public async Task ShipAsyncReportsUpdatedInsteadOfOpeningASecondPr()
+    {
+        var launcher = new FakeProcessLauncher((file, args) =>
+        {
+            if (file.EndsWith("gh") && args.Contains("view"))
+            {
+                return new FakeChildProcess(new List<string>
+                {
+                    """{"number":9,"state":"OPEN","url":"https://github.com/o/r/pull/9","title":"Fix","isDraft":false}""",
+                });
+            }
+            if (file.EndsWith("gh")) return new FakeChildProcess(new List<string>()); // create shouldn't be called
+            if (args.Contains("commit")) return new FakeChildProcess(new List<string> { "[main abc] msg" });
+            return new FakeChildProcess(new List<string> { "main" });
+        });
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGitAndGh);
+        await vm.RefreshAsync("feature-x"); // populates Info, so ShipAsync sees hadPR: true
+
+        await vm.ShipAsync("/repo", "feature-x", "fix the bug", "Fix the bug", "details", anyStaged: false);
+
+        Assert.Equal("Pull request updated.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task ShipAsyncReportsFailureWhenTheCommitFails()
+    {
+        var launcher = new FakeProcessLauncher((_, args) =>
+            args.Contains("commit")
+                ? new FakeChildProcess(new List<string>(), exitCode: 1, stderr: "fatal: not a git repository")
+                : new FakeChildProcess(new List<string>()));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGitAndGh);
+
+        await vm.ShipAsync("/repo", "feature-x", "msg", "t", "b", anyStaged: false);
+
+        Assert.Equal("Error: fatal: not a git repository", vm.StatusMessage);
+    }
 }
