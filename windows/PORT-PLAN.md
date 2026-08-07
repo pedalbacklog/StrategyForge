@@ -227,14 +227,18 @@ Fase 5 — Chat MVP                    ✅ cerrada — confirmado funcionando en
                                       quedó verificado por el founder, no solo
                                       revisado o compilado
                                       (ver §10)
-Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewModel.cs
-                                      + botón "Connect Claude" en MainPage,
-                                      todo portado/construido, probado con
-                                      fakes, y CONFIRMADO compilando en
-                                      windows-latest CI (ver §10); AÚN sin
-                                      correr contra npm/claude reales en
-                                      Windows — lo único que falta para
-                                      cerrar esta fase
+Fase 6 — Instalación de CLIs         ✅ ProviderInstaller.cs + ConnectViewModel.cs
+                                      + botón "Connect Claude" en MainPage —
+                                      CONFIRMADO de punta a punta en Windows
+                                      real: npm install real, `claude auth
+                                      login` real, navegador real, login
+                                      resuelto por loopback hasta "Connected."
+                                      (ver más abajo en esta sección). El
+                                      camino de pegar código a mano sigue sin
+                                      ejercitarse contra un CLI real en vivo
+                                      (dos intentos, los dos resueltos por
+                                      loopback antes de necesitarlo) — cubierto
+                                      por tests con fakes, no bloqueante
 Fase 7 — Code mode                   🔶 Capa de servicio completa + UI real
                                       (git panel, diff viewer, flujo de PR,
                                       selector de repo, panel de terminal,
@@ -1024,20 +1028,30 @@ bugs reales en el camino (compilación rota por `x:Bind` en `Window`, ventana
 en blanco por un recurso mal ubicado, mojibake por no fijar UTF-8, texto no
 seleccionable, scroll que no seguía el streaming) — detalle completo en §10.
 
-**Fase 6 (Instalación de CLIs) en marcha — servicio + ViewModel + UI ya
-construidos, sin verificar en Windows real todavía.** `ProviderInstaller.cs`
+**Fase 6 (Instalación de CLIs) cerrada — confirmada de punta a punta en
+Windows real (2026-08-07).** `ProviderInstaller.cs`
 (instalación vía npm, sign-in headless reutilizando la primitiva ConPTY de
 Fase 3, flujo `Connect` unificado) y `ConnectViewModel.cs` (la capa de UI que
 lo consume — mismo patrón que `ChatViewModel`) escritos y probados con fakes
-(35 tests nuevos entre ambos, 195 en total) — detalle en §6. `MainPage.xaml`
-gana un botón "Connect Claude" con un panel de instalación/log/estado/código.
-A diferencia de Fase 3/5, ningún test hasta ahora llamó a un `npm` real ni a
-un `claude auth login` real esperando autenticación por una pseudo-consola
-real, y la UI nueva (un `Flyout` con contenido `x:Bind`, patrón no usado
-antes en este proyecto) tampoco se ha visto correr — eso es lo único que
-falta para cerrar esta fase del todo. `ManualProviderInstallerSmokeTest.cs`
-(nuevo, detalle en §6) ya existe para esa verificación en cuanto haya
-oportunidad de correrla en Windows real.
+(35 tests nuevos entre ambos, 195 en total en su momento) — detalle en §6.
+`MainPage.xaml` gana un botón "Connect Claude" con un panel de
+instalación/log/estado/código, más un aviso en la cabecera para cuando el
+flyout no está a la vista (ver más abajo en esta sección — dos bugs reales
+de UI encontrados y arreglados por el camino). El founder pulsó "Connect
+Claude" de verdad, con `claude` ya instalado por npm: el navegador se abrió
+solo, la autorización de OAuth se completó, y el log de la app mostró
+"Connected." — login real, de punta a punta, confirmado. El camino de pegar
+el código a mano (la caja "Paste the code from the browser" + Submit)
+llegó a mostrarse correctamente en pantalla (confirmando que el aviso de
+cabecera y el bloqueo de auto-cierre del flyout funcionan), pero el propio
+`claude auth login` resolvió el login por su listener local (loopback) antes
+de que hiciera falta pulsar Submit — dos intentos reales, los dos por ese
+camino. `SubmitCodeAsync()`/`LoginInput.SubmitAsync()` siguen sin
+ejercitarse contra un CLI real esperando ese envío concreto (solo contra
+fakes) — un hueco de cobertura real pero no bloqueante, ya que depende de
+una condición de red que este port no controla (que el loopback local falle
+o esté bloqueado). `ManualProviderInstallerSmokeTest.cs` (detalle en §6)
+sigue disponible como verificación automatizada equivalente.
 
 ## 10. Bitácora de verificación en Windows real
 
@@ -1229,3 +1243,53 @@ siguió trabajando en local (`dotnet test`/`dotnet build` de `Coral.Core`/
 de quedarse esperando sin avanzar. Lección: una incidencia de infraestructura
 de GitHub no bloquea el desarrollo local, solo la verificación remota — hay
 trabajo real que seguir haciendo mientras se resuelve.
+
+> Nota editorial: el trabajo de Fase 7 completo y varios bugs reales de
+> Fase 6 (documentados más arriba, en el bloque de §9) se registraron por
+> error fuera de esta sección numerada durante varias sesiones seguidas —
+> se mantienen donde están para no reescribir el historial, pero las
+> entradas nuevas deberían ir aquí a partir de ahora.
+
+**2026-08-07 — Fase 6 (Connect Claude) cerrada: login real de punta a punta
+en Windows real, tras dos bugs de UI reales encontrados y arreglados en el
+camino.** El founder ejecutó "Connect Claude" contra un `claude` ya
+instalado por npm. Primer intento: el navegador se abrió, la página de
+`platform.claude.com` mostró un código para pegar de vuelta en la app — pero
+la app no mostraba ninguna caja para pegarlo, y el founder acabó pegando el
+código, por confusión, en la caja de chat principal ("Ask Coral…") en vez de
+en el login, que el CLI (correctamente) rechazó con "Not logged in · Please
+run /login". Causa raíz: `MainPage.xaml`'s `Flyout` de "Connect Claude"
+tenía `Closed="OnConnectFlyoutClosed"` → `ConnectViewModel.CancelConnect()`,
+pero un `Flyout` de WinUI3 hace *light-dismiss* automático ante cualquier
+clic o cambio de foco de ventana fuera de él — y abrir el navegador con
+`Process.Start` es exactamente eso: la ventana pierde el foco, el flyout se
+cierra solo, y ese cierre cancelaba TODO el flujo justo en el paso en el que
+se pide ir al navegador. `ProviderConnectSheet.swift` (el original de
+macOS) nunca tuvo este problema: una `.sheet` modal no se auto-descarta por
+perder el foco de ventana — es un efecto secundario de portar a un
+primitivo de UI con semántica de descarte distinta, no un fallo de lógica
+del ViewModel. Primer arreglo: quitar la cancelación al cerrar. Insuficiente
+por sí solo — un segundo intento mostró el mismo síntoma (el flyout seguía
+cerrándose visualmente, solo dejamos de cancelar la operación de fondo).
+Segundo arreglo: un handler `Closing` (cancelable, a diferencia de `Closed`)
+que bloquea el *light-dismiss* del todo mientras `ConnectViewModel.
+IsConnecting` sea true, acotado por el timeout de 150s ya existente en
+`RunSignInAsync`. Como red de seguridad adicional mientras no había forma
+de confirmar si ese segundo arreglo bastaba por sí solo (una reproducción
+intermedia fue ambigua: el flyout apareció cerrado al volver del navegador,
+sin evidencia de si el login había terminado rápido de verdad o si el
+cierre por desactivación de ventana se saltó `Closing`), se añadió un aviso
+persistente en la cabecera de `MainPage` ("⚠ Paste the code — click Connect
+Claude"), fuera del flyout, visible mientras `NeedsCode` sea true. Con las
+tres piezas en su sitio, la siguiente corrida real fue limpia: el aviso de
+cabecera apareció, el flyout se mantuvo abierto con la caja de pegar código
+visible, y el login se resolvió por el listener local (loopback) de
+`claude auth login` antes de que hiciera falta pulsar Submit — terminando
+en "Connected." tanto en el log de la app como en la página de éxito del
+navegador ("Sign in successful… Ya puedes cerrar esta ventana"). Confirma
+la Fase 6 de punta a punta: npm install real, sign-in real, browser real,
+login real. Hueco de cobertura que queda, no bloqueante: el propio envío
+manual de un código (`SubmitCodeAsync`/`LoginInput.SubmitAsync`) nunca se
+ha ejercitado contra un CLI real esperando ese envío concreto — los dos
+intentos reales se resolvieron por loopback antes de necesitarlo; sigue
+cubierto solo por tests con fakes.

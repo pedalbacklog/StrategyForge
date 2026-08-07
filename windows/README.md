@@ -319,7 +319,8 @@ browser code, reads one from stdin.
 **Fase 1 (scaffolding) done**; **Fase 2 (portable core) done**;
 **Fase 3 (process runner) done**; **Fase 4 (secretos + auth) started** (scope
 deliberately cut, see below); **Fase 5 (Chat MVP) done — confirmed end to end
-on real Windows** — see `PORT-PLAN.md` §6 for the live
+on real Windows**; **Fase 6 (Instalación de CLIs) done — confirmed end to
+end on real Windows** — see `PORT-PLAN.md` §6 for the live
 done/remaining checklist. Ported: the full "Strategy → subagent `.md` files +
 CLAUDE.md + dynamic workflow + MCP configs, written to disk" path
 (`AgentRole`/`Strategy`/validation + `Strategy.AutoFixed()` +
@@ -418,16 +419,15 @@ pointer to a heap copy of the `HPCON` handle instead of the handle value
 itself). Full story, including a red herring that turned out to be a Windows
 Terminal ConPTY-passthrough artifact rather than a bug, in `PORT-PLAN.md` §10.
 
-**Fase 6 (Instalación de CLIs) is in progress: the service layer, its
-ViewModel, and a first UI surface are all built and unit-tested, but nothing
-has run on real Windows yet.** `ProviderInstaller.cs` covers npm-based CLI
+**Fase 6 (Instalación de CLIs) is done — confirmed end to end on real
+Windows.** `ProviderInstaller.cs` covers npm-based CLI
 install, headless sign-in (reusing the now-confirmed ConPTY primitive the
 same way the Swift original reuses `openpty`), Gemini's
 TUI-nudge-and-creds-mtime success detection, Antigravity-migration detection,
 and the unified install-then-sign-in `Connect()` flow. `ConnectViewModel.cs`
 consumes that event stream for a UI (same pattern as `ChatViewModel`), and
 `MainPage.xaml` now has a "Connect Claude" button/flyout wired to it — 35 new
-tests between the two (195 automated total). Deliberately deferred, each for
+tests between the two (195 automated total at the time). Deliberately deferred, each for
 being a platform redesign rather than a missing translation: an automated
 Node.js bootstrap (Swift's `installNode()` shells out to Homebrew; Windows
 has no single trusted equivalent verified in this port, so it falls back to
@@ -435,22 +435,17 @@ sending the user to nodejs.org, the same terminal state Swift itself uses
 when Homebrew isn't present), and the Terminal.app/AppleScript fallback
 (already dead code in Swift today — no provider needs a visible terminal
 anymore). Opening the sign-in URL in a browser IS wired up (`ConnectViewModel`'s
-injectable `openUrl`, defaulting to `Process.Start(UseShellExecute: true)`) —
-unlike the rest of Fase 6, this one piece is exercised by a real system call
-in production, just not yet run for real. Two things specifically need a real
-Windows machine before this phase can close: the `Flyout` with `x:Bind`
-content (a pattern not used elsewhere in this project yet, though the same
-underlying mechanism already works for `ChatList`'s `DataTemplate`), and —
-the actual point of this phase — clicking "Connect Claude" against a real
-npm install and a real `claude auth login`. `ManualProviderInstallerSmokeTest`
-(new — see "Testing the pieces that need a real Windows machine" above) is
-the tool for exactly that second piece, split into a safe-to-run-unattended
+injectable `openUrl`, defaulting to `Process.Start(UseShellExecute: true)`).
+`ManualProviderInstallerSmokeTest`
+(see "Testing the pieces that need a real Windows machine" above) remains
+available as an automated equivalent, split into a safe-to-run-unattended
 install check and an opt-in (`CORAL_MANUAL_RUN_SIGNIN=1`), interactive
 sign-in check that's honest about replacing your machine's Claude login when
-run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
+run. See `PORT-PLAN.md` §9/§10 for the full breakdown.
 
-**Update (2026-08-07): the `Flyout` concern above was real.** Clicking
-"Connect Claude" for real surfaced a genuine bug: the `Flyout` auto-dismisses
+**Update (2026-08-07): clicking "Connect Claude" for real surfaced two
+genuine UI bugs, both fixed, then a clean real login confirmed the phase
+closed.** The `Flyout` auto-dismisses
 (WinUI3's default "light dismiss" on any outside click or window-focus
 change) the instant the sign-in browser window opens and steals focus — and
 `Closed` was wired straight to `ConnectViewModel.CancelConnect()`, so the
@@ -461,11 +456,21 @@ sheets don't auto-dismiss on focus loss). First fix — no longer cancelling on
 light-dismissed when the browser stole focus, so the "paste the code" box
 kept vanishing before the user could reach it (confirmed the hard way — the
 founder ended up pasting the auth code into the main chat prompt box
-instead, since the login one wasn't visible). Real fix: a `Closing` handler
+instead, since the login one wasn't visible). Second fix: a `Closing` handler
 (cancellable, unlike `Closed`) that blocks the light-dismiss outright while
 `ConnectViewModel.IsConnecting` is true, bounded by `RunSignInAsync`'s
-existing 150s sign-in timeout. See `PORT-PLAN.md` §10 for the full writeup.
-Pending reconfirmation on real Windows after this second fix.
+existing 150s sign-in timeout. A stopgap header badge ("⚠ Paste the code —
+click Connect Claude", visible whenever `NeedsCode` is true, outside the
+Flyout) was added alongside it in case that still wasn't enough. It was
+enough: the next real run showed the badge, kept the flyout open with the
+code box visible, and finished with "Connected." — `claude auth login`
+resolved via its local loopback listener before a manual paste was even
+needed, closing the loop on a real npm install → real browser OAuth → real
+signed-in CLI. One coverage gap remains, non-blocking: `SubmitCodeAsync`/
+`LoginInput.SubmitAsync` (the actual manual-code-paste submission) has never
+fired against a real CLI waiting for it — both real attempts resolved via
+loopback first. Still covered by fake-based tests only. See `PORT-PLAN.md`
+§10 for the full writeup.
 
 **Fase 7 (Code mode) started: the whole service layer — `CodeGit` (all
 real-git operations, read/write/clone) and `GitHubCLI` (PR flow + repo
