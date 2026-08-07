@@ -108,17 +108,20 @@ public class ClaudeRunnerTests
     [Fact]
     public async Task ActivityResetsTheWatchdogSoALongQuietRunSurvives()
     {
-        // Three lines, each ~40ms apart, watchdog at 100ms — if bump() didn't
-        // reset the clock this would stall; it must complete normally instead.
+        // Three lines, each ~20ms apart, watchdog at 400ms (20x margin) — if
+        // bump() didn't reset the clock this would stall; it must complete
+        // normally instead. The margin needs to be wide: a 40ms/100ms (2.5x)
+        // gap flaked for real on a loaded CI runner (scheduler jitter pushed
+        // one inter-line gap past the watchdog window), not just in theory.
         var lines = Enumerable.Range(0, 3)
             .Select(_ => """{"type":"result","subtype":"success","result":"ok"}""")
             .ToList();
         var launcher = new FakeProcessLauncher((_, _) =>
-            new FakeChildProcess(lines, exitCode: 0, delayBetweenLines: TimeSpan.FromMilliseconds(40)));
+            new FakeChildProcess(lines, exitCode: 0, delayBetweenLines: TimeSpan.FromMilliseconds(20)));
 
         var events = await Collect(ClaudeRunner.Stream(launcher, "claude", "/repo", "hello",
             "claude-sonnet-5", "sess-1", resume: false, permissionMode: "default",
-            inactivityTimeout: TimeSpan.FromMilliseconds(100),
+            inactivityTimeout: TimeSpan.FromMilliseconds(400),
             resolveBinary: _ => "/resolved/claude"));
 
         // 3 "finished" results (one per success line) + the final clean-exit Finished.
