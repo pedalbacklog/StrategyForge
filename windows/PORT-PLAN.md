@@ -877,7 +877,22 @@ así que reabrir el flyout ahora debería mostrar el progreso real donde se
 quedó, en vez de cancelarlo. `ConnectViewModel.CancelConnect()` sigue
 existiendo como API pública (cubierta por tests) para un futuro botón
 "Cancel" explícito — simplemente ya no está cableada al cierre implícito
-del flyout. Pendiente de reconfirmación real tras este fix.
+del flyout.
+
+**Confirmado en CI y en Windows real.** Commit `7b94969`, run
+[31193766949](https://github.com/pedalbacklog/StrategyForge/actions/runs/31193766949)
+(`windows-latest`, `workflow_dispatch`) verde a nivel de step:
+`Test Coral.Core (via Coral.Tests)` → success (293/293) y `Build the WinUI 3
+app (Coral)` → success. El founder reprodujo el flujo tras el fix y el
+sign-in terminó con éxito — esta vez sin pedir código (el CLI resolvió el
+login vía loopback en lugar del camino de pegar código manualmente; ambos
+son comportamientos legítimos de `claude auth login`, no algo que este port
+controle). Queda pendiente reconfirmar específicamente el camino CON código
+(cerrando sesión del CLI primero, borrando/renombrando
+`%USERPROFILE%\.claude\.credentials.json`) para verificar que la caja
+"Paste the code from the browser" + Submit aparece y funciona una vez
+arreglado el auto-cierre del flyout — es la parte del fix que aún no se ha
+visto renderizada de verdad.
 
 293 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
