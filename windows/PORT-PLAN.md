@@ -938,8 +938,13 @@ sea true — así, aunque el flyout se cierre por lo que sea, el usuario ve
 una señal persistente de que hay un código pendiente, en vez de depender de
 pillar la ventana emergente en el momento exacto. No resuelve la causa raíz
 (sigue sin saberse cuál de las dos es), pero hace el síntoma observable y
-manejable mientras se decide. Reintentar con más cuidado en el próximo pase
-— ver checklist de reanudación al final de esta sección.
+manejable mientras se decide. **Confirmado en CI**: commit `47fc459`, run
+[31195743149](https://github.com/pedalbacklog/StrategyForge/actions/runs/31195743149)
+(`windows-latest`, `workflow_dispatch`), verde a nivel de step incluyendo
+"Build the WinUI 3 app (Coral)" — el aviso nuevo en la cabecera compila bien.
+Reintentar con más cuidado en el próximo pase — ver checklist de reanudación
+al final de esta sección. La sesión se pausó aquí; nadie ha vuelto a probar
+"Connect Claude" todavía tras este commit.
 
 293 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
