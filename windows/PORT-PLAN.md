@@ -229,17 +229,18 @@ Fase 5 — Chat MVP                    ✅ cerrada — confirmado funcionando en
                                       (ver §10)
 Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewModel.cs
                                       + botón "Connect Claude" en MainPage,
-                                      todo portado/construido y probado con
-                                      fakes (ver §6); AÚN sin correr contra
-                                      npm/claude reales en Windows — lo único
-                                      que falta para cerrar esta fase
-Fase 7 — Code mode                   🔶 Capa de servicio completa (ver §6) +
-                                      primera UI real (CodeModePage: panel de
-                                      git + diff viewer, en una ventana propia
-                                      para no arriesgar la UI de Fase 5/6 ya
-                                      confirmada) — sin verificar en Windows
-                                      real todavía; falta terminal, PR en la
-                                      UI, y correr contra un repo real
+                                      todo portado/construido, probado con
+                                      fakes, y CONFIRMADO compilando en
+                                      windows-latest CI (ver §10); AÚN sin
+                                      correr contra npm/claude reales en
+                                      Windows — lo único que falta para
+                                      cerrar esta fase
+Fase 7 — Code mode                   🔶 Capa de servicio completa + UI real
+                                      (git panel, diff viewer, flujo de PR,
+                                      selector de repo) — CONFIRMADO
+                                      compilando en windows-latest CI (ver
+                                      §10); falta terminal y verificación
+                                      visual real en Windows
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -732,7 +733,41 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
   y refresca, create con fallo que conserva el título, merge con
   éxito/fallo) — 265 en total.
 
-265 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+- ✅ **`RepoPickerViewModel.cs` + botón "Open Repo" en `MainPage`** — el
+  "selector de repo" que quedaba pendiente desde Fase 5 (`PORT-PLAN.md`
+  llevaba varias entradas diciendo "sin selector de repo todavía"). Une
+  `GitHubCLI.ListReposAsync` (navegar los repos del usuario), `CodeGit.
+  CloneAsync` (clonar por URL) y `GitHubCLI.CreateRepoAsync` (crear uno
+  nuevo) en un solo ViewModel, con `createDirectory`/`pathExists`
+  inyectables igual que los servicios que envuelve, así que el camino
+  feliz de clone/create es tan testeable como el resto. Deliberadamente
+  NO intenta cambiar el repo activo de una sesión de chat/Code Mode ya
+  abierta — al clonar o crear con éxito, abre una `MainWindow` NUEVA
+  apuntando al path resultante, en vez de mutar el `RepoPath`/`ViewModel`
+  de la página actual (que son `OneTime`-bound a propósito, ver Fase 5) —
+  más simple y de menor riesgo que hacerlos reasignables en caliente.
+  8 tests nuevos — 273 en total.
+
+**Hito: primer run de CI de verdad, con la incidencia de GitHub ya resuelta
+(2026-08-07, ~05:26 UTC).** El run para el commit `465085f` pasó completo,
+incluyendo por primera vez el paso "Build the WinUI 3 app (Coral)" — hasta
+ahora esta rama había acumulado 11 commits sin que CI llegara nunca a
+compilar el proyecto WinUI3 de verdad, por la incidencia de horas de GitHub
+Actions (ver más abajo en esta sección). El único fallo que sí llegó a
+producirse en un run real (`23b2e0a`, antes de este) no era del código de
+hoy: `ClaudeRunnerTests.ActivityResetsTheWatchdogSoALongQuietRunSurvives`
+resultó ser un test con un margen de tiempo demasiado ajustado (40ms de
+delay contra un watchdog de 100ms, 2.5x) que ya había fallado una vez en
+este mismo sandbox bajo carga — confirmado no relacionado con nada portado
+en esta sesión (la lógica del watchdog de `ClaudeRunner` no se tocó).
+Arreglado ensanchando el margen a 20x (20ms/400ms), verificado con 5
+corridas locales seguidas antes de repushear. Con esto, TODO el trabajo
+acumulado de Fase 6/7 de hoy —`ProviderInstaller`, `ConnectViewModel`, el
+flyout "Connect Claude", `CodeGit`, `GitHubCLI`, `GitPanelViewModel`,
+`PullRequestViewModel`, `CodeModePage`/`CodeModeWindow`— está confirmado
+compilando de verdad contra el Windows App SDK, no solo en teoría.
+
+273 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
 los dos de Fase 3/5 **confirmados pasando en Windows real** (uno contra

@@ -17,9 +17,10 @@ namespace Coral;
 /// A <see cref="Page"/> rather than living directly in <see cref="MainWindow"/>:
 /// WinUI 3's <c>Window</c> isn't a <c>FrameworkElement</c>, so x:Bind doesn't
 /// work at a Window's root — the standard pattern is a Window that just hosts
-/// a Page, with the actual bindings living on the Page. No repo picker yet —
-/// defaults to the user's home directory; no settings UI (model/effort/
-/// permission-mode are hardcoded sane defaults) — those are follow-up work,
+/// a Page, with the actual bindings living on the Page. Defaults to the
+/// user's home directory unless opened with an explicit repo path (see
+/// RepoPickerViewModel's "Open Repo" flyout); no settings UI (model/effort/
+/// permission-mode are hardcoded sane defaults) — that's follow-up work,
 /// not part of this minimal slice.
 /// </summary>
 public sealed partial class MainPage : Page
@@ -33,22 +34,29 @@ public sealed partial class MainPage : Page
     /// single-provider scope.</summary>
     public ConnectViewModel ConnectViewModel { get; }
 
+    /// <summary>Drives the "Open Repo" flyout — browse/clone/create a GitHub
+    /// repo. Opening one hands off to a NEW <see cref="MainWindow"/> rather
+    /// than swapping this page's own (OneTime-bound) repo in place.</summary>
+    public RepoPickerViewModel RepoPickerViewModel { get; }
+
     private ScrollViewer? _chatScrollViewer;
 
-    public MainPage()
+    public MainPage(string? repoPath = null)
     {
         // Set everything an x:Bind in the XAML reads BEFORE InitializeComponent():
         // default (OneTime) x:Bind expressions evaluate during that call, so a
         // property assigned only afterward would bind to null/default and never
         // update (OneTime bindings don't re-evaluate).
-        RepoPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        RepoPath = repoPath ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         ViewModel = new ChatViewModel(new RealProcessLauncher(), RepoPath);
         ConnectViewModel = new ConnectViewModel(new RealProcessLauncher(), new Win32PseudoConsoleLauncher(),
             AIProvider.Claude);
+        RepoPickerViewModel = new RepoPickerViewModel(new RealProcessLauncher());
 
         InitializeComponent();
 
         ViewModel.Messages.CollectionChanged += OnMessagesChanged;
+        RepoPickerViewModel.PropertyChanged += OnRepoPickerPropertyChanged;
     }
 
     /// <summary>Scroll on every new message AND on every streamed delta into the
@@ -90,6 +98,35 @@ public sealed partial class MainPage : Page
     private async void OnSubmitCodeClick(object sender, RoutedEventArgs e) => await ConnectViewModel.SubmitCodeAsync();
 
     private void OnCodeModeClick(object sender, RoutedEventArgs e) => new CodeModeWindow(RepoPath).Activate();
+
+    private async void OnOpenRepoFlyoutOpened(object sender, object e) => await RepoPickerViewModel.LoadReposAsync();
+
+    private async void OnRepoSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (((ListView)sender).SelectedItem is not RepoRef repo) return;
+        RepoPickerViewModel.CloneUrl = repo.Url;
+        await RepoPickerViewModel.CloneAsync(DefaultReposParentDir());
+    }
+
+    private async void OnCloneRepoClick(object sender, RoutedEventArgs e) =>
+        await RepoPickerViewModel.CloneAsync(DefaultReposParentDir());
+
+    private async void OnCreateRepoClick(object sender, RoutedEventArgs e) =>
+        await RepoPickerViewModel.CreateRepoAsync(DefaultReposParentDir());
+
+    /// <summary>Where a cloned/newly-created repo lands. No folder picker in
+    /// this first pass — the user's home directory, same default
+    /// <see cref="RepoPath"/> itself falls back to.</summary>
+    private static string DefaultReposParentDir() => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    /// <summary>Once a clone/create succeeds, open a NEW window pointed at
+    /// it — see the doc comment on <see cref="RepoPickerViewModel"/>.</summary>
+    private void OnRepoPickerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(RepoPickerViewModel.ResultRepoPath)) return;
+        if (RepoPickerViewModel.ResultRepoPath is not { } path) return;
+        new MainWindow(path).Activate();
+    }
 
     /// <summary>Scroll all the way to the bottom of the ListView's real
     /// scrollable content. Deliberately NOT ChatList.ScrollIntoView(lastItem):

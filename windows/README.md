@@ -171,8 +171,18 @@ windows/
   `ChatViewModel`/`ConnectViewModel`. Wraps `GitHubCLI.PrInfoAsync`/
   `CreatePRAsync`/`MergePRAsync`; the branch it acts on is passed in by the
   caller rather than owned here, since `GitPanelViewModel` is what tracks
-  the active branch. 7 tests; **not yet confirmed on real Windows** — see
-  Status.
+  the active branch. 7 tests. And `RepoPickerViewModel` (Fase 7): the repo
+  picker that had been the standing "Fase 5 leftover" for a while — browse
+  the signed-in user's GitHub repos, clone one by URL, or create a new one,
+  wrapping `GitHubCLI.ListReposAsync`/`CodeGit.CloneAsync`/`GitHubCLI.
+  CreateRepoAsync`. Deliberately doesn't try to hot-swap an already-open
+  session's repo — on success it hands `ResultRepoPath` to the caller,
+  which opens a fresh `MainWindow` pointed at it rather than mutating the
+  current page's `OneTime`-bound `RepoPath`. 8 tests. **All of Fase 6/7's
+  UI — `ConnectViewModel`'s flyout, `CodeModePage`, the "Open Repo"
+  flyout — is now CONFIRMED compiling against the real Windows App SDK on
+  `windows-latest` CI** (2026-08-07, see Status) — not yet run on a real
+  Windows machine, but no longer "written and hoped."
 
 `Coral.Tests` mirrors the matching macOS test files (`GeneratorTests`, `DiffTests`,
 `ModelJSONTests`), plus `ModelCatalogTests` parses the *real* repo-root `models.json`
@@ -189,7 +199,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **265/265**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **273/273**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -319,7 +329,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel` (Fase 7 — see below) — 265 automated
+`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel` (Fase 7 — see below) — 273 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -428,11 +438,12 @@ run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
 
 **Fase 7 (Code mode) started: the whole service layer — `CodeGit` (all
 real-git operations, read/write/clone) and `GitHubCLI` (PR flow + repo
-browse/create) — plus both ViewModels (`GitPanelViewModel`,
-`PullRequestViewModel`) are ported and unit-tested (265 automated total),
-and Code Mode now has a first real UI: `CodeModePage` in its own
-`CodeModeWindow`, opened from a new "Code Mode" button in `MainPage`.** Same
-scope discipline as
+browse/create) — plus all three ViewModels (`GitPanelViewModel`,
+`PullRequestViewModel`, `RepoPickerViewModel`) are ported and unit-tested
+(273 automated total), and Code Mode now has a first real UI: `CodeModePage`
+in its own `CodeModeWindow`, opened from a new "Code Mode" button in
+`MainPage`, plus an "Open Repo" flyout on `MainPage` itself (the repo
+picker that had been a standing Fase 5 leftover).** Same scope discipline as
 Fases 4/6: the diff/changed-files parsers, the read-only real-git calls
 (current branch, branch stat, changed files, has-uncommitted-changes), the
 write actions a git panel needs (stage/unstage/revert/staged-files/commit/
@@ -470,18 +481,32 @@ via a `Flyout`), a "Pull Request" `Flyout` (same pattern as MainPage's
 "Connect Claude") wired to `PullRequestViewModel`, and a commit message box
 with Commit/Push. Deliberately in its **own window** (`CodeModeWindow`, same
 thin-shell pattern as `MainWindow`/`MainPage`) rather than embedded in
-`MainPage`, so this not-yet-real-Windows-verified UI can't put the
-already-confirmed Fase 5/6 chat flow at risk. **Not yet run on real
-Windows** — written with the same patterns already confirmed working
-(converters in `Page.Resources`, `ViewModel` set before
-`InitializeComponent()`, `UpdateSourceTrigger=PropertyChanged` on text
-inputs, and — new this round — relying on x:Bind's documented automatic
-null-propagation across a binding path like `PullRequestViewModel.Info.Title`
-rather than needing `?.` or a converter), but as with every prior XAML
-addition in this port, that's not a substitute for a real compile + a
-founder actually
-looking at it.
+`MainPage`, so this UI can't put the already-confirmed Fase 5/6 chat flow at
+risk. The "Open Repo" flyout on `MainPage` (`RepoPickerViewModel`) browses/
+clones/creates a repo and, on success, opens a **new** `MainWindow` pointed
+at it — `MainWindow`/`MainPage` now both take an optional `repoPath`
+parameter for this — rather than trying to hot-swap the current page's
+`OneTime`-bound `RepoPath` in place.
+
+**Milestone: as of 2026-08-07 (~05:26 UTC), all of this is CONFIRMED
+compiling for real on `windows-latest` CI**, including the "Build the WinUI
+3 app (Coral)" step — the first time that's happened since Fase 6/7 started;
+every earlier attempt that day hit a real, hours-long GitHub Actions
+infrastructure incident before a runner ever picked it up (see
+\ §10 for the full timeline). The one real (non-infra) CI failure that did
+surface along the way wasn't a code regression: `ClaudeRunnerTests.
+ActivityResetsTheWatchdogSoALongQuietRunSurvives` had a timing margin too
+tight for a loaded runner (2.5x, 40ms delay vs. a 100ms watchdog) — fixed by
+widening it to 20x, verified with 5 consecutive local runs before repushing.
+Still **not yet run on a real Windows machine by the founder** — the same
+gap Fase 5's UI had before five real bugs turned up despite a clean compile,
+so "compiles in CI" is a necessary signal here, not a sufficient one.
+Written with the same patterns already confirmed working (converters in
+`Page.Resources`, `ViewModel` set before `InitializeComponent()`,
+`UpdateSourceTrigger=PropertyChanged` on text inputs, and — new this round —
+relying on x:Bind's documented automatic null-propagation across a binding
+path like `PullRequestViewModel.Info.Title` rather than needing `?.` or a
+converter).
 Written while GitHub Actions was down (see below) — none of the service
 layer needs Windows or CI to build/test, so there was no reason to wait
-idle for it; the UI piece, unlike the service layer, DOES need a real
-Windows/CI check before it can be called done.
+idle for it.
