@@ -63,6 +63,16 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
+                <!-- Lives in the header, NOT inside the Flyout above: the Flyout can
+                     end up closed/hidden while a code is still pending (window
+                     deactivation isn't always preventable from Closing alone — see
+                     PORT-PLAN.md §10's Fase 6 entry), so this is the one signal
+                     guaranteed to stay visible regardless of the popup's own state.
+                     Purely informational — click "Connect Claude" again to reopen
+                     the flyout and actually paste the code. -->
+                <TextBlock Text="⚠ Paste the code — click Connect Claude" FontSize="11"
+                           Foreground="OrangeRed" VerticalAlignment="Center"
+                           Visibility="{x:Bind ConnectViewModel.NeedsCode, Mode=OneWay, Converter={StaticResource Visible}}" />
                 <Button Content="Code Mode" VerticalAlignment="Center" Click="OnCodeModeClick" />
                 <Button Content="Open Repo" VerticalAlignment="Center">
                     <Button.Flyout>

@@ -907,8 +907,39 @@ este problema: una `.sheet` modal de macOS simplemente no se auto-cierra por
 perder el foco, así que nunca necesitó una defensa explícita — WinUI3 sí, y
 ahora la tiene. Acotado por el timeout de 150s ya existente en
 `RunSignInAsync`: si el login se cuelga, `IsConnecting` vuelve a `false` al
-fallar y el flyout puede volver a cerrarse con normalidad. Pendiente de
-reconfirmación real en Windows (CI todavía no disparado para este commit).
+fallar y el flyout puede volver a cerrarse con normalidad. **Confirmado en
+CI** (commit `ab90d34`, run
+[31194701495](https://github.com/pedalbacklog/StrategyForge/actions/runs/31194701495),
+`windows-latest`, verde a nivel de step incluyendo "Build the WinUI 3 app
+(Coral)" — el nuevo `FlyoutBase.Closing`/`FlyoutBaseClosingEventArgs`
+compila bien).
+
+**Reintento del founder tras este fix: resultado ambiguo, sin cerrar del
+todo la fase.** Esta vez el flyout SÍ estaba abierto antes de ir al
+navegador (a diferencia del intento anterior), pero al volver ya estaba
+cerrado otra vez — sin ver ni la caja de pegar código ni el Submit. Dos
+explicaciones posibles, sin evidencia suficiente para decidir entre ellas:
+(a) el login se completó de verdad muy rápido sin llegar a pedir código
+(`IsConnecting` volvió a `false` legítimamente y el cierre fue correcto —
+plausible si la sesión ya estaba reconocida de algún modo, algo que el
+propio founder sospechó: "o no la he cerrado bien, o el navegador me la
+está reconociendo de alguna otra forma"), o (b) `Closing`/`e.Cancel` no
+basta para bloquear el cierre cuando la ventana entera pierde el foco frente
+a OTRA app (el navegador es un proceso/ventana totalmente distinta, no un
+clic fuera dentro de la misma ventana — WinUI3 puede forzar el cierre de
+popups por desactivación de ventana a un nivel que `Closing` no cubre).
+Reescribir el flyout entero a una `Window` separada (como `CodeModeWindow`)
+sería la solución más robusta si (b) es la causa real, pero es un cambio de
+más superficie sin poder verificarlo yo mismo en este sandbox — no se hizo
+a ciegas. En su lugar, ajuste de bajo riesgo y alto valor mientras tanto:
+un aviso "⚠ Paste the code — click Connect Claude" en la cabecera de
+`MainPage`, FUERA del `Flyout`, visible mientras `ConnectViewModel.NeedsCode`
+sea true — así, aunque el flyout se cierre por lo que sea, el usuario ve
+una señal persistente de que hay un código pendiente, en vez de depender de
+pillar la ventana emergente en el momento exacto. No resuelve la causa raíz
+(sigue sin saberse cuál de las dos es), pero hace el síntoma observable y
+manejable mientras se decide. Reintentar con más cuidado en el próximo pase
+— ver checklist de reanudación al final de esta sección.
 
 293 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
