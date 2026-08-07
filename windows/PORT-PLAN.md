@@ -704,8 +704,8 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
   5/6 que el founder ya confirmó funcionando de punta a punta. `MainPage`
   gana solo un botón "Code Mode" que abre la ventana.
   Deliberadamente NO en esta UI (ver el doc comment de `GitPanelViewModel`):
-  integración con GitHub/PR, Auto-PR, panel de terminal, ni cargar el
-  contenido crudo (no-diff) de un archivo.
+  Auto-PR, panel de terminal, ni cargar el contenido crudo (no-diff) de un
+  archivo.
   **Sin verificar en Windows real todavía** — escrito con la misma
   disciplina de las fases anteriores (patrones ya confirmados: converters en
   `Page.Resources`, `ViewModel` asignado antes de `InitializeComponent()`,
@@ -713,8 +713,26 @@ surge otra razón de producto para tener una identidad de usuario en Windows.
   igual que toda la UI de Fase 5 antes de que el founder la corriera, eso no
   sustituye una compilación real contra el Windows App SDK ni una
   verificación visual.
+- ✅ **`PullRequestViewModel.cs` — el flujo de PR de un tap, en la UI.**
+  Ampliando `CodeModePage` el mismo día: ViewModel nuevo y deliberadamente
+  SEPARADO de `GitPanelViewModel` (misma separación que `ConnectViewModel`/
+  `ChatViewModel` en `MainPage` — un ViewModel, una responsabilidad), que
+  envuelve `GitHubCLI.PrInfoAsync`/`CreatePRAsync`/`MergePRAsync`. El estado
+  de la rama no vive aquí — lo pasa `GitPanelViewModel` en cada llamada, ya
+  que ese sigue siendo el dueño de qué rama está activa. En `CodeModePage`,
+  un botón "Pull Request" con `Flyout` (mismo patrón que "Connect Claude" en
+  `MainPage`): título/estado del PR si existe, campos de título/descripción,
+  botones Create PR/Merge, mensaje de estado — `x:Bind` con rutas anidadas
+  que pueden ser null (`PullRequestViewModel.Info.Title`) confía en que
+  x:Bind genera sus propios null-checks automáticamente en cada segmento de
+  la ruta, a diferencia de `{Binding}` clásico — comportamiento documentado
+  de WinUI3, no una suposición nueva de este port.
+  7 tests nuevos contra fakes (refresh con/sin PR existente, create como
+  no-op con título en blanco, create con éxito que limpia título/descripción
+  y refresca, create con fallo que conserva el título, merge con
+  éxito/fallo) — 265 en total.
 
-258 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+265 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
 los dos de Fase 3/5 **confirmados pasando en Windows real** (uno contra

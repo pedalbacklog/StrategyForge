@@ -6,16 +6,19 @@ using Microsoft.UI.Xaml.Controls;
 namespace Coral;
 
 /// <summary>
-/// Code Mode's git panel (Fase 7, first pass): changed files on the left
-/// with per-file stage/revert, the selected file's diff on the right, a
-/// branch bar, and commit/push — wired to <see cref="GitPanelViewModel"/>.
-/// Deliberately NOT here (see GitPanelViewModel's own doc comment): the
-/// GitHub PR integration, Auto-PR, the terminal panel, and loading a file's
-/// raw (non-diff) contents — each is its own unported piece.
+/// Code Mode's git panel (Fase 7): changed files on the left with per-file
+/// stage/revert, the selected file's diff on the right, a branch bar,
+/// commit/push, and a "Pull Request" flyout — wired to
+/// <see cref="GitPanelViewModel"/> and <see cref="PullRequestViewModel"/>
+/// respectively (kept separate ViewModels on purpose — see each one's own
+/// doc comment). Deliberately NOT here: Auto-PR, the terminal panel, repo
+/// browse/create, and loading a file's raw (non-diff) contents — each is
+/// its own unported piece.
 /// </summary>
 public sealed partial class CodeModePage : Page
 {
     public GitPanelViewModel ViewModel { get; }
+    public PullRequestViewModel PullRequestViewModel { get; }
 
     public CodeModePage(string repoPath)
     {
@@ -23,11 +26,27 @@ public sealed partial class CodeModePage : Page
         // expressions evaluate during that call — see MainPage.xaml.cs for
         // the same ordering requirement.
         ViewModel = new GitPanelViewModel(new RealProcessLauncher(), repoPath);
+        PullRequestViewModel = new PullRequestViewModel(new RealProcessLauncher(), repoPath);
 
         InitializeComponent();
     }
 
     private async void OnPageLoaded(object sender, RoutedEventArgs e) => await ViewModel.RefreshAsync();
+
+    private async void OnPrFlyoutOpened(object sender, object e)
+    {
+        if (ViewModel.Branch is { } branch) await PullRequestViewModel.RefreshAsync(branch);
+    }
+
+    private async void OnCreatePrClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.Branch is { } branch) await PullRequestViewModel.CreateAsync(branch);
+    }
+
+    private async void OnMergePrClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.Branch is { } branch) await PullRequestViewModel.MergeAsync(branch);
+    }
 
     private async void OnFileSelectionChanged(object sender, SelectionChangedEventArgs e)
     {

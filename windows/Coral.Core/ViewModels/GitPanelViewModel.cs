@@ -14,15 +14,16 @@ namespace Coral.Core.ViewModels;
 /// no WinUI dependency, an injected <see cref="IProcessLauncher"/> so it's
 /// unit-testable with a fake).
 ///
-/// SCOPE: only what <see cref="CodeGit"/> already ports — changed files,
-/// per-file diff, stage/unstage/revert, commit/commit-staged, push, branch
-/// create/checkout. Deliberately NOT here: the GitHub PR integration
-/// (<c>GitHubCLI</c> in Swift — wraps the `gh` CLI, not ported at all yet),
-/// Auto-PR, and the terminal panel — each is its own unported piece with no
-/// C# service behind it yet, so wiring UI state for them now would be
-/// speculative. Also not wired: file content loading for the "file" view
-/// mode (`CodeModeView.swift`'s <c>fileText</c>) — this ViewModel is the git
-/// panel specifically, not the whole Code Mode workspace.
+/// SCOPE: only what <see cref="CodeGit"/> ports — changed files, per-file
+/// diff, stage/unstage/revert, commit/commit-staged, push, branch
+/// create/checkout. The GitHub PR integration is deliberately a SEPARATE
+/// ViewModel (<see cref="PullRequestViewModel"/>) even though
+/// <see cref="GitHubCLI"/> is ported now — keeps this one focused on git
+/// alone, the same separation <c>ConnectViewModel</c> keeps from
+/// <c>ChatViewModel</c> on <c>MainPage</c>. Still not wired anywhere: Auto-PR,
+/// the terminal panel, and file content loading for the "file" (non-diff)
+/// view mode (`CodeModeView.swift`'s <c>fileText</c>) — this ViewModel is the
+/// git panel specifically, not the whole Code Mode workspace.
 /// </summary>
 public sealed class GitPanelViewModel : ObservableObject
 {

@@ -163,10 +163,16 @@ windows/
   type behind it: `CodeModeView.swift` keeps this state as plain `@State` on
   the View itself, SwiftUI's norm, not a separate ViewModel class — so this
   is a fresh design in the same shape this port already established, not a
-  translation. Deliberately excludes the GitHub PR integration (`GitHubCLI`
-  in Swift, not ported), Auto-PR, and the terminal panel — none has a C#
-  service behind it yet. 10 tests; **not yet confirmed on real Windows** —
-  see Status.
+  translation. Deliberately excludes Auto-PR and the terminal panel — neither
+  has a C# service behind it yet. 10 tests; **not yet confirmed on real
+  Windows** — see Status. And `PullRequestViewModel` (Fase 7): the one-tap PR
+  flow, kept as its own ViewModel rather than folded into
+  `GitPanelViewModel` — same one-ViewModel-one-concern separation as
+  `ChatViewModel`/`ConnectViewModel`. Wraps `GitHubCLI.PrInfoAsync`/
+  `CreatePRAsync`/`MergePRAsync`; the branch it acts on is passed in by the
+  caller rather than owned here, since `GitPanelViewModel` is what tracks
+  the active branch. 7 tests; **not yet confirmed on real Windows** — see
+  Status.
 
 `Coral.Tests` mirrors the matching macOS test files (`GeneratorTests`, `DiffTests`,
 `ModelJSONTests`), plus `ModelCatalogTests` parses the *real* repo-root `models.json`
@@ -183,7 +189,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **258/258**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **265/265**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -313,7 +319,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI` (Fase 7 — see below) — 258 automated
+`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel` (Fase 7 — see below) — 265 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -421,9 +427,10 @@ sign-in check that's honest about replacing your machine's Claude login when
 run. See `PORT-PLAN.md` §6/§9 for the full breakdown.
 
 **Fase 7 (Code mode) started: the whole service layer — `CodeGit` (all
-real-git operations, read/write/clone), `GitPanelViewModel`, and `GitHubCLI`
-(PR flow + repo browse/create) — is ported and unit-tested (258 automated
-total), and Code Mode now has a first real UI: `CodeModePage` in its own
+real-git operations, read/write/clone) and `GitHubCLI` (PR flow + repo
+browse/create) — plus both ViewModels (`GitPanelViewModel`,
+`PullRequestViewModel`) are ported and unit-tested (265 automated total),
+and Code Mode now has a first real UI: `CodeModePage` in its own
 `CodeModeWindow`, opened from a new "Code Mode" button in `MainPage`.** Same
 scope discipline as
 Fases 4/6: the diff/changed-files parsers, the read-only real-git calls
@@ -443,28 +450,36 @@ than a separate ViewModel type. `GitHubCLI` adds the GitHub half: install/
 auth checks, opening/reading/merging a PR, and now also browsing/creating
 repos (`ListReposAsync`/`RepoRef`/`CreateRepoAsync`) — the same
 one-shot-subprocess shape as `CodeGit`, sharing the new `OneShotProcess`
-runner both now use instead of duplicating it. Still deliberately deferred:
-`searchCommunitySkills` (a different feature area — skills catalog discovery
-— with meaningfully more complex logic deserving its own scoped pass),
-Auto-PR, the terminal panel, and every worktree operation (used only for
-loop isolation, which is Fase 8's zone requiring human review of the diff,
-not just green tests — porting worktree logic here would sidestep that
-gate).
+runner both now use instead of duplicating it. `PullRequestViewModel` wraps
+the PR half of `GitHubCLI` as its own ViewModel — deliberately kept separate
+from `GitPanelViewModel` rather than merged in, the same one-ViewModel-
+one-concern split as `ChatViewModel`/`ConnectViewModel`. Still deliberately
+deferred: `searchCommunitySkills` (a different feature area — skills catalog
+discovery — with meaningfully more complex logic deserving its own scoped
+pass), Auto-PR, the terminal panel, and every worktree operation (used only
+for loop isolation, which is Fase 8's zone requiring human review of the
+diff, not just green tests — porting worktree logic here would sidestep
+that gate).
 
 `CodeModePage` is a fresh design (not a port — `CodeModeView.swift` is 900
-lines including the terminal panel and PR integration this pass deliberately
+lines including the terminal panel and Auto-PR this pass deliberately
 excludes): changed files with per-file Stage/Revert on the left, the
 selected file's diff on the right (a `+`/`-`/`@@` glyph gutter via the new
 `DiffLineKindToGlyphConverter`), a branch bar (switch via `ComboBox`, create
-via a `Flyout`), and a commit message box with Commit/Push. Deliberately in
-its **own window** (`CodeModeWindow`, same thin-shell pattern as
-`MainWindow`/`MainPage`) rather than embedded in `MainPage`, so this
-not-yet-real-Windows-verified UI can't put the already-confirmed Fase 5/6
-chat flow at risk. **Not yet run on real Windows** — written with the same
-patterns already confirmed working (converters in `Page.Resources`,
-`ViewModel` set before `InitializeComponent()`, `UpdateSourceTrigger=
-PropertyChanged` on the commit box), but as with every prior XAML addition
-in this port, that's not a substitute for a real compile + a founder actually
+via a `Flyout`), a "Pull Request" `Flyout` (same pattern as MainPage's
+"Connect Claude") wired to `PullRequestViewModel`, and a commit message box
+with Commit/Push. Deliberately in its **own window** (`CodeModeWindow`, same
+thin-shell pattern as `MainWindow`/`MainPage`) rather than embedded in
+`MainPage`, so this not-yet-real-Windows-verified UI can't put the
+already-confirmed Fase 5/6 chat flow at risk. **Not yet run on real
+Windows** — written with the same patterns already confirmed working
+(converters in `Page.Resources`, `ViewModel` set before
+`InitializeComponent()`, `UpdateSourceTrigger=PropertyChanged` on text
+inputs, and — new this round — relying on x:Bind's documented automatic
+null-propagation across a binding path like `PullRequestViewModel.Info.Title`
+rather than needing `?.` or a converter), but as with every prior XAML
+addition in this port, that's not a substitute for a real compile + a
+founder actually
 looking at it.
 Written while GitHub Actions was down (see below) — none of the service
 layer needs Windows or CI to build/test, so there was no reason to wait
