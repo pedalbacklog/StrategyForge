@@ -238,12 +238,10 @@ Fase 6 — Instalación de CLIs         🔶 ProviderInstaller.cs + ConnectViewM
 Fase 7 — Code mode                   🔶 Capa de servicio completa + UI real
                                       (git panel, diff viewer, flujo de PR,
                                       selector de repo, panel de terminal,
-                                      "Commit + PR") — todo menos ShipFlow/
-                                      "Commit + PR" CONFIRMADO compilando en
-                                      windows-latest CI (ver §10); ShipFlow es
-                                      nuevo y aún sin esa confirmación; falta
-                                      verificación visual real en Windows y
-                                      el toggle opt-in de Auto-PR
+                                      "Commit + PR") — TODO CONFIRMADO
+                                      compilando en windows-latest CI (ver
+                                      §10); falta verificación visual real en
+                                      Windows y el toggle opt-in de Auto-PR
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -842,6 +840,15 @@ compartido, el nuevo `xmlns:vm`, y el `ListView`/`DataTemplate` del panel
 de terminal en `CodeModePage.xaml` compilan de verdad contra el Windows
 App SDK, no solo localmente en Linux (donde el proyecto `Coral` en sí no
 puede compilarse). Todavía sin verificación visual real en Windows.
+
+**Hito: "Commit + PR" (`ShipFlow`) confirmado en CI.** Commit `e7a8093`, run
+[31162585239](https://github.com/pedalbacklog/StrategyForge/actions/runs/31162585239)
+(`windows-latest`, disparado por `workflow_dispatch`), verde a nivel de run
+Y a nivel de step: `Test Coral.Core (via Coral.Tests)` → success (293/293)
+y `Build the WinUI 3 app (Coral)` → success (no skipped) — confirma que el
+nuevo recurso `BoolNegationConverter x:Key="Negate"` y el botón "Commit + PR"
+en `CodeModePage.xaml` compilan de verdad contra el Windows App SDK.
+Todavía sin verificación visual real en Windows.
 
 293 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
