@@ -1379,4 +1379,10 @@ solas — quedan huérfanas pero intactas (con el trabajo/ramas de esas
 sesiones dentro, recuperable a mano si hace falta); solo se evita crear
 MÁS a partir de ahora. 2 tests nuevos en `RepoPickerViewModelTests`
 (abre sin clonar cuando la carpeta ya existe, clona cuando no) — 298 en
-total.
+total. **Confirmado en CI**: commit `62cbf2d`, run
+[31388764516](https://github.com/pedalbacklog/StrategyForge/actions/runs/31388764516)
+(`windows-latest`, `workflow_dispatch`), verde a nivel de step incluyendo
+"Build the WinUI 3 app (Coral)" — `OpenOrCloneAsync` compila bien. Pendiente
+de reconfirmación visual real en Windows (seleccionar el mismo repo dos
+veces seguidas desde "Open Repo" y comprobar que la segunda vez abre la
+misma carpeta en vez de crear una nueva).
