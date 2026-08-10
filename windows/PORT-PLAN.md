@@ -950,7 +950,7 @@ Reintentar con más cuidado en el próximo pase — ver checklist de reanudació
 al final de esta sección. La sesión se pausó aquí; nadie ha vuelto a probar
 "Connect Claude" todavía tras este commit.
 
-293 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
+296 xUnit tests automatizados en `Coral.Tests` a día de hoy (todos pasando,
 verificados con `dotnet test` real en este entorno además de en
 `windows-latest`) más 4 tests manuales (Category=Manual, excluidos del CI):
 los dos de Fase 3/5 **confirmados pasando en Windows real** (uno contra
@@ -1293,3 +1293,55 @@ manual de un código (`SubmitCodeAsync`/`LoginInput.SubmitAsync`) nunca se
 ha ejercitado contra un CLI real esperando ese envío concreto — los dos
 intentos reales se resolvieron por loopback antes de necesitarlo; sigue
 cubierto solo por tests con fakes.
+
+**2026-08-10 — Fase 7 (Code Mode), primera verificación visual real en
+Windows: tres bugs de UI encontrados y arreglados, panel de terminal
+confirmado funcionando.** El founder probó el flujo completo (Open Repo,
+git panel, ramas, commit/push, Commit + PR, terminal) contra un repo real.
+Push y el panel de terminal funcionaron tal cual (confirmado con captura:
+`$ ls -la` con salida real y el contador correcto), pero aparecieron tres
+bugs reales:
+
+1. **El flyout "New" (crear rama) no daba ningún aviso de éxito ni se
+   cerraba solo.** `GitPanelViewModel.CreateBranchAsync` no ponía ningún
+   `StatusMessage` en el camino feliz — solo en el de error — así que un
+   mensaje de error de un intento anterior (p. ej. "a branch named
+   'animated-sticker' already exists") se quedaba pegado en pantalla
+   indefinidamente, incluso después de una creación posterior con éxito, y
+   nada le decía al flyout que se cerrara tras crear la rama. Arreglado:
+   `CreateBranchAsync` ahora devuelve `bool` y pone un `StatusMessage` de
+   éxito ("Created branch 'x'."); `CodeModePage.xaml.cs` cierra el flyout
+   (`NewBranchFlyout.Hide()`) y limpia la caja de texto solo cuando la
+   creación tuvo éxito, dejándolo abierto en caso de error para poder
+   reintentar viendo el mensaje. Mismo arreglo aplicado a `CheckoutAsync`
+   (mismo patrón de "éxito silencioso"), aunque no fue lo reportado
+   explícitamente.
+2. **El `ComboBox` de ramas resaltaba en azul la primera rama de la lista,
+   no la rama realmente activa** (capturado en vivo: la rama activa real
+   era `main`, pero `animated-sticker` — la primera del desplegable —
+   aparecía resaltada). Causa raíz: `GitPanelViewModel.RefreshAsync()`
+   asignaba `Branch` ANTES de repoblar `Branches`; como el `ComboBox`'s
+   `SelectedItem` es un `x:Bind` `OneWay` cuya fuente es `Branch`, el push
+   del nuevo valor llegaba cuando `Branches` todavía no contenía ese string
+   (estaba a punto de vaciarse/rellenarse), así que WinUI3 no encontraba
+   ítem que resaltar — y al añadirse los ítems justo después, el `ComboBox`
+   termina auto-seleccionando el índice 0 por defecto, sin volver a
+   evaluar el binding (`Branch` no cambió de nuevo, así que no hay nuevo
+   push). Arreglado reordenando `RefreshAsync()`: `Branches` se repuebla
+   ANTES de asignar `Branch`. Sin test de regresión posible en
+   `Coral.Core`/`Coral.Tests` (no tienen dependencia de WinUI, así que no
+   pueden observar el binding de un `ComboBox` real) — exactamente el tipo
+   de bug que solo aparece corriendo la app de verdad en Windows.
+3. **Pulsar Enter en la caja de nombre de rama no disparaba "Create".**
+   `NewBranchBox` no tenía `KeyDown` cableado, a diferencia de `PromptBox`
+   en `MainPage` (que sí soporta Enter para enviar). Arreglado con un
+   `OnNewBranchBoxKeyDown` que replica el patrón ya usado en `MainPage`.
+
+Nota aparte, no arreglada: el desplegable del `ComboBox` de ramas puede
+tapar visualmente el `TextBlock` de la rama actual (justo encima) cuando la
+ventana es muy pequeña — comportamiento de posicionamiento de `Popup` de
+WinUI3 (voltea hacia arriba si no hay sitio abajo), no algo con un arreglo
+de una línea evidente; a revisar solo si sigue siendo un problema con la
+ventana a tamaño normal. 3 tests nuevos en `GitPanelViewModelTests`
+(`CreateBranchAsync` éxito/fallo, `CheckoutAsync` mensaje de éxito) — 296 en
+total. Pendiente de reconfirmación real tras estos arreglos.

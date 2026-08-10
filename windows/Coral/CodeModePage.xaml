@@ -48,9 +48,10 @@
                               SelectionChanged="OnBranchSelectionChanged" HorizontalAlignment="Stretch" />
                     <Button Grid.Column="1" Content="New">
                         <Button.Flyout>
-                            <Flyout>
+                            <Flyout x:Name="NewBranchFlyout">
                                 <StackPanel Width="220" Spacing="6">
-                                    <TextBox x:Name="NewBranchBox" PlaceholderText="branch-name" />
+                                    <TextBox x:Name="NewBranchBox" PlaceholderText="branch-name"
+                                             KeyDown="OnNewBranchBoxKeyDown" />
                                     <Button Content="Create" Click="OnCreateBranchClick" HorizontalAlignment="Right" />
                                 </StackPanel>
                             </Flyout>

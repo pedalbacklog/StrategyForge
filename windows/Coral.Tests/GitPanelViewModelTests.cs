@@ -166,6 +166,37 @@ public class GitPanelViewModelTests
     }
 
     [Fact]
+    public async Task CreateBranchAsyncReturnsTrueAndSetsASuccessMessage()
+    {
+        var launcher = new FakeProcessLauncher((_, args) =>
+            args.Contains("-b")
+                ? new FakeChildProcess(new List<string> { "Switched to a new branch 'feature-y'" })
+                : new FakeChildProcess(new List<string> { "main" }));
+        var vm = new GitPanelViewModel(launcher, "/repo", ResolveGit);
+
+        var ok = await vm.CreateBranchAsync("feature-y");
+
+        Assert.True(ok);
+        Assert.Equal("Created branch 'feature-y'.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task CreateBranchAsyncReturnsFalseAndKeepsTheErrorOnFailure()
+    {
+        var launcher = new FakeProcessLauncher((_, args) =>
+            args.Contains("-b")
+                ? new FakeChildProcess(new List<string>(), exitCode: 1,
+                    stderr: "a branch named 'feature-y' already exists")
+                : new FakeChildProcess(new List<string>()));
+        var vm = new GitPanelViewModel(launcher, "/repo", ResolveGit);
+
+        var ok = await vm.CreateBranchAsync("feature-y");
+
+        Assert.False(ok);
+        Assert.Equal("Error: a branch named 'feature-y' already exists", vm.StatusMessage);
+    }
+
+    [Fact]
     public async Task CheckoutAsyncRefreshesOnSuccess()
     {
         var launcher = MakeRefreshLauncher(branch: "feature-x");
@@ -174,5 +205,16 @@ public class GitPanelViewModelTests
         await vm.CheckoutAsync("feature-x");
 
         Assert.Equal("feature-x", vm.Branch);
+    }
+
+    [Fact]
+    public async Task CheckoutAsyncSetsASuccessMessage()
+    {
+        var launcher = MakeRefreshLauncher(branch: "feature-x");
+        var vm = new GitPanelViewModel(launcher, "/repo", ResolveGit);
+
+        await vm.CheckoutAsync("feature-x");
+
+        Assert.Equal("Switched to 'feature-x'.", vm.StatusMessage);
     }
 }

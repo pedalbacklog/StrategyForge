@@ -2,6 +2,8 @@ using Coral.Core.Services;
 using Coral.Core.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.System;
 
 namespace Coral;
 
@@ -109,8 +111,30 @@ public sealed partial class CodeModePage : Page
         }
     }
 
-    private async void OnCreateBranchClick(object sender, RoutedEventArgs e) =>
-        await ViewModel.CreateBranchAsync(NewBranchBox.Text);
+    private async void OnCreateBranchClick(object sender, RoutedEventArgs e) => await CreateBranchFromFlyoutAsync();
+
+    private async void OnNewBranchBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter) return;
+        e.Handled = true;
+        await CreateBranchFromFlyoutAsync();
+    }
+
+    /// <summary>Shared by the "Create" button and Enter in the branch-name
+    /// box. Closes the flyout and clears the box on success — otherwise
+    /// (real bug caught on real Windows) nothing told the user a branch had
+    /// been created, and the flyout just sat there open. Left open on
+    /// failure so the error in <see cref="GitPanelViewModel.StatusMessage"/>
+    /// stays visible and the name can be retried.</summary>
+    private async Task CreateBranchFromFlyoutAsync()
+    {
+        var name = NewBranchBox.Text;
+        if (await ViewModel.CreateBranchAsync(name))
+        {
+            NewBranchBox.Text = "";
+            NewBranchFlyout.Hide();
+        }
+    }
 
     /// <summary>Mirrors CodeModeView.swift's collapsible terminal — plain
     /// code-behind toggle rather than a bound bool, since it's pure UI state

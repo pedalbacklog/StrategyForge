@@ -86,11 +86,19 @@ public sealed class GitPanelViewModel : ObservableObject
             foreach (var s in staged) _stagedFiles.Add(s);
             OnPropertyChanged(nameof(StagedFiles));
 
-            Branch = await CodeGit.CurrentBranchAsync(_launcher, _repoPath, _resolveBinary, ct);
-
+            // Branches populated BEFORE Branch is (re)assigned: the ComboBox's
+            // x:Bind SelectedItem is a OneWay push sourced from Branch — if
+            // Branch changes while Branches doesn't contain that value yet,
+            // WinUI3 can't find a matching item to highlight and falls back to
+            // auto-selecting whatever ends up at index 0 once items are added,
+            // which looked like the wrong branch was "selected" (a real bug
+            // caught on real Windows, not visible from Coral.Core's own tests
+            // — no WinUI dependency here to observe it).
             var branches = await CodeGit.BranchesAsync(_launcher, _repoPath, _resolveBinary, ct);
             Branches.Clear();
             foreach (var b in branches) Branches.Add(b);
+
+            Branch = await CodeGit.CurrentBranchAsync(_launcher, _repoPath, _resolveBinary, ct);
 
             if (SelectedFile is null || !ChangedFiles.Any(f => f.Path == SelectedFile))
             {
@@ -200,18 +208,30 @@ public sealed class GitPanelViewModel : ObservableObject
         }
     }
 
-    /// <summary>Create a branch off HEAD and switch to it, then refresh.</summary>
-    public async Task CreateBranchAsync(string name, CancellationToken ct = default)
+    /// <summary>Create a branch off HEAD and switch to it, then refresh.
+    /// Returns whether it succeeded, so a caller (e.g. the "New" branch
+    /// flyout) can react — close itself, clear its textbox — only on
+    /// success, matching the feedback <see cref="CommitAsync"/>/
+    /// <see cref="PushAsync"/> already give.</summary>
+    public async Task<bool> CreateBranchAsync(string name, CancellationToken ct = default)
     {
         var trimmed = name.Trim();
-        if (trimmed.Length == 0 || IsBusy) return;
+        if (trimmed.Length == 0 || IsBusy) return false;
 
         IsBusy = true;
         try
         {
             var (ok, output) = await CodeGit.CreateBranchAsync(_launcher, _repoPath, trimmed, _resolveBinary, ct);
-            if (ok) await RefreshAsync(ct);
-            else StatusMessage = $"Error: {output}";
+            if (ok)
+            {
+                StatusMessage = $"Created branch '{trimmed}'.";
+                await RefreshAsync(ct);
+            }
+            else
+            {
+                StatusMessage = $"Error: {output}";
+            }
+            return ok;
         }
         finally
         {
@@ -227,8 +247,15 @@ public sealed class GitPanelViewModel : ObservableObject
         try
         {
             var (ok, output) = await CodeGit.CheckoutAsync(_launcher, _repoPath, branch, _resolveBinary, ct);
-            if (ok) await RefreshAsync(ct);
-            else StatusMessage = $"Error: {output}";
+            if (ok)
+            {
+                StatusMessage = $"Switched to '{branch}'.";
+                await RefreshAsync(ct);
+            }
+            else
+            {
+                StatusMessage = $"Error: {output}";
+            }
         }
         finally
         {

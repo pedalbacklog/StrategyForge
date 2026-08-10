@@ -212,7 +212,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **293/293**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **296/296**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -343,7 +343,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow` (Fase 7 — see below) — 293 automated
+`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow` (Fase 7 — see below) — 296 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -570,9 +570,28 @@ surface along the way wasn't a code regression: `ClaudeRunnerTests.
 ActivityResetsTheWatchdogSoALongQuietRunSurvives` had a timing margin too
 tight for a loaded runner (2.5x, 40ms delay vs. a 100ms watchdog) — fixed by
 widening it to 20x, verified with 5 consecutive local runs before repushing.
-Still **not yet run on a real Windows machine by the founder** — the same
-gap Fase 5's UI had before five real bugs turned up despite a clean compile,
-so "compiles in CI" is a necessary signal here, not a sufficient one.
+**Update (2026-08-10): now run on a real Windows machine, three real UI bugs
+found and fixed** — the same gap Fase 5's UI had before five real bugs
+turned up despite a clean compile, so "compiles in CI" was never a
+sufficient signal here, only a necessary one. Push and the terminal panel
+worked as designed on the first try. Three didn't: (1) the "New" branch
+flyout gave no success feedback and never closed itself —
+`GitPanelViewModel.CreateBranchAsync` only set `StatusMessage` on failure,
+so a stale error from an earlier attempt stayed on screen even after a
+later success; now returns `bool` and sets a success message, and
+`CodeModePage` closes the flyout + clears the textbox only on success
+(same fix applied to `CheckoutAsync`'s identical silent-success gap); (2)
+the branch `ComboBox` highlighted whichever branch happened to be first in
+the list, not the actually-active one — `GitPanelViewModel.RefreshAsync()`
+assigned `Branch` before repopulating `Branches`, so the `x:Bind`
+`SelectedItem`'s `OneWay` push landed while `Branches` didn't contain that
+value yet, and WinUI3 fell back to auto-selecting index 0 once items were
+added, never re-evaluating the binding; fixed by reordering `RefreshAsync`
+to populate `Branches` first — no regression test possible here, since
+`Coral.Core`/`Coral.Tests` have no WinUI dependency to observe a real
+`ComboBox` binding; (3) Enter in the branch-name box didn't trigger
+"Create" — no `KeyDown` handler was wired, unlike `MainPage`'s prompt box.
+3 new tests, 296 total. See `PORT-PLAN.md` §10 for the full writeup.
 Written with the same patterns already confirmed working (converters in
 `Page.Resources`, `ViewModel` set before `InitializeComponent()`,
 `UpdateSourceTrigger=PropertyChanged` on text inputs, and — new this round —
