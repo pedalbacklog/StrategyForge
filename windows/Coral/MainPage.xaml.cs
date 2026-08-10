@@ -114,8 +114,7 @@ public sealed partial class MainPage : Page
     private async void OnRepoSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (((ListView)sender).SelectedItem is not RepoRef repo) return;
-        RepoPickerViewModel.CloneUrl = repo.Url;
-        await RepoPickerViewModel.CloneAsync(DefaultReposParentDir());
+        await RepoPickerViewModel.OpenOrCloneAsync(repo, DefaultReposParentDir());
     }
 
     private async void OnCloneRepoClick(object sender, RoutedEventArgs e) =>

@@ -81,6 +81,33 @@ public class RepoPickerViewModelTests
     }
 
     [Fact]
+    public async Task OpenOrCloneAsyncOpensTheExistingFolderWithoutCloningWhenAlreadyPresent()
+    {
+        var called = false;
+        var launcher = new FakeProcessLauncher((_, _) => { called = true; return new FakeChildProcess(new List<string>()); });
+        var vm = new RepoPickerViewModel(launcher, Resolve, createDirectory: _ => { }, pathExists: _ => true);
+        var repo = new RepoRef("owner/foo", "", false, "git@github.com:owner/foo.git");
+
+        await vm.OpenOrCloneAsync(repo, "/parent");
+
+        Assert.False(called); // never re-cloned — no "-2" suffix, no wasted clone
+        Assert.Equal(Path.Combine("/parent", "foo"), vm.ResultRepoPath);
+    }
+
+    [Fact]
+    public async Task OpenOrCloneAsyncClonesWhenNotYetPresent()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string> { "Cloning..." }));
+        var vm = new RepoPickerViewModel(launcher, Resolve, createDirectory: _ => { }, pathExists: _ => false);
+        var repo = new RepoRef("owner/foo", "", false, "git@github.com:owner/foo.git");
+
+        await vm.OpenOrCloneAsync(repo, "/parent");
+
+        Assert.Equal(Path.Combine("/parent", "foo"), vm.ResultRepoPath);
+        Assert.Equal("git@github.com:owner/foo.git", vm.CloneUrl);
+    }
+
+    [Fact]
     public async Task CreateRepoAsyncIsANoOpOnABlankName()
     {
         var called = false;

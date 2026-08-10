@@ -1349,6 +1349,34 @@ total. **Confirmado en CI**: commit `391cbfa`, run
 (`windows-latest`, `workflow_dispatch`), verde a nivel de step incluyendo
 "Build the WinUI 3 app (Coral)" — el nuevo retorno `bool` de
 `CreateBranchAsync`, el `NewBranchFlyout.Hide()`, y el `KeyDown` en
-`NewBranchBox` compilan bien. Pendiente de reconfirmación visual real en
-Windows (crear una rama con el botón y con Enter, comprobar que el
-desplegable resalta la rama correcta).
+`NewBranchBox` compilan bien. **Reconfirmado visualmente por el founder**:
+el desplegable ya resalta "main" correctamente, y Enter ya crea la rama —
+los tres arreglos funcionan de verdad, no solo compilan.
+
+**2026-08-10, mismo pase — cuarto bug real: reabrir el mismo repo desde
+"Open Repo" lo re-clonaba en una carpeta nueva cada vez** (`pedalbacklog`
+→ `pedalbacklog-2` → `pedalbacklog-3`…), y eso a su vez hacía que las
+ramas creadas en sesiones anteriores "desaparecieran" — no habían
+desaparecido, estaban en la carpeta anterior, abandonada, a la que la app
+ya no apuntaba. Causa raíz: `MainPage.OnRepoSelectionChanged` llamaba
+siempre a `RepoPickerViewModel.CloneAsync`, que a su vez usa la lógica de
+dedup de carpetas de `CodeGit.CloneAsync` (`nombre`, `nombre-2`,
+`nombre-3`…) — una lógica pensada para el cuadro "clonar por URL" (donde
+clonar una segunda copia es una intención real, aunque rara), pero
+aplicada también al simple hecho de volver a seleccionar un repo YA
+clonado en la lista de "tus repos", donde la intención es siempre "ábrelo",
+nunca "clona otra copia". Arreglado con `RepoPickerViewModel.
+OpenOrCloneAsync(RepoRef, parentDir)`: comprueba primero si
+`parentDir/nombre-del-repo` ya existe — si existe, pone `ResultRepoPath`
+directamente a esa ruta (abre lo que ya hay, sin tocar git en absoluto);
+si no existe, cae al `CloneAsync` normal (que aterriza limpio en la ruta
+sin sufijo, al no existir todavía). `MainPage.OnRepoSelectionChanged` ahora
+llama a este método en vez de forzar siempre un clone. El cuadro "clonar
+por URL" no se toca — sigue usando `CloneAsync` directamente, dedup
+incluido, porque ahí sí puede ser una intención real. Las carpetas
+"-2"/"-3" que ya existan en disco de las pruebas anteriores NO se limpian
+solas — quedan huérfanas pero intactas (con el trabajo/ramas de esas
+sesiones dentro, recuperable a mano si hace falta); solo se evita crear
+MÁS a partir de ahora. 2 tests nuevos en `RepoPickerViewModelTests`
+(abre sin clonar cuando la carpeta ya existe, clona cuando no) — 298 en
+total.

@@ -113,6 +113,33 @@ public sealed class RepoPickerViewModel : ObservableObject
         }
     }
 
+    /// <summary>Open <paramref name="repo"/> if it's already cloned into
+    /// <paramref name="parentDir"/> — reuses the existing folder, no
+    /// re-clone, no "-2"/"-3" dedup suffix — or clones it fresh if it isn't
+    /// there yet. Selecting a repo from the browse list means "open this
+    /// one", never "clone another copy of it"; <see cref="CloneAsync"/>'s
+    /// own dedup logic is for the "clone by URL" box, where a deliberate
+    /// second clone is a real (if rare) intent. Without this distinction,
+    /// re-selecting the same repo from the list kept spawning a fresh
+    /// "reponame-N" folder every time — a real bug caught on real Windows,
+    /// confusing enough to make local branches from an earlier session
+    /// "disappear" (they were never gone, just sitting in an
+    /// orphaned "-2" clone the app no longer pointed at).</summary>
+    public async Task OpenOrCloneAsync(RepoRef repo, string parentDir, CancellationToken ct = default)
+    {
+        var existingPath = Path.Combine(parentDir, repo.Name);
+        if ((_pathExists ?? DefaultPathExists)(existingPath))
+        {
+            ResultRepoPath = existingPath;
+            StatusMessage = null;
+            return;
+        }
+        CloneUrl = repo.Url;
+        await CloneAsync(parentDir, ct);
+    }
+
+    private static bool DefaultPathExists(string path) => Directory.Exists(path) || File.Exists(path);
+
     /// <summary>Create a new repo on GitHub named <see cref="NewRepoName"/>
     /// and clone it into <paramref name="parentDir"/>. No-op on a blank
     /// name or while busy.</summary>

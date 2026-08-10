@@ -212,7 +212,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **296/296**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **298/298**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -343,7 +343,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow` (Fase 7 — see below) — 296 automated
+`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow` (Fase 7 — see below) — 298 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -591,7 +591,26 @@ to populate `Branches` first — no regression test possible here, since
 `Coral.Core`/`Coral.Tests` have no WinUI dependency to observe a real
 `ComboBox` binding; (3) Enter in the branch-name box didn't trigger
 "Create" — no `KeyDown` handler was wired, unlike `MainPage`'s prompt box.
-3 new tests, 296 total. See `PORT-PLAN.md` §10 for the full writeup.
+3 new tests, 296 total. Reconfirmed visually afterward: the `ComboBox` now
+highlights the real current branch, and Enter creates one.
+
+**Update, same day: a fourth real bug — reopening the same repo from "Open
+Repo" re-cloned it into a new "-2"/"-3" folder every time**, which in turn
+made branches from earlier sessions look like they'd vanished (they
+hadn't — they were sitting in the earlier, now-orphaned clone folder the
+app no longer pointed at). `MainPage.OnRepoSelectionChanged` always called
+`RepoPickerViewModel.CloneAsync`, which uses `CodeGit.CloneAsync`'s
+folder-dedup logic — correct for the "clone by URL" box, where a second
+clone can be a real intent, but wrong for re-selecting an already-cloned
+repo from the browse list, where the intent is always "open this one." New
+`RepoPickerViewModel.OpenOrCloneAsync(RepoRef, parentDir)` checks whether
+`parentDir/repo-name` already exists first — if so, opens it directly with
+no git operation at all; only clones if it isn't there yet. The "clone by
+URL" box is untouched — still dedups on purpose. Existing orphaned "-2"/"-3"
+folders aren't cleaned up automatically (their contents/branches are still
+there, just no longer pointed at); this only stops new ones from being
+created. 2 new tests, 298 total. See `PORT-PLAN.md` §10 for the full
+writeup.
 Written with the same patterns already confirmed working (converters in
 `Page.Resources`, `ViewModel` set before `InitializeComponent()`,
 `UpdateSourceTrigger=PropertyChanged` on text inputs, and — new this round —
