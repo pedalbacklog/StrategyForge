@@ -1344,4 +1344,11 @@ WinUI3 (voltea hacia arriba si no hay sitio abajo), no algo con un arreglo
 de una línea evidente; a revisar solo si sigue siendo un problema con la
 ventana a tamaño normal. 3 tests nuevos en `GitPanelViewModelTests`
 (`CreateBranchAsync` éxito/fallo, `CheckoutAsync` mensaje de éxito) — 296 en
-total. Pendiente de reconfirmación real tras estos arreglos.
+total. **Confirmado en CI**: commit `391cbfa`, run
+[31386827224](https://github.com/pedalbacklog/StrategyForge/actions/runs/31386827224)
+(`windows-latest`, `workflow_dispatch`), verde a nivel de step incluyendo
+"Build the WinUI 3 app (Coral)" — el nuevo retorno `bool` de
+`CreateBranchAsync`, el `NewBranchFlyout.Hide()`, y el `KeyDown` en
+`NewBranchBox` compilan bien. Pendiente de reconfirmación visual real en
+Windows (crear una rama con el botón y con Enter, comprobar que el
+desplegable resalta la rama correcta).
