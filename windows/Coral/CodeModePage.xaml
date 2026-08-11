@@ -52,12 +52,14 @@
                                 <StackPanel Width="220" Spacing="6">
                                     <TextBox x:Name="NewBranchBox" PlaceholderText="branch-name"
                                              KeyDown="OnNewBranchBoxKeyDown" />
-                                    <Button Content="Create" Click="OnCreateBranchClick" HorizontalAlignment="Right" />
+                                    <Button Content="Create" Click="OnCreateBranchClick" HorizontalAlignment="Right"
+                                            IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}" />
                                 </StackPanel>
                             </Flyout>
                         </Button.Flyout>
                     </Button>
-                    <Button Grid.Column="2" Content="Refresh" Click="OnRefreshClick" />
+                    <Button Grid.Column="2" Content="Refresh" Click="OnRefreshClick"
+                            IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}" />
                 </Grid>
                 <Button Content="Pull Request" HorizontalAlignment="Left">
                     <Button.Flyout>
@@ -91,8 +93,10 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0" Content="Create PR" Click="OnCreatePrClick" HorizontalAlignment="Stretch" />
-                                    <Button Grid.Column="1" Content="Merge" Click="OnMergePrClick" HorizontalAlignment="Stretch" />
+                                    <Button Grid.Column="0" Content="Create PR" Click="OnCreatePrClick" HorizontalAlignment="Stretch"
+                                            IsEnabled="{x:Bind PullRequestViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}" />
+                                    <Button Grid.Column="1" Content="Merge" Click="OnMergePrClick" HorizontalAlignment="Stretch"
+                                            IsEnabled="{x:Bind PullRequestViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}" />
                                 </Grid>
                                 <TextBlock Text="{x:Bind PullRequestViewModel.StatusMessage, Mode=OneWay}"
                                            Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
@@ -136,8 +140,10 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Button Grid.Column="0" Content="Commit" Click="OnCommitClick" HorizontalAlignment="Stretch" />
-                    <Button Grid.Column="1" Content="Push" Click="OnPushClick" HorizontalAlignment="Stretch" />
+                    <Button Grid.Column="0" Content="Commit" Click="OnCommitClick" HorizontalAlignment="Stretch"
+                            IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}" />
+                    <Button Grid.Column="1" Content="Push" Click="OnPushClick" HorizontalAlignment="Stretch"
+                            IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}" />
                 </Grid>
                 <Button Content="Commit + PR" Click="OnShipClick" HorizontalAlignment="Stretch"
                         IsEnabled="{x:Bind PullRequestViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}" />

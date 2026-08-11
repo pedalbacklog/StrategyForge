@@ -212,7 +212,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **299/299**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **301/301**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -343,7 +343,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow` (Fase 7 — see below) — 299 automated
+`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow` (Fase 7 — see below) — 301 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -656,6 +656,28 @@ PR" gave no visible feedback at all** — `PullRequestViewModel.ShipAsync`
 does set `StatusMessage`, but the only `TextBlock` bound to it lived inside
 the separate "Pull Request" flyout, which "Commit + PR" never opens. Fixed
 by adding the same `TextBlock` next to the "Commit + PR" button itself.
+
+**Update (2026-08-11): "Create PR"/"Merge" tested for real — worked — plus
+one serious bug found and fixed.** The founder isolated each button on its
+own branch and clicked them directly: PR opened, then merged, confirmed
+on GitHub. Along the way, clicking "Connect Claude" while already signed
+in re-ran the full install+signin flow — opened a second browser window
+and left the app looking stuck (the `Closing`-blocks-light-dismiss fix from
+before was doing exactly its job, just for an operation that should never
+have started). Two combined causes: `ConnectViewModel` never checked
+`ProviderAuth.Freshness` (ported in Fase 4 for exactly this, never wired to
+this button) before running install+signin, and `ProviderInstaller.Connect`
+opened the browser once per matching log line rather than once per
+attempt — real CLIs print the login URL more than once (once when opening
+the browser, again as an "if it didn't open, visit:" fallback). Fixed both:
+`ConnectAsync()` now short-circuits to "Already connected." when the
+stored login is fresh, and `Connect()` guards the URL-open to fire once per
+attempt, matching the single-open invariant `ProviderInstaller.swift` keeps
+directly in its read loop. 2 new tests — 301 total. Separately, no Code
+Mode button gave any feedback WHILE it was working, only once it finished
+— the ViewModels already track `IsBusy`, it just wasn't bound to anything.
+Fixed by disabling Commit/Push/Refresh/branch-Create/Create PR/Merge while
+their respective `IsBusy` is true.
 Written with the same patterns already confirmed working (converters in
 `Page.Resources`, `ViewModel` set before `InitializeComponent()`,
 `UpdateSourceTrigger=PropertyChanged` on text inputs, and — new this round —

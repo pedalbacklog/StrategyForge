@@ -421,14 +421,27 @@ public static class ProviderInstaller
             yield break;
         }
 
+        // Guards ConnectEvent.Url below to fire at most once per attempt —
+        // without it, a login CLI that prints the URL on more than one line
+        // (e.g. "Opening browser to <url>" followed by a "if it didn't open,
+        // visit: <url>" fallback line, both real on real Windows) opened a
+        // SECOND browser window for the same login. Mirrors the single-open
+        // invariant ProviderInstaller.swift keeps with its own `openedURL`
+        // flag (there it gates the actual NSWorkspace.open call directly,
+        // since Swift doesn't split "detect the URL" from "open it" across
+        // two layers the way SignIn/Connect do here).
+        var urlOpened = false;
         await foreach (var ev in SignIn(ptyLauncher, provider, input, resolveBinary, geminiCredsMtimeOverride, ct))
         {
             switch (ev)
             {
                 case InstallEvent.Log log:
                     yield return new ConnectEvent.Log(log.Line);
-                    var url = FirstUrl(log.Line);
-                    if (url is not null) yield return new ConnectEvent.Url(url.AbsoluteUri);
+                    if (!urlOpened && FirstUrl(log.Line) is { } url)
+                    {
+                        urlOpened = true;
+                        yield return new ConnectEvent.Url(url.AbsoluteUri);
+                    }
                     break;
                 case InstallEvent.NeedsCode: yield return new ConnectEvent.NeedsCode(); break;
                 case InstallEvent.NeedsNode: yield return new ConnectEvent.NeedsNode(); yield break;

@@ -1539,3 +1539,63 @@ llegaron a pulsar. Dado que el `gh` subyacente ya está confirmado
 funcionando en esta máquina, el riesgo restante es bajo, pero sigue siendo
 una verificación explícita pendiente antes de dar la Fase 7 por cerrada
 del todo.
+
+**2026-08-11 — botones "Create PR"/"Merge" probados de verdad, con éxito, y
+dos bugs reales más encontrados y arreglados por el camino (uno de ellos
+serio: la app se quedaba bloqueada).** El founder aisló cada botón en su
+propia rama siguiendo un plan de prueba dedicado. `Push`, `Create PR` y
+`Merge` funcionaron correctamente de punta a punta — PR #2 creado y
+mergeado desde los botones propios de la app, confirmado también en
+GitHub. Por el camino:
+
+1. **Falso positivo inicial: "not a git repository" en Code Mode.** No era
+   un bug — el founder tenía abierta una ventana de Code Mode apuntando a
+   `C:\Users\mase_` (su carpeta de usuario, que no es un repo) en vez de a
+   `C:\Users\mase_\pedalbacklog`, por tener más de una ventana de Coral
+   abierta a la vez. Cada ventana recuerda el repo con el que se abrió;
+   "Code Mode" siempre opera sobre el de SU ventana. Se explicó y no
+   requirió cambio de código — aunque sí destapó que `GitPanelViewModel.
+   RefreshAsync()` no pone ningún `StatusMessage` cuando el repo no es
+   válido (a diferencia de `CommitAsync`/`PushAsync`/`CreateBranchAsync`,
+   que sí informan de sus fallos) — el founder pulsó "Refresh" antes de
+   nada y "no vio cambios ni avisos", exactamente ese hueco. Anotado como
+   arreglo menor pendiente, no bloqueante.
+2. **Bug real, serio: pulsar "Connect Claude" estando ya conectado
+   relanzaba el login completo — dos ventanas de navegador, app bloqueada,
+   tuvo que forzar el cierre.** Dos causas combinadas:
+   - `ConnectViewModel` nunca comprobaba si ya había una sesión válida
+     antes de lanzar instalación+login — `ProviderAuth.cs` (portado en
+     Fase 4 precisamente para esta comprobación barata, sin subproceso) no
+     estaba conectado a este botón. Arreglado: `ConnectAsync()` ahora
+     llama a `ProviderAuth.Freshness(Provider)` primero; si ya está `Ok`,
+     pone `StatusMessage = "Already connected."` y no toca ni el proceso
+     ni la pseudo-consola.
+   - El propio `claude auth login` imprime la URL de login en más de una
+     línea (una vez al abrir el navegador, otra como "si no se abrió,
+     visita..."), y `ProviderInstaller.Connect()` abría el navegador por
+     cada línea que la contuviera, sin bandera de "ya abierta" a ese nivel
+     — a diferencia de `ProviderInstaller.swift`, que abre la URL
+     directamente dentro del bucle de lectura con su propio `openedURL`,
+     sin dividir "detectar la URL" y "abrirla" en capas distintas como
+     hace este port. Arreglado añadiendo esa misma bandera de una sola vez
+     en `Connect()`. Con el primer arreglo puesto, este caso concreto ya
+     ni debería dispararse (al estar ya conectado, nunca se llega a esta
+     rama) — pero el bug de fondo (URL duplicada) seguía siendo real para
+     cualquier primer login futuro, así que se arregló igualmente. El
+     "bloqueo" que vivió el founder era, en parte, el propio arreglo de
+     `Closing` de la semana pasada funcionando tal como se diseñó
+     (bloquea el cierre mientras `IsConnecting`) — solo que aplicado a una
+     operación que nunca debió arrancar. 2 tests nuevos
+     (`ConnectAsyncSkipsSignInEntirelyWhenAlreadyFresh`,
+     `ConnectAsyncOnlyOpensTheLoginUrlOnceEvenIfTheCliPrintsItTwice`) —
+     301 en total.
+
+Además, hallazgo de UX (no bug funcional): ningún botón de Code Mode daba
+ninguna señal MIENTRAS trabajaba (solo al terminar) — "en ninguno de los
+dos puntos anteriores parece que esté pasando nada hasta que acaba". Los
+ViewModels ya llevan su propio `IsBusy`, simplemente no estaba conectado a
+nada visual. Arreglo mínimo: `IsEnabled` de Commit/Push/Refresh/Create
+(rama)/Create PR/Merge ahora atado a `!IsBusy` del ViewModel
+correspondiente — un botón deshabilitado durante la operación es señal
+suficiente sin necesitar un spinner. `"Commit + PR"` ya lo tenía desde que
+se creó.

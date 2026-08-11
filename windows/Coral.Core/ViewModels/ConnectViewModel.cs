@@ -20,6 +20,7 @@ public sealed class ConnectViewModel : ObservableObject
     private readonly IPseudoConsoleLauncher _ptyLauncher;
     private readonly Func<string, string?>? _resolveBinary;
     private readonly Action<string> _openUrl;
+    private readonly Func<AIProvider, ProviderAuth.State> _checkFreshness;
     private readonly LoginInput _loginInput = new();
     private CancellationTokenSource? _cts;
 
@@ -60,19 +61,22 @@ public sealed class ConnectViewModel : ObservableObject
     private string? _statusMessage;
     public string? StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
 
-    /// <paramref name="resolveBinary"/> and <paramref name="openUrl"/> are
-    /// injectable so this is unit-testable with fakes, same pattern as
-    /// <see cref="ChatViewModel"/> — production callers leave both at their
-    /// defaults (<see cref="BinaryResolver.Resolve"/> and the real
-    /// shell-execute browser launch).</summary>
+    /// <paramref name="resolveBinary"/>, <paramref name="openUrl"/>, and
+    /// <paramref name="checkFreshness"/> are injectable so this is
+    /// unit-testable with fakes, same pattern as <see cref="ChatViewModel"/>
+    /// — production callers leave all three at their defaults
+    /// (<see cref="BinaryResolver.Resolve"/>, the real shell-execute browser
+    /// launch, and <see cref="ProviderAuth.Freshness"/>).</summary>
     public ConnectViewModel(IProcessLauncher processLauncher, IPseudoConsoleLauncher ptyLauncher,
-        AIProvider provider, Func<string, string?>? resolveBinary = null, Action<string>? openUrl = null)
+        AIProvider provider, Func<string, string?>? resolveBinary = null, Action<string>? openUrl = null,
+        Func<AIProvider, ProviderAuth.State>? checkFreshness = null)
     {
         _processLauncher = processLauncher;
         _ptyLauncher = ptyLauncher;
         Provider = provider;
         _resolveBinary = resolveBinary;
         _openUrl = openUrl ?? RealOpenUrl;
+        _checkFreshness = checkFreshness ?? ProviderAuth.Freshness;
     }
 
     private static void RealOpenUrl(string url)
@@ -102,6 +106,22 @@ public sealed class ConnectViewModel : ObservableObject
         CodeInput = "";
         StatusMessage = null;
         Phase = null;
+
+        // Skip install+signin entirely when the stored login already looks
+        // fresh. Without this, clicking "Connect Claude" while already
+        // signed in re-ran `claude auth login` unconditionally — a real bug
+        // found on real Windows: opened a fresh browser tab, showed the
+        // "paste the code" flow again, and looked stuck (the flyout
+        // correctly won't light-dismiss while IsConnecting, so with nothing
+        // ever finishing there was no way back out except force-closing).
+        // ProviderAuth was ported in Fase 4 for exactly this check but never
+        // wired to this button until now.
+        if (_checkFreshness(Provider) == ProviderAuth.State.Ok)
+        {
+            StatusMessage = "Already connected.";
+            return;
+        }
+
         IsConnecting = true;
         var cts = new CancellationTokenSource();
         _cts = cts;

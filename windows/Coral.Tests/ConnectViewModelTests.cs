@@ -12,10 +12,12 @@ public class ConnectViewModelTests
 {
     private static ConnectViewModel MakeViewModel(
         FakeProcessLauncher processLauncher, FakePseudoConsoleLauncher ptyLauncher,
-        AIProvider provider = AIProvider.Claude, List<string>? openedUrls = null) =>
+        AIProvider provider = AIProvider.Claude, List<string>? openedUrls = null,
+        Func<AIProvider, ProviderAuth.State>? checkFreshness = null) =>
         new(processLauncher, ptyLauncher, provider,
             resolveBinary: name => name == "claude" ? "/bin/claude" : null,
-            openUrl: openedUrls is null ? null : openedUrls.Add);
+            openUrl: openedUrls is null ? null : openedUrls.Add,
+            checkFreshness: checkFreshness ?? (_ => ProviderAuth.State.Unknown));
 
     [Fact]
     public async Task ConnectAsyncStreamsPhasesAndLogsThenReportsDone()
@@ -123,6 +125,44 @@ public class ConnectViewModelTests
 
         Assert.Equal("Cancelled.", vm.StatusMessage);
         Assert.False(vm.IsConnecting);
+    }
+
+    [Fact]
+    public async Task ConnectAsyncSkipsSignInEntirelyWhenAlreadyFresh()
+    {
+        var processCalled = false;
+        var ptyCalled = false;
+        var processLauncher = new FakeProcessLauncher((_, _) => { processCalled = true; return new FakeChildProcess(new List<string>()); });
+        var ptyLauncher = new FakePseudoConsoleLauncher((_, _) => { ptyCalled = true; return new FakePseudoConsoleSession(new List<string>()); });
+        var vm = MakeViewModel(processLauncher, ptyLauncher, checkFreshness: _ => ProviderAuth.State.Ok);
+
+        await vm.ConnectAsync();
+
+        Assert.False(processCalled);
+        Assert.False(ptyCalled);
+        Assert.Equal("Already connected.", vm.StatusMessage);
+        Assert.False(vm.IsConnecting);
+    }
+
+    [Fact]
+    public async Task ConnectAsyncOnlyOpensTheLoginUrlOnceEvenIfTheCliPrintsItTwice()
+    {
+        // Real CLIs commonly print the URL once when opening the browser,
+        // then again as a "if it didn't open, visit: <url>" fallback line —
+        // confirmed on real Windows to open a second browser window before
+        // this fix.
+        var processLauncher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+        var ptyLauncher = new FakePseudoConsoleLauncher((_, _) => new FakePseudoConsoleSession(new List<string>
+        {
+            "Opening browser to https://claude.ai/login?code=abc",
+            "If the browser didn't open, visit: https://claude.ai/login?code=abc",
+        }));
+        var openedUrls = new List<string>();
+        var vm = MakeViewModel(processLauncher, ptyLauncher, openedUrls: openedUrls);
+
+        await vm.ConnectAsync();
+
+        Assert.Equal(new List<string> { "https://claude.ai/login?code=abc" }, openedUrls);
     }
 
     [Fact]
