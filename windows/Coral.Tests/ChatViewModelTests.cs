@@ -39,6 +39,26 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SendAsyncRunsWithAcceptEditsSoToolCallsDontHangOnApproval()
+    {
+        // Matches ChatViewModel.swift's own default ("acceptEdits", not
+        // "default") — a real bug found on real Windows: "default" requires
+        // interactive approval for most tool calls, which a headless -p run
+        // has no channel to give, so e.g. a requested `git checkout -b` just
+        // sat forever reporting "This command requires approval".
+        var lines = new List<string> { """{"type":"result","subtype":"success","result":"done"}""" };
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(lines));
+        var vm = MakeViewModel(launcher);
+
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        var pmIndex = launcher.LastStart!.Value.Args.ToList().IndexOf("--permission-mode");
+        Assert.True(pmIndex >= 0);
+        Assert.Equal("acceptEdits", launcher.LastStart.Value.Args[pmIndex + 1]);
+    }
+
+    [Fact]
     public async Task AssistantTextIsIgnoredOnceDeltasHaveStreamed()
     {
         // --include-partial-messages means both a delta AND the final full

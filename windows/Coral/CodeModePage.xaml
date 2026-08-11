@@ -61,9 +61,26 @@
                 </Grid>
                 <Button Content="Pull Request" HorizontalAlignment="Left">
                     <Button.Flyout>
-                        <Flyout Placement="Bottom" Opened="OnPrFlyoutOpened">
+                        <!-- Never light-dismisses (see OnPrFlyoutClosing): switching
+                             windows while typing a title/description shouldn't lose
+                             it, and unlike "Connect Claude" there's no IsConnecting-
+                             style busy window to key the block off — this flyout has
+                             no "operation in progress" moment, just idle user input,
+                             so the block is unconditional and paired with an explicit
+                             Close button instead. -->
+                        <Flyout x:Name="PrFlyout" Placement="Bottom" Opened="OnPrFlyoutOpened"
+                                Closing="OnPrFlyoutClosing">
                             <StackPanel Width="360" Spacing="6">
-                                <TextBlock Text="{x:Bind PullRequestViewModel.Info.Title, Mode=OneWay}" FontWeight="SemiBold" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{x:Bind PullRequestViewModel.Info.Title, Mode=OneWay}"
+                                               FontWeight="SemiBold" />
+                                    <Button Grid.Column="1" Content="✕" Click="OnClosePrFlyoutClick"
+                                            FontSize="11" Padding="6,2" />
+                                </Grid>
                                 <TextBlock Text="{x:Bind PullRequestViewModel.Info.State, Mode=OneWay}" Opacity="0.6" FontSize="12" />
                                 <TextBox PlaceholderText="Title"
                                          Text="{x:Bind PullRequestViewModel.Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
@@ -124,6 +141,13 @@
                 </Grid>
                 <Button Content="Commit + PR" Click="OnShipClick" HorizontalAlignment="Stretch"
                         IsEnabled="{x:Bind PullRequestViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}" />
+                <!-- The "Pull Request" flyout above shows this same StatusMessage
+                     too, but that flyout is a separate button — "Commit + PR" never
+                     opens it, so without a copy here its own result (opened/updated/
+                     error) was invisible unless you happened to also open the PR
+                     flyout afterward to check. -->
+                <TextBlock Text="{x:Bind PullRequestViewModel.StatusMessage, Mode=OneWay}"
+                           Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
             </StackPanel>
         </Grid>
 

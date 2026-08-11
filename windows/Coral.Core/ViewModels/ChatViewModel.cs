@@ -164,7 +164,7 @@ public sealed class ChatViewModel : ObservableObject
         try
         {
             await foreach (var evt in ClaudeRunner.Stream(_launcher, _binary, _repoPath, prompt, _model,
-                _sessionId, resume, permissionMode: "default",
+                _sessionId, resume, permissionMode: "acceptEdits",
                 inactivityTimeout: TimeSpan.FromMinutes(5), resolveBinary: _resolveBinary, ct: cts.Token))
             {
                 switch (evt)

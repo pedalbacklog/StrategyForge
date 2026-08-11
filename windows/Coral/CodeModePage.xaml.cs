@@ -2,6 +2,7 @@ using Coral.Core.Services;
 using Coral.Core.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
@@ -47,6 +48,30 @@ public sealed partial class CodeModePage : Page
     private async void OnPrFlyoutOpened(object sender, object e)
     {
         if (ViewModel.Branch is { } branch) await PullRequestViewModel.RefreshAsync(branch);
+    }
+
+    private bool _prFlyoutClosingAllowed;
+
+    /// <summary>Blocks the PR flyout's light-dismiss unconditionally — real
+    /// bug caught on real Windows: switching windows mid-edit (e.g. to check
+    /// something else while drafting a title/description) silently closed
+    /// it, though the typed text did survive since the ViewModel keeps it
+    /// regardless of the popup's visibility. Unlike "Connect Claude"'s
+    /// Flyout, there's no IsConnecting-style busy window here to key the
+    /// block off, so it's unconditional — paired with an explicit ✕ button
+    /// (<see cref="OnClosePrFlyoutClick"/>), the only way to actually close
+    /// it, which sets <see cref="_prFlyoutClosingAllowed"/> right before
+    /// calling <c>Hide()</c> so this handler lets that one through.</summary>
+    private void OnPrFlyoutClosing(FlyoutBase sender, FlyoutBaseClosingEventArgs e)
+    {
+        if (_prFlyoutClosingAllowed) { _prFlyoutClosingAllowed = false; return; }
+        e.Cancel = true;
+    }
+
+    private void OnClosePrFlyoutClick(object sender, RoutedEventArgs e)
+    {
+        _prFlyoutClosingAllowed = true;
+        PrFlyout.Hide();
     }
 
     private async void OnCreatePrClick(object sender, RoutedEventArgs e)

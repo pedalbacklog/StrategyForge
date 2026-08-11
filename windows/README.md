@@ -212,7 +212,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **298/298**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **299/299**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -343,7 +343,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow` (Fase 7 — see below) — 298 automated
+`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow` (Fase 7 — see below) — 299 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -611,6 +611,31 @@ folders aren't cleaned up automatically (their contents/branches are still
 there, just no longer pointed at); this only stops new ones from being
 created. 2 new tests, 298 total. See `PORT-PLAN.md` §10 for the full
 writeup.
+
+**Update, same day: three more findings from testing the PR flow for
+real** — one a real bug in Fase 5's own code, not Fase 7's, just surfaced by
+this testing. (1) **`ChatViewModel.cs` ran with `permission-mode "default"`
+instead of `"acceptEdits"`.** Asked to have the agent create a branch, the
+requested `git checkout -b` sat forever reporting "This command requires
+approval" — `"default"` needs interactive approval for most tool calls, and
+a headless `-p` run has no channel to give it. `ChatViewModel.swift`'s own
+default is `"acceptEdits"`; the port had `"default"` hardcoded, a real
+divergence rather than a deliberate choice. Fixed the literal, added a test
+asserting the actual `--permission-mode` argument passed to the process —
+299 total. (2) **The "Pull Request" flyout had the same missing
+light-dismiss guard "Connect Claude" already needed** (see the Fase 6
+update above) — switching windows while drafting a title/description
+closed it (the text survived, since it lives on the ViewModel, but the
+popup itself vanished). Unlike Connect Claude there's no `IsConnecting`-
+style busy window to key a conditional block off, so this one blocks
+unconditionally and pairs it with an explicit ✕ close button. Deliberately
+doesn't auto-close on a successful create/merge, unlike the branch-create
+flyout — this one shows `Info.Title`/`.State` updating in place, and
+snapping it shut would rob the user of that confirmation. (3) **"Commit +
+PR" gave no visible feedback at all** — `PullRequestViewModel.ShipAsync`
+does set `StatusMessage`, but the only `TextBlock` bound to it lived inside
+the separate "Pull Request" flyout, which "Commit + PR" never opens. Fixed
+by adding the same `TextBlock` next to the "Commit + PR" button itself.
 Written with the same patterns already confirmed working (converters in
 `Page.Resources`, `ViewModel` set before `InitializeComponent()`,
 `UpdateSourceTrigger=PropertyChanged` on text inputs, and — new this round —

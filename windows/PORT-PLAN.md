@@ -1398,3 +1398,66 @@ nueva "-4" — arreglo funcionando de verdad, no solo compilando. Con esto,
 los cuatro bugs reales de este pase de Fase 7 (flyout de rama sin feedback,
 ComboBox con la rama incorrecta resaltada, Enter sin efecto, re-clonado
 duplicado) están todos arreglados y confirmados en Windows real.
+
+**2026-08-10, mismo pase — quinto y sexto bug reales, más un hallazgo de
+Fase 5 (no de Fase 7): probar "Commit + PR" y el flujo de PR de verdad
+destapó tres cosas distintas.**
+
+1. **Fase 5, bug real de portado (no de Fase 7): `ChatViewModel.cs` corría
+   con `permission-mode "default"` en vez de `"acceptEdits"`.** El founder
+   le pidió al chat "haz una nueva rama que me permita incrustar un vídeo
+   en el readme" — el agente intentó `git checkout -b feature/embed-video`
+   vía Bash, pero el comando se quedó reportando "This command requires
+   approval" indefinidamente (visto repetido varias veces en el panel de
+   Activity y en el panel de terminal), porque el modo `"default"` exige
+   aprobación interactiva para la mayoría de llamadas a herramientas, y un
+   run headless por `-p` no tiene ningún canal para darla — exactamente el
+   límite de alcance ya documentado ("no 'Ask' live-permission mode"), pero
+   agravado porque ni siquiera estábamos usando el modo por defecto
+   correcto. Comparado con el original: `ChatViewModel.swift` usa
+   `permissionMode: String = "acceptEdits"` como su propio valor por
+   defecto — nuestro puerto tenía `"default"` puesto a fuego en
+   `RunTurnAsync`, una divergencia real, no una decisión de diseño.
+   Arreglado cambiando el literal a `"acceptEdits"`. 1 test nuevo
+   (`SendAsyncRunsWithAcceptEditsSoToolCallsDontHangOnApproval`) que
+   comprueba el argumento `--permission-mode` real que recibe el proceso —
+   299 en total.
+2. **El flyout "Pull Request" no tenía ninguna protección contra el
+   auto-cierre** — el mismo problema que ya se había encontrado y arreglado
+   para "Connect Claude" (`PORT-PLAN.md`, entradas de Fase 6 más arriba),
+   sin haberse portado también aquí. El founder lo confirmó: cambiar de
+   ventana con el flyout abierto (con texto ya escrito en título/
+   descripción) lo cerraba solo; el texto sobrevivía al reabrirlo (el
+   estado vive en el ViewModel, no en el popup), pero cerrarse sin que el
+   usuario lo pidiera seguía siendo el problema real. A diferencia de
+   "Connect Claude", este flyout no tiene un momento de "operación en
+   curso" (`IsConnecting`) al que enganchar el bloqueo — es solo el usuario
+   escribiendo, sin más. Arreglado bloqueando el *light-dismiss* de forma
+   incondicional (`Closing` con `e.Cancel = true` siempre) y añadiendo un
+   botón "✕" explícito (`OnClosePrFlyoutClick`) que activa una bandera
+   (`_prFlyoutClosingAllowed`) justo antes de llamar a `Hide()`, para que
+   el `Closing` handler sepa distinguir ese cierre explícito del
+   *light-dismiss* implícito. Deliberadamente NO se cierra solo al crear/
+   mergear el PR con éxito (a diferencia del flyout de "New" rama): el
+   propio flyout muestra `PullRequestViewModel.Info.Title`/`.State`
+   actualizados tras el éxito, así que cerrarlo de golpe le quitaría al
+   usuario esa confirmación visual — mejor dejar que lo cierre él cuando
+   ya la haya visto.
+3. **El botón "Commit + PR" no daba ninguna señal visible de si había
+   hecho algo.** El founder lo probó y no tenía forma de saber si había
+   funcionado. Causa: `PullRequestViewModel.ShipAsync` sí pone
+   `StatusMessage` (éxito o error), pero el único `TextBlock` que lo
+   mostraba vivía DENTRO del flyout separado "Pull Request" — que
+   "Commit + PR" nunca abre. Arreglado añadiendo una copia de ese mismo
+   `TextBlock` junto al propio botón "Commit + PR", en el panel principal,
+   siempre visible sin necesidad de abrir nada más.
+
+Nota aparte, no un bug: los dos errores que vio el founder al intentar crear
+el PR a mano ("you must first push the current branch to a remote" y luego,
+tras el push, "GraphQL: No commits between main and embed-video") son
+comportamiento CORRECTO de `gh`/GitHub — la rama `embed-video` se creó pero
+nunca llegó a tener ningún commit propio (el intento de editar el README vía
+chat se quedó bloqueado por el bug #1 de esta entrada, así que el archivo
+nunca cambió), así que no hay diff real que ofrecer como PR. Con el bug #1
+arreglado, un intento futuro donde el agente sí complete la edición debería
+producir un PR real sin este error.
