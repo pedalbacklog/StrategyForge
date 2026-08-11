@@ -955,8 +955,10 @@ of this port; it never writes files itself, only produces a recommendation.
 confirming the port is faithful to the original; `AdvisorViewModelTests.cs`,
 2 cases) — 340 total.
 
-Covered by unit tests and local build/test (340/340) — same as the entry
-above, pending CI compile confirmation (new XAML in the flyout) and
-hands-on verification on real Windows (type a task, click "Suggest",
-confirm the recommendation makes sense, click "Use this" and confirm it
-applies the same way manually picking a template does).
+Covered by unit tests, local build/test (340/340), and CONFIRMED compiling
+on windows-latest CI (commit `cd871b0`, run
+[31490734337](https://github.com/pedalbacklog/StrategyForge/actions/runs/31490734337) —
+"Test Coral.Core (via Coral.Tests)" and "Build the WinUI 3 app (Coral)"
+both green) — pending hands-on verification on real Windows (type a task,
+click "Suggest", confirm the recommendation makes sense, click "Use this"
+and confirm it applies the same way manually picking a template does).

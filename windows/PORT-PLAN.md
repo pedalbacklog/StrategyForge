@@ -1989,8 +1989,10 @@ ficheros él mismo, solo produce una recomendación.
 validando que el port es fiel al original; `AdvisorViewModelTests.cs`, 2
 casos) — 340 en total.
 
-Cubierto por tests unitarios y build/test local (340/340) — igual que la
-entrada anterior, pendiente de verificación de compilación en CI (nuevo
-XAML en el flyout) y de prueba a mano en Windows real (escribir una tarea,
+Cubierto por tests unitarios, build/test local (340/340) y CONFIRMADO
+compilando en windows-latest CI (commit `cd871b0`, run
+[31490734337](https://github.com/pedalbacklog/StrategyForge/actions/runs/31490734337) —
+"Test Coral.Core (via Coral.Tests)" y "Build the WinUI 3 app (Coral)" en
+verde) — pendiente de prueba a mano en Windows real (escribir una tarea,
 pulsar "Suggest", confirmar que la recomendación tiene sentido, pulsar
 "Use this" y confirmar que aplica igual que elegir una plantilla a mano).
