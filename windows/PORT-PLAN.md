@@ -1769,9 +1769,12 @@ la sesión explícitamente en vez de esperar una salida natural.
 
 Categoría `Manual` como el resto — compila limpio en Linux (`dotnet build`/
 `dotnet test --filter "Category!=Manual"`, 316/316 sin cambios, ya que el
-test nuevo queda excluido del filtro), pero como el resto de esta familia
-de tests SOLO puede ejecutarse de verdad en Windows — pendiente de que el
-founder lo corra:
+test nuevo queda excluido del filtro) Y CONFIRMADO compilando en
+windows-latest CI (commit `bb84703`, run
+[31476621086](https://github.com/pedalbacklog/StrategyForge/actions/runs/31476621086) —
+"Test Coral.Core (via Coral.Tests)" y "Build the WinUI 3 app (Coral)" en
+verde), pero como el resto de esta familia de tests SOLO puede ejecutarse
+de verdad en Windows — pendiente de que el founder lo corra:
 `dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~WriteLineAsyncDeliversInputToARealChildProcessStdin"`.
 Sigue sin cubrirse (y no puede forzarse de forma determinista) el camino
 end-to-end completo contra un `claude auth login` real llegando a
