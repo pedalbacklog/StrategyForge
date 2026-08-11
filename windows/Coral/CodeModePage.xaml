@@ -161,7 +161,8 @@
                      PullRequestViewModel.AutoPr (AppSettings-backed), so it
                      survives closing this window/the whole app. -->
                 <CheckBox Content="Auto-PR when a run finishes"
-                          IsChecked="{x:Bind PullRequestViewModel.AutoPr, Mode=TwoWay}" FontSize="12" />
+                          IsChecked="{x:Bind PullRequestViewModel.AutoPr, Mode=TwoWay}" FontSize="12"
+                          VerticalContentAlignment="Center" />
             </StackPanel>
         </Grid>
 

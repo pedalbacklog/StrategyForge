@@ -711,5 +711,22 @@ so the identifier resolves to that instance before the type (C# CS0176) —
 worked around by inlining the same four-part check instead. 14 new tests —
 316 total. CONFIRMED compiling on windows-latest CI (commit `88d0781`, run
 [31472737875](https://github.com/pedalbacklog/StrategyForge/actions/runs/31472737875) —
-"Build the WinUI 3 app (Coral)" green, including the new checkbox's XAML);
-not yet confirmed on real Windows — see Status.
+"Build the WinUI 3 app (Coral)" green, including the new checkbox's XAML).
+
+**Update, same day: verified end to end on real Windows, plus one style
+bug found and fixed.** The founder tested it on a real branch
+(`ui-test-create-pr-2`): a chat-driven change with the toggle on opened a
+PR the moment the turn finished (confirmed both in Coral's own "Pull
+request opened." message and on the branch on GitHub), a second change on
+the same branch updated the existing PR instead of opening a second one
+("Pull request updated." — same `TextBlock` "Commit + PR" already used,
+just easy to miss live since it's small and sits right above the
+checkbox), and a third change with the toggle off correctly did nothing —
+the file changed locally but nothing was committed/pushed, exactly as
+designed. One real bug found along the way: the checkbox and its label
+text rendered visibly misaligned — WinUI3's default `CheckBox` template
+doesn't vertically center its content against the check glyph once
+`FontSize` is overridden down (here, to 12). Fixed by adding
+`VerticalContentAlignment="Center"` to the `CheckBox` in
+`CodeModePage.xaml`. XAML-only change, no unit test possible for it —
+pending visual reconfirmation.

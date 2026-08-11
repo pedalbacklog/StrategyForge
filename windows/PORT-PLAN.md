@@ -260,8 +260,14 @@ Fase 7 — Code mode                   ✅ cerrada — capa de servicio completa
                                       `PullRequestViewModel.AutoPr` +
                                       checkbox en `CodeModePage.xaml` +
                                       disparo en `OnChatViewModelPropertyChanged`,
-                                      ver §10) — pendiente de verificación a
-                                      mano en Windows real
+                                      ver §10) Y VERIFICADO funcionando de
+                                      punta a punta en Windows real (abre PR
+                                      al terminar el turno, lo actualiza en
+                                      cambios siguientes, no dispara nada con
+                                      el toggle apagado). Un bug de estilo
+                                      encontrado y arreglado en el mismo pase
+                                      (checkbox desalineado de su texto, ver
+                                      §10)
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -1676,7 +1682,37 @@ Cubierto por tests unitarios, build/test local (316/316) y CONFIRMADO
 compilando en windows-latest CI (commit `88d0781`, run
 [31472737875](https://github.com/pedalbacklog/StrategyForge/actions/runs/31472737875) —
 "Build the WinUI 3 app (Coral)" en verde, la XAML del nuevo checkbox
-incluida). 14 tests nuevos — 316 en total. Pendiente, sobre todo, de
-prueba a mano en Windows real por el founder (activar el toggle, pedir un
-cambio de fichero por chat en una rama nueva, confirmar que se abre un PR
-solo al terminar el turno, sin tocar "Commit + PR").
+incluida). 14 tests nuevos — 316 en total.
+
+**Verificación a mano en Windows real, el mismo día.** El founder probó
+el toggle punto por punto sobre `ui-test-create-pr-2`:
+
+1. Checkbox y su texto ("Auto-PR when a run finishes") se veían
+   desalineados verticalmente — real bug de estilo, no funcional. La
+   plantilla por defecto de `CheckBox` en WinUI3 no centra el contenido
+   verticalmente frente al glifo cuando se reduce `FontSize` (aquí a 12);
+   arreglado añadiendo `VerticalContentAlignment="Center"` al `CheckBox` en
+   `CodeModePage.xaml`. Solo XAML, sin tests unitarios posibles — pendiente
+   de reconfirmación visual.
+2. Con el toggle activo, pedir un cambio por chat abrió un PR solo al
+   terminar el turno — confirmado tanto en la captura de Coral
+   ("Pull request opened.") como en la rama `ui-test-create-pr-2` en
+   GitHub. Funciona como se diseñó.
+3. Un segundo cambio en la misma rama actualizó el PR existente en vez de
+   abrir uno nuevo — confirmado en GitHub. El mensaje "Pull request
+   updated." si aparece (visible en la captura, en el mismo `TextBlock` que
+   ya mostraba "Pull request opened." antes) — el founder no lo localizó
+   en el momento, no porque falte, sino porque es texto gris pequeño justo
+   encima del checkbox y fácil de pasar por alto durante la prueba en vivo.
+   No es el mismo bug que el de "Push no da feedback" (aquella vez el
+   `TextBlock` correcto no existía en ese punto de la UI; aquí sí existe y
+   se actualiza). No se toca por ahora — a la espera de si el founder
+   quiere hacerlo más visible.
+4. Con el toggle desactivado, un tercer cambio por chat SÍ se aplicó
+   localmente (el chat lo confirma) pero NO se disparó ningún commit/push
+   automático — el cambio se quedó sin confirmar en el working tree,
+   invisible en GitHub. Comportamiento esperado: confirma que el toggle
+   apagado no dispara nada.
+
+Pendiente: reconfirmar visualmente el arreglo de alineación del checkbox
+una vez compile en CI y el founder lo vea en su máquina.
