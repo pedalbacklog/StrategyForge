@@ -1672,9 +1672,11 @@ persistencia de settings que aún no existía.
    (CS0176). Se evitó compilando el mismo chequeo de cuatro partes en
    línea, dejando el método estático como spec documentada y testeada.
 
-Solo cubierto por tests unitarios y build/test local (316/316) — pendiente
-de verificación de compilación en windows-latest CI y, sobre todo, de
+Cubierto por tests unitarios, build/test local (316/316) y CONFIRMADO
+compilando en windows-latest CI (commit `88d0781`, run
+[31472737875](https://github.com/pedalbacklog/StrategyForge/actions/runs/31472737875) —
+"Build the WinUI 3 app (Coral)" en verde, la XAML del nuevo checkbox
+incluida). 14 tests nuevos — 316 en total. Pendiente, sobre todo, de
 prueba a mano en Windows real por el founder (activar el toggle, pedir un
 cambio de fichero por chat en una rama nueva, confirmar que se abre un PR
-solo al terminar el turno, sin tocar "Commit + PR"). 14 tests nuevos — 316
-en total.
+solo al terminar el turno, sin tocar "Commit + PR").

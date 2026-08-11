@@ -709,5 +709,7 @@ hasRepo, ghInstalled, hasChanges)` is a pure static spec of the guard (5
 `CodeModePage` also has an instance property named `PullRequestViewModel`,
 so the identifier resolves to that instance before the type (C# CS0176) —
 worked around by inlining the same four-part check instead. 14 new tests —
-316 total. Build/test-verified locally; not yet confirmed on real Windows —
-see Status.
+316 total. CONFIRMED compiling on windows-latest CI (commit `88d0781`, run
+[31472737875](https://github.com/pedalbacklog/StrategyForge/actions/runs/31472737875) —
+"Build the WinUI 3 app (Coral)" green, including the new checkbox's XAML);
+not yet confirmed on real Windows — see Status.
