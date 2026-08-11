@@ -1596,7 +1596,9 @@ nada visual. Arreglo mínimo: `IsEnabled` de Commit/Push/Refresh/Create
 (rama)/Create PR/Merge ahora atado a `!IsBusy` del ViewModel
 correspondiente — un botón deshabilitado durante la operación es señal
 suficiente sin necesitar un spinner. `"Commit + PR"` ya lo tenía desde que
-se creó.
+se creó. CONFIRMADO compilando en windows-latest CI (commit `7e2cd30`, run
+[31471341980](https://github.com/pedalbacklog/StrategyForge/actions/runs/31471341980) —
+"Build the WinUI 3 app (Coral)" en verde).
 
 **Cerrado el cabo suelto anotado en la entrada anterior: `Refresh` sin
 aviso en un repo inválido.** `GitPanelViewModel.RefreshAsync()` ahora pone
@@ -1610,7 +1612,10 @@ destapó de paso un fake perezoso en `CommitAsyncClearsTheMessageAndRefreshesOnS
 que nunca simulaba `rev-parse` con una rama real (devolvía éxito con salida
 vacía) — inofensivo antes de este cambio porque nada comprobaba `Branch`,
 pero ahora sí, así que se corrigió el fake para que devuelva `"main"`. 1
-test nuevo — 302 en total.
+test nuevo — 302 en total. CONFIRMADO compilando en windows-latest CI
+(commit `bfe8b88`, run
+[31471817071](https://github.com/pedalbacklog/StrategyForge/actions/runs/31471817071) —
+"Build the WinUI 3 app (Coral)" en verde).
 
 **2026-08-11 — Toggle opt-in de Auto-PR construido de punta a punta.**
 Tras cerrar Fase 7, el founder pidió seguir con el producto y, entre las
