@@ -1728,6 +1728,10 @@ la copia dentro del flyout "Pull Request") se dejan igual a propósito —
 no fueron el hallazgo, y ese otro contexto (el flyout) ya es lo bastante
 prominente al ser un panel modal propio.
 
+CONFIRMADO compilando en windows-latest CI (commit `7560aeb`, run
+[31475443776](https://github.com/pedalbacklog/StrategyForge/actions/runs/31475443776) —
+"Build the WinUI 3 app (Coral)" en verde).
+
 Pendiente: reconfirmar visualmente en Windows real tanto el arreglo de
 alineación del checkbox como este cambio de contraste del mensaje de
 estado.

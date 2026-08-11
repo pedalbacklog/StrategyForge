@@ -741,4 +741,7 @@ Auto-PR toggle needs noticed, so it's now full opacity and
 `TextBlock`s on the page (`GitPanelViewModel`'s, and the copy inside the
 "Pull Request" flyout) are left as they were on purpose — they weren't the
 finding, and the flyout's copy already sits in its own prominent modal
-context.
+context. CONFIRMED compiling on windows-latest CI (commit `7560aeb`, run
+[31475443776](https://github.com/pedalbacklog/StrategyForge/actions/runs/31475443776) —
+"Build the WinUI 3 app (Coral)" green); pending visual reconfirmation on
+real Windows, same as the checkbox alignment fix above.
