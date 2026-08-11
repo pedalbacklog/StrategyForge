@@ -770,3 +770,32 @@ on Linux (316/316 unaffected, since it's excluded by the `Category!=Manual`
 filter) but, like every other test in this file, can only really run on
 Windows — pending the founder running it:
 `dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~WriteLineAsyncDeliversInputToARealChildProcessStdin"`.
+
+**Update: attempted on real Windows — unresolved environment issue, documented
+rather than chased further.** The founder ran it on their physical machine
+(not RDP, not a VM — explicitly ruled out), and both `ManualPseudoConsoleSmokeTest`
+tests failed with the exact same signature as Fase 3's original
+`STATUS_DLL_INIT_FAILED` investigation (see above): only the 16-byte ConPTY
+handshake crosses the pipe, then nothing — including the `echo` test that
+was confirmed passing back on 2026-08-06. The same fix from that
+investigation (switch to the classic console host, away from Windows
+Terminal) was retried, this time with the founder explicitly confirming
+the window had no tab strip (i.e. genuinely wasn't Windows Terminal hosting
+a `cmd`/PowerShell tab) before rerunning — and it failed identically
+anyway. That rules out Fase 3's documented cause as the complete
+explanation: something else is intercepting the nested ConPTY creation on
+this machine today that wasn't intercepting it (or not the same way) back
+then. Plausible, unconfirmed candidates — none diagnosable remotely without
+hands-on access to the machine: a Windows update since then changing
+`conhost.exe`'s internal behavior, some third-party terminal/console
+software hooking console creation system-wide, or a local group
+policy/registry setting.
+
+**Decision: parked, non-blocking.** The real app never launches from a
+terminal (it opens from Explorer, with no ConPTY anywhere above it in the
+process tree), so this nested-ConPTY scenario can't occur in production —
+it only affects manually running these two tests via `dotnet test`.
+`WriteLineAsyncDeliversInputToARealChildProcessStdin` stays written,
+compiling in CI, and documented as pending future verification if the
+environment ever changes (or gets investigated with direct machine
+access) — no more time spent chasing it blind over chat.

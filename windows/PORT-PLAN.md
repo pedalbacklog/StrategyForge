@@ -1780,3 +1780,35 @@ Sigue sin cubrirse (y no puede forzarse de forma determinista) el camino
 end-to-end completo contra un `claude auth login` real llegando a
 `NeedsCode` — eso sigue dependiendo de que el loopback local falle o esté
 bloqueado, fuera del control de este port.
+
+**Intento de verificación en Windows real, sin éxito — problema de entorno
+sin resolver, documentado en vez de perseguido más.** El founder lo probó
+en su máquina física real (no RDP, no VM — descartado explícitamente) y
+los dos tests de `ManualPseudoConsoleSmokeTest` fallaron con la MISMA huella
+que el bug de Fase 3 (`STATUS_DLL_INIT_FAILED`, ver más arriba en esta
+sección): solo los 16 bytes del handshake inicial de ConPTY
+(`ESC[?9001h ESC[?1004h...`) cruzan nuestro pipe y luego nada — incluido
+el test de `echo` que en su momento (2026-08-06) SÍ se confirmó pasando.
+Se repitió el mismo diagnóstico de entonces (cambiar a la consola clásica,
+sin Windows Terminal) — el founder confirmó explícitamente, antes de
+volver a correr el test, que la ventana era la consola clásica sin
+pestañas (no Windows Terminal alojando una pestaña de `cmd`/PowerShell) —
+y el fallo se reprodujo IGUAL. Esto descarta la causa documentada en Fase 3
+como explicación completa: algo más está interceptando la creación de la
+ConPTY anidada en esta máquina hoy, que no interceptaba (o no de la misma
+forma) cuando se diagnosticó aquello. Candidatos razonables sin confirmar
+(ninguno diagnosticable a distancia sin acceso directo a la máquina): una
+actualización de Windows que haya cambiado el comportamiento interno de
+`conhost.exe` desde entonces, algún software de terminal/consola de
+terceros interceptando la creación de consolas a nivel de sistema, o una
+directiva de grupo/registro local.
+
+**Decisión: aparcado, no bloqueante.** La app real nunca se lanza desde una
+terminal (se abre desde el Explorador, sin ninguna ConPTY por encima en el
+árbol de procesos), así que este escenario de "ConPTY anidada" no puede
+darse en producción — solo afecta a la verificación manual de estos dos
+tests concretos vía `dotnet test` a mano. `WriteLineAsyncDeliversInputToARealChildProcessStdin`
+queda escrito, compilando en CI, y documentado como pendiente de
+verificación futura si alguna vez cambia el entorno (o se investiga con
+acceso directo a la máquina) — no se ha invertido más tiempo en
+diagnosticarlo a ciegas por chat.
