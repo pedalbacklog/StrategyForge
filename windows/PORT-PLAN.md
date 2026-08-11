@@ -242,10 +242,19 @@ Fase 6 — Instalación de CLIs         ✅ ProviderInstaller.cs + ConnectViewMo
 Fase 7 — Code mode                   🔶 Capa de servicio completa + UI real
                                       (git panel, diff viewer, flujo de PR,
                                       selector de repo, panel de terminal,
-                                      "Commit + PR") — TODO CONFIRMADO
-                                      compilando en windows-latest CI (ver
-                                      §10); falta verificación visual real en
-                                      Windows y el toggle opt-in de Auto-PR
+                                      "Commit + PR") — CONFIRMADO compilando
+                                      en windows-latest CI Y verificado a mano
+                                      en Windows real (ver §10): git panel,
+                                      barra de ramas, selector/dedup de
+                                      repos, y panel de terminal, todos
+                                      probados de verdad, con cuatro bugs
+                                      reales encontrados y arreglados por el
+                                      camino. Sin confirmar todavía de forma
+                                      explícita: el ciclo completo de crear/
+                                      mergear un PR real y "Commit + PR"
+                                      abriendo un PR de verdad. Falta el
+                                      toggle opt-in de Auto-PR (deliberadamente
+                                      diferido, ver §9)
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -1382,7 +1391,10 @@ MÁS a partir de ahora. 2 tests nuevos en `RepoPickerViewModelTests`
 total. **Confirmado en CI**: commit `62cbf2d`, run
 [31388764516](https://github.com/pedalbacklog/StrategyForge/actions/runs/31388764516)
 (`windows-latest`, `workflow_dispatch`), verde a nivel de step incluyendo
-"Build the WinUI 3 app (Coral)" — `OpenOrCloneAsync` compila bien. Pendiente
-de reconfirmación visual real en Windows (seleccionar el mismo repo dos
-veces seguidas desde "Open Repo" y comprobar que la segunda vez abre la
-misma carpeta en vez de crear una nueva).
+"Build the WinUI 3 app (Coral)" — `OpenOrCloneAsync` compila bien.
+**Reconfirmado visualmente por el founder**: seleccionar el mismo repo dos
+veces seguidas desde "Open Repo" abre la carpeta existente, sin crear una
+nueva "-4" — arreglo funcionando de verdad, no solo compilando. Con esto,
+los cuatro bugs reales de este pase de Fase 7 (flyout de rama sin feedback,
+ComboBox con la rama incorrecta resaltada, Enter sin efecto, re-clonado
+duplicado) están todos arreglados y confirmados en Windows real.
