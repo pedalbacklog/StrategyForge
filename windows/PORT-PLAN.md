@@ -1692,8 +1692,11 @@ el toggle punto por punto sobre `ui-test-create-pr-2`:
    plantilla por defecto de `CheckBox` en WinUI3 no centra el contenido
    verticalmente frente al glifo cuando se reduce `FontSize` (aquí a 12);
    arreglado añadiendo `VerticalContentAlignment="Center"` al `CheckBox` en
-   `CodeModePage.xaml`. Solo XAML, sin tests unitarios posibles — pendiente
-   de reconfirmación visual.
+   `CodeModePage.xaml`. Solo XAML, sin tests unitarios posibles. CONFIRMADO
+   compilando en windows-latest CI (commit `d415f90`, run
+   [31474875284](https://github.com/pedalbacklog/StrategyForge/actions/runs/31474875284) —
+   "Build the WinUI 3 app (Coral)" en verde) — pendiente de reconfirmación
+   visual en Windows real.
 2. Con el toggle activo, pedir un cambio por chat abrió un PR solo al
    terminar el turno — confirmado tanto en la captura de Coral
    ("Pull request opened.") como en la rama `ui-test-create-pr-2` en
