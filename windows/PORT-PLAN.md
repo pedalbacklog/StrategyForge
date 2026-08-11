@@ -1495,6 +1495,12 @@ comprueba `"bypassPermissions"`) — sigue en 299 en total (no se añadió,
 se corrigió). Si en el futuro se porta el modo "Ask" de verdad, este valor
 por defecto debería revisarse.
 
+**Confirmado en CI**: commit `0ead749`, run
+[31469136602](https://github.com/pedalbacklog/StrategyForge/actions/runs/31469136602)
+(`windows-latest`, `workflow_dispatch`), verde a nivel de step incluyendo
+"Build the WinUI 3 app (Coral)" — el nuevo literal `"bypassPermissions"` y
+el test actualizado compilan bien.
+
 **Reconfirmado de verdad por el founder.** Le pidió al chat conectarse al
 repo, cambiar a la rama `embed-video`, y preparar un GIF local para el
 README — el agente encadenó `find`, `git status`, `git diff`,
