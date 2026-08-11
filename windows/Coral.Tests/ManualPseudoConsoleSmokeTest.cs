@@ -62,4 +62,71 @@ public class ManualPseudoConsoleSmokeTest
             "Never saw the echoed text in the pseudo-console output — report the lines printed above.");
         Assert.Equal(0, exitCode);
     }
+
+    /// <summary>Closes a real coverage gap flagged in <c>PORT-PLAN.md</c> §9:
+    /// <see cref="SpawnsARealProcessAttachedToAPseudoConsole"/> above only
+    /// ever ran a one-shot <c>echo</c> with no stdin involved, so
+    /// <see cref="IPseudoConsoleSession.WriteLineAsync"/> — the exact
+    /// mechanism <c>LoginInput.SubmitAsync</c> uses to deliver a pasted
+    /// browser auth code to a real CLI's stdin — had never actually been
+    /// exercised against a real ConPTY session, only against fakes in
+    /// <c>ConnectViewModelTests</c>. Both real Claude sign-ins run so far
+    /// resolved via loopback before <c>NeedsCode</c> ever fired (see
+    /// PORT-PLAN.md §10), so that specific end-to-end path still can't be
+    /// forced deterministically — it depends on network conditions this
+    /// port doesn't control. What CAN be tested deterministically, without
+    /// any CLI/network dependency at all, is the write itself: pipe a line
+    /// in and confirm a real child process reading its own stdin actually
+    /// receives it. <c>findstr /r .</c> (no file argument) is a plain
+    /// stdin-echo — no <c>set /p</c>/delayed-expansion timing traps to
+    /// worry about. <c>findstr</c> never reaches EOF on its own here (the
+    /// ConPTY input pipe stays open), so this reads only until it's seen
+    /// what it came for, then kills the session instead of waiting for a
+    /// natural exit — unlike every other manual smoke test here.</summary>
+    [Fact]
+    public async Task WriteLineAsyncDeliversInputToARealChildProcessStdin()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            _output.WriteLine("Skipped: ConPTY only exists on Windows.");
+            return;
+        }
+
+        var launcher = new Win32PseudoConsoleLauncher { Diagnostics = _output.WriteLine };
+        using var session = launcher.Start("cmd.exe", new List<string> { "/c", "findstr /r ." },
+            Environment.CurrentDirectory, new Dictionary<string, string?>());
+
+        const string payload = "hello-from-writelineasync";
+        await session.WriteLineAsync(payload, CancellationToken.None);
+
+        var sawEcho = false;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            await foreach (var line in session.ReadOutputLinesAsync(cts.Token))
+            {
+                _output.WriteLine(line);
+                if (line.Contains(payload))
+                {
+                    sawEcho = true;
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Handled below via sawEcho staying false — the assertion message
+            // explains what to check.
+        }
+        finally
+        {
+            session.Kill();
+        }
+
+        Assert.True(sawEcho,
+            $"Never saw '{payload}' echoed back — either the write didn't reach the child's stdin, or " +
+            "the read timed out after 10s. Report the lines printed above. See this test's own doc comment " +
+            "if this fails on Windows Terminal specifically — the same nested-ConPTY passthrough caveat as " +
+            "the test above may apply.");
+    }
 }

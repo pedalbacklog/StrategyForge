@@ -472,7 +472,7 @@ signed-in CLI. One coverage gap remains, non-blocking: `SubmitCodeAsync`/
 `LoginInput.SubmitAsync` (the actual manual-code-paste submission) has never
 fired against a real CLI waiting for it — both real attempts resolved via
 loopback first. Still covered by fake-based tests only. See `PORT-PLAN.md`
-§10 for the full writeup.
+§10 for the full writeup, and below for a partial close of this gap.
 
 **Fase 7 (Code mode) started: the whole service layer — `CodeGit` (all
 real-git operations, read/write/clone) and `GitHubCLI` (PR flow + repo
@@ -745,3 +745,28 @@ context. CONFIRMED compiling on windows-latest CI (commit `7560aeb`, run
 [31475443776](https://github.com/pedalbacklog/StrategyForge/actions/runs/31475443776) —
 "Build the WinUI 3 app (Coral)" green); pending visual reconfirmation on
 real Windows, same as the checkbox alignment fix above.
+
+**Update: partially closing the Fase 6 `SubmitCodeAsync`/`WriteLineAsync`
+coverage gap.** With Fase 9 (packaging) parked pending a signing-strategy
+decision, this stale gap got priority instead. The full end-to-end path —
+a real `claude auth login` actually reaching `NeedsCode` — still can't be
+forced deterministically, since both real attempts so far resolved via
+loopback first, a network condition outside this port's control. But the
+low-level mechanism `SubmitAsync` relies on —
+`IPseudoConsoleSession.WriteLineAsync` writing into a real ConPTY session —
+CAN be tested deterministically, independent of any CLI or network at all.
+`ManualPseudoConsoleSmokeTest`'s existing test only ever exercised the
+READ half of that primitive (`cmd.exe /c echo ...`, no stdin involved). A
+new test, `WriteLineAsyncDeliversInputToARealChildProcessStdin`, starts
+`cmd.exe /c "findstr /r ."` (no file — `findstr` echoes back whatever it
+reads from stdin, a clean stdin-echo with none of `set /p`/delayed
+expansion's timing traps), writes a line via `WriteLineAsync`, and confirms
+it comes back out through the child process's real stdout. Unlike the
+other manual tests here, `findstr` never exits on its own (the ConPTY's
+input pipe stays open), so this one reads only until it's seen what it's
+looking for (10s timeout) and explicitly kills the session rather than
+waiting for a natural exit. `Category=Manual` like the rest — builds clean
+on Linux (316/316 unaffected, since it's excluded by the `Category!=Manual`
+filter) but, like every other test in this file, can only really run on
+Windows — pending the founder running it:
+`dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~WriteLineAsyncDeliversInputToARealChildProcessStdin"`.

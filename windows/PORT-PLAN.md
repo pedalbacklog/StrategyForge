@@ -1073,7 +1073,11 @@ ejercitarse contra un CLI real esperando ese envío concreto (solo contra
 fakes) — un hueco de cobertura real pero no bloqueante, ya que depende de
 una condición de red que este port no controla (que el loopback local falle
 o esté bloqueado). `ManualProviderInstallerSmokeTest.cs` (detalle en §6)
-sigue disponible como verificación automatizada equivalente.
+sigue disponible como verificación automatizada equivalente. Lo que SÍ se
+puede probar de forma determinista, sin depender de esa condición de red,
+es el mecanismo mismo que `SubmitAsync` usa para entregar el código
+(`IPseudoConsoleSession.WriteLineAsync` escribiendo en un ConPTY real) —
+ver el nuevo test en §10 (2026-08-11).
 
 ## 10. Bitácora de verificación en Windows real
 
@@ -1735,3 +1739,41 @@ CONFIRMADO compilando en windows-latest CI (commit `7560aeb`, run
 Pendiente: reconfirmar visualmente en Windows real tanto el arreglo de
 alineación del checkbox como este cambio de contraste del mensaje de
 estado.
+
+**Cerrando (parcialmente) el hueco de cobertura de Fase 6: `WriteLineAsync`
+contra un ConPTY real.** Con Fase 9 aparcada a la espera de decidir la
+estrategia de firma, se priorizó este cabo suelto anotado desde el cierre
+de Fase 6: `SubmitCodeAsync()`/`LoginInput.SubmitAsync()` — el camino que
+entrega a mano el código de login pegado del navegador — nunca se había
+ejercitado contra un CLI real esperando ese envío (los dos intentos reales
+de login se resolvieron por loopback antes de llegar a ese punto, algo que
+este port no controla porque depende de la red). Lo que SÍ se puede probar
+de forma determinista, sin depender en absoluto de esa condición de red o
+de tener `claude` instalado, es el mecanismo de bajo nivel que
+`SubmitAsync` usa para entregar el código:
+`IPseudoConsoleSession.WriteLineAsync` escribiendo en la pseudo-consola.
+`ManualPseudoConsoleSmokeTest.cs` (Fase 3) solo había probado hasta ahora
+la mitad de LECTURA de esa primitiva (`cmd.exe /c echo ...`, sin stdin de
+por medio) — nunca la mitad de ESCRITURA.
+
+Nuevo test manual, `WriteLineAsyncDeliversInputToARealChildProcessStdin`:
+arranca `cmd.exe /c "findstr /r ."` (sin fichero, `findstr` lee de stdin
+línea a línea y reimprime las que casan con el patrón — un "cat" de toda
+la vida en cmd, sin las trampas de temporización de `set /p`/expansión
+retrasada), escribe una línea de prueba vía `WriteLineAsync`, y confirma
+que esa misma línea aparece en la salida real del proceso hijo. A
+diferencia del resto de tests manuales de este fichero, `findstr` no
+termina solo (el pipe de entrada del ConPTY se queda abierto), así que el
+test lee solo hasta ver lo que busca (con un timeout de 10s) y luego mata
+la sesión explícitamente en vez de esperar una salida natural.
+
+Categoría `Manual` como el resto — compila limpio en Linux (`dotnet build`/
+`dotnet test --filter "Category!=Manual"`, 316/316 sin cambios, ya que el
+test nuevo queda excluido del filtro), pero como el resto de esta familia
+de tests SOLO puede ejecutarse de verdad en Windows — pendiente de que el
+founder lo corra:
+`dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "FullyQualifiedName~WriteLineAsyncDeliversInputToARealChildProcessStdin"`.
+Sigue sin cubrirse (y no puede forzarse de forma determinista) el camino
+end-to-end completo contra un `claude auth login` real llegando a
+`NeedsCode` — eso sigue dependiendo de que el loopback local falle o esté
+bloqueado, fuera del control de este port.
