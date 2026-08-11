@@ -15,19 +15,20 @@ namespace Coral.Core.ViewModels;
 /// SCOPE: only what <see cref="GitHubCLI"/> already ports —
 /// <see cref="RefreshAsync"/> (read the PR for a branch),
 /// <see cref="CreateAsync"/> (open one), <see cref="MergeAsync"/> (merge
-/// it), and now <see cref="ShipAsync"/> — the one-tap "Commit + PR" engine
+/// it), and <see cref="ShipAsync"/> — the one-tap "Commit + PR" engine
 /// (commit → push → open-or-skip a PR), delegating the actual git+gh calls
 /// to <see cref="ShipFlow"/> rather than duplicating them here, so
 /// this ViewModel still doesn't take a dependency on
 /// <see cref="GitPanelViewModel"/> (its caller passes in whatever git state
-/// it needs — repo path, branch, staged-ness). Deliberately NOT here yet:
-/// wiring <see cref="ShipAsync"/> to auto-fire when a run finishes (Auto-PR's
-/// opt-in toggle) — that needs a settings-persistence mechanism this port
-/// hasn't built yet, and reaching into <see cref="ChatViewModel"/>'s turn
-/// lifecycle from here would cross a boundary Fase 5 confirmed working and
-/// this pass isn't willing to risk without a human running it — and repo
-/// browse/create (<c>GitHubCLI.ListReposAsync</c>/<c>CreateRepoAsync</c> back
-/// a repo-picker flow, a different screen entirely).
+/// it needs — repo path, branch, staged-ness). <see cref="AutoPr"/> is the
+/// opt-in toggle (persisted via <see cref="AppSettings"/>), but the actual
+/// "fire <see cref="ShipAsync"/> when a chat turn finishes" wiring lives in
+/// <c>CodeModePage.xaml.cs</c> — it needs to observe <c>ChatViewModel.
+/// IsSending</c>, which this ViewModel deliberately has no dependency on
+/// (same reasoning as not depending on <c>GitPanelViewModel</c>). Still
+/// deliberately NOT here: repo browse/create (<c>GitHubCLI.ListReposAsync</c>/
+/// <c>CreateRepoAsync</c> back a repo-picker flow, a different screen
+/// entirely).
 /// </summary>
 public sealed class PullRequestViewModel : ObservableObject
 {
@@ -50,12 +51,44 @@ public sealed class PullRequestViewModel : ObservableObject
     private string? _statusMessage;
     public string? StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
 
-    public PullRequestViewModel(IProcessLauncher launcher, string repoPath, Func<string, string?>? resolveBinary = null)
+    private readonly Action<bool> _saveAutoPr;
+    private bool _autoPr;
+
+    /// <summary>Opt-in: auto-ship (see <see cref="ShipAsync"/>, <c>auto:
+    /// true</c>) after a chat turn that changed files finishes. Off by
+    /// default; persisted immediately on every change via the injected
+    /// save function (<see cref="AppSettings.AutoPr"/> in production).</summary>
+    public bool AutoPr
+    {
+        get => _autoPr;
+        set
+        {
+            if (SetProperty(ref _autoPr, value)) _saveAutoPr(value);
+        }
+    }
+
+    /// <paramref name="loadAutoPr"/>/<paramref name="saveAutoPr"/> are
+    /// injectable so the persisted toggle is unit-testable without touching
+    /// the real settings file — production callers leave both at their
+    /// defaults (<see cref="AppSettings.AutoPr"/>'s getter/setter).
+    public PullRequestViewModel(IProcessLauncher launcher, string repoPath, Func<string, string?>? resolveBinary = null,
+        Func<bool>? loadAutoPr = null, Action<bool>? saveAutoPr = null)
     {
         _launcher = launcher;
         _repoPath = repoPath;
         _resolveBinary = resolveBinary;
+        _saveAutoPr = saveAutoPr ?? (v => AppSettings.AutoPr = v);
+        _autoPr = (loadAutoPr ?? (() => AppSettings.AutoPr))();
     }
+
+    /// <summary>Pure decision for Code Mode's Auto-PR trigger — matches
+    /// <c>CodeModeView.swift</c>'s <c>onChange(of: vm.isRunning)</c> guard
+    /// (<c>autoPR, isRepo, GitHubCLI.isInstalled, !changeStats.isEmpty</c>);
+    /// <paramref name="hasRepo"/> is always true for this port's Code Mode
+    /// (a window always has a repo path), kept as a parameter anyway to
+    /// mirror the original 1:1 and stay testable if that ever changes.</summary>
+    public static bool ShouldAutoShip(bool autoPr, bool hasRepo, bool ghInstalled, bool hasChanges) =>
+        autoPr && hasRepo && ghInstalled && hasChanges;
 
     /// <summary>Reload the PR (if any) for <paramref name="branch"/>. The
     /// caller passes the branch in — this ViewModel doesn't own branch

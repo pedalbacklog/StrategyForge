@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Coral.Core.Services;
 using Coral.Core.ViewModels;
 using Microsoft.UI.Xaml;
@@ -17,10 +18,13 @@ namespace Coral;
 /// the chat's own <see cref="ChatViewModel"/> (for <c>CommandLog</c> and the
 /// commit-message/PR-body drafting <see cref="OnShipClick"/> uses)
 /// respectively (kept separate ViewModels on purpose — see each one's own
-/// doc comment). Deliberately NOT here: Auto-PR's opt-in auto-fire-on-run-
-/// finish (see <see cref="PullRequestViewModel"/>'s doc comment), repo
-/// browse/create, and loading a file's raw (non-diff) contents — each is its
-/// own unported piece.
+/// doc comment). Auto-PR's toggle lives on <see cref="PullRequestViewModel"/>
+/// (<c>AutoPr</c>, persisted via <c>AppSettings</c>); the auto-fire-on-run-
+/// finish wiring lives here (<see cref="OnChatViewModelPropertyChanged"/>),
+/// observing <c>ChatViewModel.IsSending</c> from outside rather than having
+/// <c>ChatViewModel</c> itself know about Code Mode. Deliberately NOT here:
+/// repo browse/create, and loading a file's raw (non-diff) contents — each
+/// is its own unported piece.
 /// </summary>
 public sealed partial class CodeModePage : Page
 {
@@ -41,6 +45,38 @@ public sealed partial class CodeModePage : Page
         ChatViewModel = chatViewModel;
 
         InitializeComponent();
+
+        // Not unsubscribed on close — same precedent MainPage already set
+        // for its own RepoPickerViewModel subscription. Harmless even if it
+        // piles up across repeated Code Mode opens for the same chat:
+        // ShipAsync's own IsBusy guard (set synchronously before any await)
+        // turns a redundant same-tick fire into a no-op, not a duplicate ship.
+        ChatViewModel.PropertyChanged += OnChatViewModelPropertyChanged;
+    }
+
+    /// <summary>Port of <c>CodeModeView.swift</c>'s
+    /// <c>.onChange(of: vm.isRunning)</c>: once a turn finishes, ship
+    /// automatically if Auto-PR is on and there's something to ship. Doesn't
+    /// call <see cref="PullRequestViewModel.ShouldAutoShip"/> directly —
+    /// that static method and this page's own <c>PullRequestViewModel</c>
+    /// property share a name, and C# won't let a static member be reached
+    /// through what resolves to an instance reference — so the same
+    /// four-part check is inlined here instead; the static method stays as
+    /// the tested, documented spec for it.</summary>
+    private async void OnChatViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(Coral.Core.ViewModels.ChatViewModel.IsSending) || ChatViewModel.IsSending) return;
+        if (!PullRequestViewModel.AutoPr) return;
+        if (ViewModel.Branch is not { } branch) return;
+
+        await ViewModel.RefreshAsync();
+        if (!GitHubCLI.IsInstalled() || ViewModel.ChangedFiles.Count == 0) return;
+
+        var message = ChatViewModel.DraftCommitMessage();
+        if (string.IsNullOrWhiteSpace(message)) message = "Update";
+        var body = ChatViewModel.DraftPrBody();
+        await PullRequestViewModel.ShipAsync(_repoPath, branch, message, message, body,
+            anyStaged: ViewModel.StagedFiles.Count > 0, auto: true);
     }
 
     private async void OnPageLoaded(object sender, RoutedEventArgs e) => await ViewModel.RefreshAsync();

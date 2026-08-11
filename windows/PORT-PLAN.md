@@ -255,10 +255,13 @@ Fase 7 — Code mode                   ✅ cerrada — capa de servicio completa
                                       desde la UI, confirmado en GitHub.
                                       Nueve bugs reales encontrados y
                                       arreglados por el camino (detalle en
-                                      §10). Solo queda diferido a propósito:
-                                      el toggle opt-in de Auto-PR (necesita
-                                      infraestructura de settings que no
-                                      existe todavía, ver §9)
+                                      §10). El toggle opt-in de Auto-PR ya
+                                      está construido (`AppSettings.cs` +
+                                      `PullRequestViewModel.AutoPr` +
+                                      checkbox en `CodeModePage.xaml` +
+                                      disparo en `OnChatViewModelPropertyChanged`,
+                                      ver §10) — pendiente de verificación a
+                                      mano en Windows real
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -1608,3 +1611,65 @@ que nunca simulaba `rev-parse` con una rama real (devolvía éxito con salida
 vacía) — inofensivo antes de este cambio porque nada comprobaba `Branch`,
 pero ahora sí, así que se corrigió el fake para que devuelva `"main"`. 1
 test nuevo — 302 en total.
+
+**2026-08-11 — Toggle opt-in de Auto-PR construido de punta a punta.**
+Tras cerrar Fase 7, el founder pidió seguir con el producto y, entre las
+opciones planteadas, eligió construir el toggle de Auto-PR — lo único que
+había quedado deliberadamente diferido porque necesitaba una capa de
+persistencia de settings que aún no existía.
+
+1. **`Coral.Core/Services/AppSettings.cs` (nuevo).** Persistencia mínima
+   respaldada por un fichero JSON en `%LOCALAPPDATA%\Coral\settings.json`
+   — deliberadamente NO usa `Windows.Storage.ApplicationData` porque
+   requiere identidad de paquete y Coral sigue sin empaquetar (Fase 9
+   pendiente). Sigue el mismo patrón núcleo-puro-más-envoltorio-real ya
+   establecido por `ProviderAuth.FreshnessUncached(homeDirectory)`/
+   `Freshness()`: `ReadAutoPrUncached(path)`/`WriteAutoPrUncached(path,
+   value)` son funciones puras testeables contra un directorio temporal
+   (nunca tocan el disco real en los tests), y la propiedad estática
+   `AutoPr` es el envoltorio real que usa `DefaultPath()`. Tolera JSON
+   corrupto devolviendo `false` en vez de lanzar. 6 tests nuevos en
+   `AppSettingsTests.cs`.
+2. **`PullRequestViewModel.AutoPr` (propiedad nueva).** `bool` respaldado
+   por `_saveAutoPr`/el valor inicial de `loadAutoPr`, ambos inyectables
+   por constructor (por defecto, el getter/setter reales de
+   `AppSettings.AutoPr`) — así el toggle es testeable sin tocar el fichero
+   real, mismo patrón que `checkFreshness` en `ConnectViewModel`. Se
+   persiste inmediatamente en cada cambio real (`SetProperty` ya evita
+   escribir si el valor no cambia). 3 tests nuevos.
+3. **`PullRequestViewModel.ShouldAutoShip(autoPr, hasRepo, ghInstalled,
+   hasChanges)` (método estático nuevo).** Decisión pura que replica la
+   guarda de `CodeModeView.swift`'s `.onChange(of: vm.isRunning)`
+   (`autoPR, isRepo, GitHubCLI.isInstalled, !changeStats.isEmpty`) — sirve
+   de spec testeada (5 casos `[Theory]`) aunque, por una colisión de
+   nombres en C# (ver más abajo), el disparo real no lo llama
+   directamente.
+4. **Checkbox en `CodeModePage.xaml`.** `"Auto-PR when a run finishes"`
+   atado a `PullRequestViewModel.AutoPr` con `Mode=TwoWay` — sin lógica
+   propia, el propio binding ya persiste el cambio a través de la cadena
+   de arriba.
+5. **Disparo real — `CodeModePage.xaml.cs`, `OnChatViewModelPropertyChanged`.**
+   Puerto de `.onChange(of: vm.isRunning)` de `CodeModeView.swift`: el
+   constructor de `CodeModePage` se suscribe a
+   `ChatViewModel.PropertyChanged` (sin desuscribirse al cerrar — mismo
+   precedente ya sentado por `MainPage` con `RepoPickerViewModel`,
+   inofensivo porque el propio guard de `IsBusy` de `ShipAsync` convierte
+   cualquier disparo repetido en el mismo tick en un no-op). Cuando
+   `IsSending` pasa a `false`, si `AutoPr` está activo, refresca el panel
+   de git y — si `gh` está instalado y hay cambios — dispara `ShipAsync`
+   con un commit message/PR body redactados a partir de la última
+   respuesta del chat (mismo fallback que usa `OnShipClick`). Nota de C#:
+   `PullRequestViewModel.ShouldAutoShip(...)` NO se puede llamar así desde
+   dentro de `CodeModePage` — `CodeModePage` tiene su propia propiedad de
+   instancia llamada `PullRequestViewModel`, y el identificador resuelve a
+   esa propiedad antes que al tipo, así que C# no deja alcanzar un miembro
+   estático a través de lo que resuelve a una referencia de instancia
+   (CS0176). Se evitó compilando el mismo chequeo de cuatro partes en
+   línea, dejando el método estático como spec documentada y testeada.
+
+Solo cubierto por tests unitarios y build/test local (316/316) — pendiente
+de verificación de compilación en windows-latest CI y, sobre todo, de
+prueba a mano en Windows real por el founder (activar el toggle, pedir un
+cambio de fichero por chat en una rama nueva, confirmar que se abre un PR
+solo al terminar el turno, sin tocar "Commit + PR"). 14 tests nuevos — 316
+en total.

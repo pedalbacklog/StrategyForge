@@ -154,6 +154,14 @@
                      flyout afterward to check. -->
                 <TextBlock Text="{x:Bind PullRequestViewModel.StatusMessage, Mode=OneWay}"
                            Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                <!-- Port of CodeModeView.swift's "code.autoPR" @AppStorage toggle:
+                     when on, a chat turn that changes files auto-ships (commit →
+                     push → open/update a PR) the moment it finishes — see
+                     OnChatViewModelPropertyChanged. Persisted immediately via
+                     PullRequestViewModel.AutoPr (AppSettings-backed), so it
+                     survives closing this window/the whole app. -->
+                <CheckBox Content="Auto-PR when a run finishes"
+                          IsChecked="{x:Bind PullRequestViewModel.AutoPr, Mode=TwoWay}" FontSize="12" />
             </StackPanel>
         </Grid>
 

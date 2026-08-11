@@ -171,7 +171,7 @@ windows/
   type behind it: `CodeModeView.swift` keeps this state as plain `@State` on
   the View itself, SwiftUI's norm, not a separate ViewModel class — so this
   is a fresh design in the same shape this port already established, not a
-  translation. Deliberately excludes Auto-PR — no C# service behind it yet.
+  translation.
   10 tests; **not yet confirmed on real
   Windows** — see Status. And `PullRequestViewModel` (Fase 7): the one-tap PR
   flow, kept as its own ViewModel rather than folded into
@@ -179,7 +179,9 @@ windows/
   `ChatViewModel`/`ConnectViewModel`. Wraps `GitHubCLI.PrInfoAsync`/
   `CreatePRAsync`/`MergePRAsync`; the branch it acts on is passed in by the
   caller rather than owned here, since `GitPanelViewModel` is what tracks
-  the active branch. 7 tests. And `RepoPickerViewModel` (Fase 7): the repo
+  the active branch. Also owns the opt-in `AutoPr` toggle (persisted via
+  the new `AppSettings`, see the 2026-08-11 update below). 10 tests. And
+  `RepoPickerViewModel` (Fase 7): the repo
   picker that had been the standing "Fase 5 leftover" for a while — browse
   the signed-in user's GitHub repos, clone one by URL, or create a new one,
   wrapping `GitHubCLI.ListReposAsync`/`CodeGit.CloneAsync`/`GitHubCLI.
@@ -212,7 +214,7 @@ dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category
 dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
 ```
 
-> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **302/302**
+> `Coral.Core`/`Coral.Tests` (plain net8.0, no WinUI dependency) build and pass **316/316**
 > tests on Linux too — verified locally with the .NET 8 SDK, not just assumed. (The
 > `--filter` excludes two more tests, `ManualClaudeRunnerSmokeTest` and
 > `ManualPseudoConsoleSmokeTest`, that need a real, logged-in `claude` CLI and real
@@ -343,7 +345,7 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow` (Fase 7 — see below) — 302 automated
+`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow`/`AppSettings` (Fase 7 — see below) — 316 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -353,7 +355,7 @@ added after the first real-Windows run, `ProviderAuthTests`,
 `ChatViewModelTests`, `AgentNameMatcherTests`, `ProviderInstallerTests`
 (against a new `FakePseudoConsoleLauncher`, mirroring `FakeProcessLauncher`),
 `ConnectViewModelTests`, `CodeGitTests`, `GitPanelViewModelTests`,
-`GitHubCLITests`, and the `MissionReport.AgentLines` cases) — plus 4 manual
+`GitHubCLITests`, `AppSettingsTests`, and the `MissionReport.AgentLines` cases) — plus 4 manual
 tests excluded from that count and from CI
 (see "Testing the pieces that need a real Windows machine").
 Fase 2's last loose end (`MissionReport.agentLines()`, which needed
@@ -687,3 +689,25 @@ converter).
 Written while GitHub Actions was down (see below) — none of the service
 layer needs Windows or CI to build/test, so there was no reason to wait
 idle for it.
+
+**Update (2026-08-11): the opt-in Auto-PR toggle, built end to end.** With
+Fase 6 and 7 both closed, the founder asked to keep going on the product and
+picked Auto-PR — the one piece Fase 7 had deliberately deferred, for lack of
+any settings-persistence layer. New `AppSettings` (JSON file under
+`%LOCALAPPDATA%\Coral\settings.json`, not `Windows.Storage.ApplicationData`
+since Coral is still unpackaged) backs a new `PullRequestViewModel.AutoPr`
+property (injectable load/save, same pattern as `ConnectViewModel`'s
+`checkFreshness`) and a checkbox on `CodeModePage`. The actual trigger —
+mirroring `CodeModeView.swift`'s `.onChange(of: vm.isRunning)` — lives in
+`CodeModePage.xaml.cs`: the page subscribes to `ChatViewModel.PropertyChanged`
+in its constructor and, when `IsSending` flips to `false` with the toggle on
+and `gh` installed and files changed, refreshes the git panel and calls
+`PullRequestViewModel.ShipAsync` the same way "Commit + PR" does, using the
+same drafted-message fallback. `PullRequestViewModel.ShouldAutoShip(autoPr,
+hasRepo, ghInstalled, hasChanges)` is a pure static spec of the guard (5
+`[Theory]` cases) but the wiring in `CodeModePage` can't call it directly —
+`CodeModePage` also has an instance property named `PullRequestViewModel`,
+so the identifier resolves to that instance before the type (C# CS0176) —
+worked around by inlining the same four-part check instead. 14 new tests —
+316 total. Build/test-verified locally; not yet confirmed on real Windows —
+see Status.
