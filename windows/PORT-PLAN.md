@@ -1706,13 +1706,25 @@ el toggle punto por punto sobre `ui-test-create-pr-2`:
    encima del checkbox y fácil de pasar por alto durante la prueba en vivo.
    No es el mismo bug que el de "Push no da feedback" (aquella vez el
    `TextBlock` correcto no existía en ese punto de la UI; aquí sí existe y
-   se actualiza). No se toca por ahora — a la espera de si el founder
-   quiere hacerlo más visible.
+   se actualiza) — pero el founder pidió pulirlo igualmente, ver más abajo.
 4. Con el toggle desactivado, un tercer cambio por chat SÍ se aplicó
    localmente (el chat lo confirma) pero NO se disparó ningún commit/push
    automático — el cambio se quedó sin confirmar en el working tree,
    invisible en GitHub. Comportamiento esperado: confirma que el toggle
    apagado no dispara nada.
 
-Pendiente: reconfirmar visualmente el arreglo de alineación del checkbox
-una vez compile en CI y el founder lo vea en su máquina.
+**Pulido pedido explícitamente tras la verificación: hacer más visible
+"Pull request updated"/"Pull request opened".** El `TextBlock` de
+`PullRequestViewModel.StatusMessage` junto a "Commit + PR" en
+`CodeModePage.xaml` estaba a `Opacity="0.7"` y peso normal, igual que el
+resto de mensajes de estado de la página — a diferencia de esos otros,
+este es justo el que el toggle de Auto-PR necesita que se note, así que
+pasa a opacidad completa y `FontWeight="SemiBold"` (13px en vez de 12). El
+resto de `TextBlock`s de estado de la página (el de `GitPanelViewModel` y
+la copia dentro del flyout "Pull Request") se dejan igual a propósito —
+no fueron el hallazgo, y ese otro contexto (el flyout) ya es lo bastante
+prominente al ser un panel modal propio.
+
+Pendiente: reconfirmar visualmente en Windows real tanto el arreglo de
+alineación del checkbox como este cambio de contraste del mensaje de
+estado.

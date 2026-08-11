@@ -151,9 +151,13 @@
                      too, but that flyout is a separate button — "Commit + PR" never
                      opens it, so without a copy here its own result (opened/updated/
                      error) was invisible unless you happened to also open the PR
-                     flyout afterward to check. -->
+                     flyout afterward to check. Full opacity and bold (unlike the
+                     other StatusMessage TextBlocks on this page) — real feedback
+                     from testing on real Windows: at 0.7 opacity/regular weight it
+                     was too easy to miss during a live run, right where the toggle
+                     wired to this same message (see below) needs it noticed most. -->
                 <TextBlock Text="{x:Bind PullRequestViewModel.StatusMessage, Mode=OneWay}"
-                           Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                           FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap" />
                 <!-- Port of CodeModeView.swift's "code.autoPR" @AppStorage toggle:
                      when on, a chat turn that changes files auto-ships (commit →
                      push → open/update a PR) the moment it finishes — see

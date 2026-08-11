@@ -730,3 +730,15 @@ doesn't vertically center its content against the check glyph once
 `VerticalContentAlignment="Center"` to the `CheckBox` in
 `CodeModePage.xaml`. XAML-only change, no unit test possible for it —
 pending visual reconfirmation.
+
+**Follow-up polish, explicitly requested after the verification above:**
+the "Pull request opened."/"Pull request updated." `TextBlock` next to
+"Commit + PR" was styled the same as every other status message on the
+page (`Opacity="0.7"`, regular weight) — easy to miss live, which is
+exactly what happened during testing. Unlike the rest, this is the one the
+Auto-PR toggle needs noticed, so it's now full opacity and
+`FontWeight="SemiBold"` (13px instead of 12). The other status
+`TextBlock`s on the page (`GitPanelViewModel`'s, and the copy inside the
+"Pull Request" flyout) are left as they were on purpose — they weren't the
+finding, and the flyout's copy already sits in its own prominent modal
+context.
