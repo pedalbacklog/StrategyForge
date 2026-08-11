@@ -43,6 +43,21 @@ public class GitPanelViewModelTests
     }
 
     [Fact]
+    public async Task RefreshAsyncReportsAStatusMessageWhenTheFolderIsntARepo()
+    {
+        // Real gap found on real Windows: pointed at a non-repo folder (the
+        // wrong window's RepoPath), every git call fails, Branch ends up
+        // null, and Refresh used to give zero feedback about why.
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>(), exitCode: 1));
+        var vm = new GitPanelViewModel(launcher, "/not-a-repo", ResolveGit);
+
+        await vm.RefreshAsync();
+
+        Assert.Null(vm.Branch);
+        Assert.NotNull(vm.StatusMessage);
+    }
+
+    [Fact]
     public async Task SelectFileAsyncLoadsTheDiffForThatFile()
     {
         var launcher = new FakeProcessLauncher((_, args) =>
@@ -112,6 +127,7 @@ public class GitPanelViewModelTests
         var launcher = new FakeProcessLauncher((_, args) =>
         {
             if (args.Contains("commit")) return new FakeChildProcess(new List<string> { "[main abc] msg" });
+            if (args.Contains("rev-parse")) return new FakeChildProcess(new List<string> { "main" });
             return new FakeChildProcess(new List<string>());
         });
         var vm = new GitPanelViewModel(launcher, "/repo", ResolveGit);

@@ -239,31 +239,26 @@ Fase 6 — Instalación de CLIs         ✅ ProviderInstaller.cs + ConnectViewMo
                                       (dos intentos, los dos resueltos por
                                       loopback antes de necesitarlo) — cubierto
                                       por tests con fakes, no bloqueante
-Fase 7 — Code mode                   🔶 Capa de servicio completa + UI real
-                                      (git panel, diff viewer, flujo de PR,
-                                      selector de repo, panel de terminal,
-                                      "Commit + PR") — CONFIRMADO compilando
-                                      en windows-latest CI Y verificado a mano
-                                      en Windows real (ver §10): git panel,
-                                      barra de ramas, selector/dedup de
-                                      repos, panel de terminal, y ahora
-                                      también el ciclo completo de crear +
-                                      mergear un PR real (`gh pr create`/
-                                      `gh pr merge`, vía el agente por Bash
-                                      con permisos ya arreglados) — todo
-                                      probado de verdad, con siete bugs
-                                      reales encontrados y arreglados por el
-                                      camino. Confirma que `gh`/`git`
-                                      funcionan de punta a punta en este
-                                      entorno, pero sin confirmar todavía de
-                                      forma explícita: los botones propios
-                                      "Create PR"/"Merge" del flyout de PR y
-                                      "Commit + PR" pulsados directamente
-                                      (nunca se usaron en esta prueba — el
-                                      agente hizo el PR/merge él mismo por
-                                      Bash). Falta el toggle opt-in de
-                                      Auto-PR (deliberadamente diferido, ver
-                                      §9)
+Fase 7 — Code mode                   ✅ cerrada — capa de servicio completa +
+                                      UI real (git panel, diff viewer, flujo
+                                      de PR, selector de repo, panel de
+                                      terminal, "Commit + PR"), CONFIRMADA
+                                      compilando en windows-latest CI Y
+                                      verificada a mano en Windows real (ver
+                                      §10): git panel, barra de ramas,
+                                      selector/dedup de repos, panel de
+                                      terminal, el ciclo completo de PR real
+                                      vía el agente (`gh pr create`/`merge`
+                                      por Bash) Y, por separado, los botones
+                                      propios "Create PR"/"Merge" pulsados
+                                      directamente — PR creado y mergeado
+                                      desde la UI, confirmado en GitHub.
+                                      Nueve bugs reales encontrados y
+                                      arreglados por el camino (detalle en
+                                      §10). Solo queda diferido a propósito:
+                                      el toggle opt-in de Auto-PR (necesita
+                                      infraestructura de settings que no
+                                      existe todavía, ver §9)
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -1599,3 +1594,17 @@ nada visual. Arreglo mínimo: `IsEnabled` de Commit/Push/Refresh/Create
 correspondiente — un botón deshabilitado durante la operación es señal
 suficiente sin necesitar un spinner. `"Commit + PR"` ya lo tenía desde que
 se creó.
+
+**Cerrado el cabo suelto anotado en la entrada anterior: `Refresh` sin
+aviso en un repo inválido.** `GitPanelViewModel.RefreshAsync()` ahora pone
+un `StatusMessage` ("Couldn't read this repo — is it a real git
+repository?") cuando `CurrentBranchAsync` devuelve `null` — deliberadamente
+sin limpiar el mensaje en el camino de éxito, porque varios llamantes
+(`CommitAsync`/`PushAsync`/`CreateBranchAsync`/`CheckoutAsync`) ponen su
+propio mensaje de éxito ANTES de llamar a `RefreshAsync()` y necesitan que
+sobreviva. El test nuevo (`RefreshAsyncReportsAStatusMessageWhenTheFolderIsntARepo`)
+destapó de paso un fake perezoso en `CommitAsyncClearsTheMessageAndRefreshesOnSuccess`
+que nunca simulaba `rev-parse` con una rama real (devolvía éxito con salida
+vacía) — inofensivo antes de este cambio porque nada comprobaba `Branch`,
+pero ahora sí, así que se corrigió el fake para que devuelva `"main"`. 1
+test nuevo — 302 en total.

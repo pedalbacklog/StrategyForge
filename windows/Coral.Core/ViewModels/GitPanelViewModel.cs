@@ -99,6 +99,17 @@ public sealed class GitPanelViewModel : ObservableObject
             foreach (var b in branches) Branches.Add(b);
 
             Branch = await CodeGit.CurrentBranchAsync(_launcher, _repoPath, _resolveBinary, ct);
+            // Real gap found on real Windows: refreshing a folder that isn't a
+            // git repo (e.g. the wrong window's RepoPath) left every field
+            // empty with zero feedback — "Refresh" looked like it did nothing.
+            // Only set here, not cleared on success: several callers
+            // (CommitAsync/PushAsync/CreateBranchAsync/CheckoutAsync) set their
+            // own success StatusMessage BEFORE calling RefreshAsync and expect
+            // it to survive.
+            if (Branch is null)
+            {
+                StatusMessage = "Couldn't read this repo — is it a real git repository?";
+            }
 
             if (SelectedFile is null || !ChangedFiles.Any(f => f.Path == SelectedFile))
             {
