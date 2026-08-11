@@ -876,11 +876,13 @@ turn's `--model` argument) — 320 total. Fixed in passing: the requirements
 list said "13 templates" — both macOS and this port actually have 15; a
 stale number, not a real missing feature.
 
-Covered by unit tests and local build/test (320/320) — pending
-windows-latest CI confirmation (the new button/flyout is XAML) and
-hands-on verification on real Windows (pick a template, confirm real
-`.claude/agents/*.md` files show up in the repo, and that the next chat
-turn actually delegates to the generated subagents).
+Covered by unit tests, local build/test (320/320), and CONFIRMED compiling
+on windows-latest CI (commit `7945288`, run
+[31489629778](https://github.com/pedalbacklog/StrategyForge/actions/runs/31489629778) —
+"Build the WinUI 3 app (Coral)" green) — pending hands-on verification on
+real Windows (pick a template, confirm real `.claude/agents/*.md` files
+show up in the repo, and that the next chat turn actually delegates to the
+generated subagents).
 
 **Update, same day: Phase 3 — the Advisor engine, ported and wired into the
 UI (heuristic half).** The founder wasn't going to be able to test on real

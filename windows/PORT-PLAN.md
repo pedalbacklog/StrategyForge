@@ -1904,11 +1904,13 @@ construir el ViewModel se refleja en el `--model` del siguiente turno) —
 tanto macOS como el port ya tienen 15 — número desactualizado, no una
 funcionalidad real que faltara.
 
-Cubierto por tests unitarios y build/test local (320/320) — pendiente de
-verificación de compilación en windows-latest CI (el nuevo botón/flyout es
-XAML) y de prueba a mano en Windows real (elegir una plantilla, confirmar
-que aparecen `.claude/agents/*.md` reales en el repo, y que el siguiente
-turno del chat delega de verdad en los subagentes generados).
+Cubierto por tests unitarios, build/test local (320/320) y CONFIRMADO
+compilando en windows-latest CI (commit `7945288`, run
+[31489629778](https://github.com/pedalbacklog/StrategyForge/actions/runs/31489629778) —
+"Build the WinUI 3 app (Coral)" en verde) — pendiente de prueba a mano en
+Windows real (elegir una plantilla, confirmar que aparecen
+`.claude/agents/*.md` reales en el repo, y que el siguiente turno del chat
+delega de verdad en los subagentes generados).
 
 **2026-08-11 (mismo día) — Fase 3: el motor del Advisor, portado y
 enganchado a la UI (mitad heurística).** El founder no iba a poder probar
