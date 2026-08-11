@@ -246,15 +246,24 @@ Fase 7 — Code mode                   🔶 Capa de servicio completa + UI real
                                       en windows-latest CI Y verificado a mano
                                       en Windows real (ver §10): git panel,
                                       barra de ramas, selector/dedup de
-                                      repos, y panel de terminal, todos
-                                      probados de verdad, con cuatro bugs
+                                      repos, panel de terminal, y ahora
+                                      también el ciclo completo de crear +
+                                      mergear un PR real (`gh pr create`/
+                                      `gh pr merge`, vía el agente por Bash
+                                      con permisos ya arreglados) — todo
+                                      probado de verdad, con siete bugs
                                       reales encontrados y arreglados por el
-                                      camino. Sin confirmar todavía de forma
-                                      explícita: el ciclo completo de crear/
-                                      mergear un PR real y "Commit + PR"
-                                      abriendo un PR de verdad. Falta el
-                                      toggle opt-in de Auto-PR (deliberadamente
-                                      diferido, ver §9)
+                                      camino. Confirma que `gh`/`git`
+                                      funcionan de punta a punta en este
+                                      entorno, pero sin confirmar todavía de
+                                      forma explícita: los botones propios
+                                      "Create PR"/"Merge" del flyout de PR y
+                                      "Commit + PR" pulsados directamente
+                                      (nunca se usaron en esta prueba — el
+                                      agente hizo el PR/merge él mismo por
+                                      Bash). Falta el toggle opt-in de
+                                      Auto-PR (deliberadamente diferido, ver
+                                      §9)
 Fase 8 — Loops                       ⚠️ requiere revisión humana del diff, igual que
                                       en macOS — no se merge solo con CI en verde
 Fase 9 — Empaquetado                 MSIX, firma Authenticode, updater con
@@ -1512,3 +1521,21 @@ commit y push") completó el ciclo con éxito: `README actualizado con el
 séptimo bug de este pase (y el más disruptivo, porque bloqueaba el caso
 de uso central de Code Mode: que el agente haga trabajo de git de verdad)
 queda cerrado y confirmado en Windows real, no solo compilando.
+
+**Ciclo completo de PR real confirmado — vía el agente, no los botones
+propios.** El founder siguió con "haz PR y mergea" en el mismo chat: el
+agente creó el PR (`gh pr create --base main --head embed-video`),
+confirmó la URL (`.../pull/1`), y lo mergeó (`gh pr merge 1 --merge
+--delete-branch=false`), verificando el resultado con
+`gh pr view 1 --json state,mergedAt,url`. Todo por Bash, con el fix de
+`bypassPermissions` sosteniendo cada paso sin bloquearse. Esto prueba que
+`gh`/`git` funcionan de punta a punta en este entorno (autenticación,
+remoto, permisos de repo) — pero NO prueba específicamente los botones
+"Create PR"/"Merge" del flyout de `CodeModePage` ni "Commit + PR"
+(`ShipFlow`/`PullRequestViewModel.ShipAsync`), que usan un camino de
+código distinto (`GitHubCLI.CreatePRAsync`/`MergePRAsync` llamados desde
+C#, no desde una llamada a Bash del agente) y que en esta prueba nunca se
+llegaron a pulsar. Dado que el `gh` subyacente ya está confirmado
+funcionando en esta máquina, el riesgo restante es bajo, pero sigue siendo
+una verificación explícita pendiente antes de dar la Fase 7 por cerrada
+del todo.
