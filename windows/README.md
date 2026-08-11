@@ -345,7 +345,8 @@ estimation), the real spawn (`ClaudeRunner.Stream()`,
 on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
-`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow`/`AppSettings` (Fase 7 — see below) — 316 automated
+`GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow`/`AppSettings` (Fase 7 — see below), and
+`StrategyPickerViewModel` (P0 item 2, Phase 1 — see below) — 320 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -355,7 +356,7 @@ added after the first real-Windows run, `ProviderAuthTests`,
 `ChatViewModelTests`, `AgentNameMatcherTests`, `ProviderInstallerTests`
 (against a new `FakePseudoConsoleLauncher`, mirroring `FakeProcessLauncher`),
 `ConnectViewModelTests`, `CodeGitTests`, `GitPanelViewModelTests`,
-`GitHubCLITests`, `AppSettingsTests`, and the `MissionReport.AgentLines` cases) — plus 4 manual
+`GitHubCLITests`, `AppSettingsTests`, `StrategyPickerViewModelTests`, and the `MissionReport.AgentLines` cases) — plus 4 manual
 tests excluded from that count and from CI
 (see "Testing the pieces that need a real Windows machine").
 Fase 2's last loose end (`MissionReport.agentLines()`, which needed
@@ -799,3 +800,82 @@ it only affects manually running these two tests via `dotnet test`.
 compiling in CI, and documented as pending future verification if the
 environment ever changes (or gets investigated with direct machine
 access) — no more time spent chasing it blind over chat.
+
+**Update: Strategy selection (P0 item 2), Phase 1 — chat stops being a bare
+`claude -p`.** A real gap surfaced while reviewing what to build next: the
+requirements list itself marks "strategy selection/editing, basic Advisor"
+as P0 ("without this it's not Coral, it's an empty shell"), but it was
+never wired into the Windows chat — `ChatViewModel.cs`/`MainPage.xaml` had
+zero references to `Strategy` anywhere. The chat always ran bare, never
+generating the subagent `.md`/`CLAUDE.md` files `StrategyWriter` (ported
+and tested since Fase 2) has been able to write for months. A planning
+subagent researched both the Swift original (`ChatView.swift`,
+`StrategyPickerColumn.swift`, `AdvisorEngine.swift` — ~4400 lines total)
+and this port's current state before any code was written, and proposed
+cutting the work into 4 phases. Phase 1 (this entry): a read-only template
+picker → generate its files → the chat runs against the generated team.
+No strategy editing, no Advisor yet (separate later phases).
+
+Why Phase 1 is smaller than it sounds: the `claude` CLI reads
+`.claude/agents/*.md`/`CLAUDE.md`/`.mcp.json` from its own working
+directory — nothing needs to be passed as an argument. Once
+`StrategyWriter.Write` drops those files in the repo, the very NEXT chat
+turn already runs against the full generated team without
+`ChatViewModel` needing to know anything about `Strategy` at all. The one
+real change needed: `ChatViewModel._model` (private, snapshotted once at
+construction) became `ChatViewModel.Model` (a mutable public property), so
+picking a template can change the next turn's orchestrator model without
+reconstructing the ViewModel or losing the in-progress transcript/session id.
+
+New pieces: `StrategyPickerViewModel` (`Coral.Core`, new) wraps
+`StrategyWriter.Write` in a `Task.Run` (it's sync disk I/O) and exposes
+`Templates`/`SelectedStrategy`/`IsBusy`/`StatusMessage` — no
+`IProcessLauncher` dependency at all, since `StrategyWriter` never spawns a
+process. A new "Strategy" button on `MainPage`'s header opens a `Flyout`
+(the same pattern already used three times: Connect Claude, Open Repo, the
+Code Mode PR flyout) listing all 15 templates by name + description — no
+topology-diagram cards like macOS has (deliberately out of scope, see
+below). Deliberately doesn't auto-close on selection — the `StatusMessage`
+updating in place is the confirmation, same reasoning as the Pull Request
+flyout staying open through create/merge. `MainPage.xaml.cs`'s
+`OnStrategySelectionChanged` calls `SelectAsync` and, on success, sets
+`ViewModel.Model` to the picked strategy's orchestrator model.
+
+**Deliberate deviation from the plan's own recommendation:** nothing gets
+written automatically on startup. The plan proposed silently writing
+`Solo()` as a "behaviorally neutral" default — dropped after checking two
+things the plan hadn't verified: (1) `RepoPath` falls back to the user's
+ENTIRE home directory when no repo is open, so writing files there
+unprompted is a real surprise, not a neutral one; (2)
+`StrategyLibrary.Solo()`'s suggested model is `ClaudeModel.Opus5`, while
+today's chat defaults to `claude-sonnet-5` — applying that automatically
+would have silently raised the cost of every chat for everyone. Instead:
+chat behaves exactly as it did before this feature existed until the user
+explicitly opens "Strategy" and picks something — zero required action,
+zero surprise side effect.
+
+Other findings from the plan, recorded as deliberate cuts (same pattern as
+Fase 6/7's deferred-scope calls): macOS's animated topology-diagram card
+grid, cost-tier pills, and topic filtering are pure presentation and don't
+block "pick a template and run against it" — deferred to a later polish
+pass. The guided wizards (`ChooseStrategyWizard`/`TaskToStrategySheet`) are
+redundant once Advisor (Phase 3) exists, not worth building twice.
+"Advisor" itself turns out NOT to be an LLM call — it's a local,
+deterministic heuristic engine (keywords/length/language) that returns a
+recommended `Strategy`; the one piece that IS AI-backed
+(`adviseWithAI`, an on-device Apple Intelligence upgrade) has no Windows
+equivalent and is dropped outright, not deferred.
+
+4 new tests (`StrategyPickerViewModelTests`: all templates exposed, a real
+write to a temp directory, a controlled error instead of an unhandled
+exception on an unwritable path; `ChatViewModelTests`: a regression
+confirming `Model` mutated after construction is reflected in the next
+turn's `--model` argument) — 320 total. Fixed in passing: the requirements
+list said "13 templates" — both macOS and this port actually have 15; a
+stale number, not a real missing feature.
+
+Covered by unit tests and local build/test (320/320) — pending
+windows-latest CI confirmation (the new button/flyout is XAML) and
+hands-on verification on real Windows (pick a template, confirm real
+`.claude/agents/*.md` files show up in the repo, and that the next chat
+turn actually delegates to the generated subagents).

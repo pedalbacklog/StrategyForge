@@ -70,7 +70,6 @@ public sealed class ChatViewModel : ObservableObject
     private readonly IProcessLauncher _launcher;
     private readonly string _repoPath;
     private readonly string _binary;
-    private readonly string _model;
     private readonly Func<string, string?>? _resolveBinary;
     private readonly string _sessionId = Guid.NewGuid().ToString();
     private bool _hasSentFirstTurn;
@@ -107,6 +106,15 @@ public sealed class ChatViewModel : ObservableObject
     private string? _statusMessage;
     public string? StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
 
+    /// <summary>The orchestrator model the next turn runs on. A plain mutable
+    /// property (not <c>SetProperty</c>-backed) rather than a constructor-only
+    /// value: nothing in the UI displays it yet, so it doesn't need change
+    /// notification — <c>StrategyPickerViewModel</c>'s caller (<c>MainPage.xaml.cs</c>)
+    /// sets this after writing a selected template, so the picked strategy's
+    /// suggested model takes effect on the very next turn without restarting
+    /// the chat or losing the transcript/session id.</summary>
+    public string Model { get; set; }
+
     /// <paramref name="resolveBinary"/> is injectable so this is unit-testable
     /// with a fake, same as <see cref="ClaudeRunner"/> itself — production
     /// callers leave it at its default (<see cref="BinaryResolver.Resolve"/>).
@@ -117,7 +125,7 @@ public sealed class ChatViewModel : ObservableObject
         _launcher = launcher;
         _repoPath = repoPath;
         _binary = binary;
-        _model = model;
+        Model = model;
         _resolveBinary = resolveBinary;
     }
 
@@ -180,7 +188,7 @@ public sealed class ChatViewModel : ObservableObject
             // run has no equivalent mid-turn channel to ask through, so a denial
             // here is a dead end, not a recoverable prompt — bypassing from the
             // start is the only sane option until "Ask" mode gets ported.
-            await foreach (var evt in ClaudeRunner.Stream(_launcher, _binary, _repoPath, prompt, _model,
+            await foreach (var evt in ClaudeRunner.Stream(_launcher, _binary, _repoPath, prompt, Model,
                 _sessionId, resume, permissionMode: "bypassPermissions",
                 inactivityTimeout: TimeSpan.FromMinutes(5), resolveBinary: _resolveBinary, ct: cts.Token))
             {

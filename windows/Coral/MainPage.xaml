@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Coral.Core.ViewModels"
     xmlns:services="using:Coral.Core.Services"
+    xmlns:models="using:Coral.Core.Models"
     xmlns:converters="using:Coral.Converters">
 
     <Page.Resources>
@@ -28,6 +29,37 @@
             <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12">
                 <TextBlock Text="Coral" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <TextBlock Text="{x:Bind RepoPath}" Opacity="0.6" VerticalAlignment="Center" />
+                <TextBlock Text="{x:Bind StrategyPickerViewModel.SelectedStrategy.Name, Mode=OneWay}"
+                           Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
+                <Button Content="Strategy" VerticalAlignment="Center">
+                    <Button.Flyout>
+                        <!-- Deliberately left open on success (no Hide() call, unlike
+                             the branch-create flyout): SelectedStrategy/StatusMessage
+                             updating in place right here IS the confirmation, same
+                             reasoning as the Pull Request flyout not auto-closing on
+                             create/merge. -->
+                        <Flyout Placement="Bottom">
+                            <StackPanel Width="380" Spacing="6">
+                                <TextBlock Text="Choose a team" FontWeight="SemiBold" />
+                                <ListView ItemsSource="{x:Bind StrategyPickerViewModel.Templates}" MaxHeight="320"
+                                          SelectionChanged="OnStrategySelectionChanged" SelectionMode="Single"
+                                          IsEnabled="{x:Bind StrategyPickerViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:Strategy">
+                                            <StackPanel Margin="0,4" MaxWidth="360">
+                                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="13" />
+                                                <TextBlock Text="{x:Bind Description}" Opacity="0.6" FontSize="11"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <TextBlock Text="{x:Bind StrategyPickerViewModel.StatusMessage, Mode=OneWay}"
+                                           Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
                 <Button Content="Connect Claude" VerticalAlignment="Center">
                     <Button.Flyout>
                         <!-- No Closed handler: a Flyout light-dismisses on any outside

@@ -97,7 +97,9 @@ Puntos concretos que hacen de WinUI 3 un buen encaje mirando el código real:
 **P0 — MVP funcional (sin esto no es Coral, es un shell vacío)**
 1. Chat con una estrategia/equipo, ejecutando `claude` headless y mostrando el
    activity panel en vivo (streaming NDJSON → eventos → UI).
-2. Selección/edición de estrategias (los 13 templates), Advisor básico.
+2. Selección/edición de estrategias (los 15 templates — el "13" original de
+   esta lista estaba desactualizado; tanto macOS como el port ya tienen 15),
+   Advisor básico.
 3. Instalación guiada + login de al menos **Claude Code** (el proveedor
    principal); Codex y Gemini pueden ir en P1 si el adapter tarda.
 4. Generación de archivos (`.claude/agents/*.md`, `CLAUDE.md`) — portar
@@ -1812,3 +1814,95 @@ queda escrito, compilando en CI, y documentado como pendiente de
 verificación futura si alguna vez cambia el entorno (o se investiga con
 acceso directo a la máquina) — no se ha invertido más tiempo en
 diagnosticarlo a ciegas por chat.
+
+**2026-08-11 — Selección de estrategia (P0 punto 2), Fase 1: el chat deja de
+ser un `claude -p` a pelo.** Hallazgo real durante una revisión de qué
+seguir construyendo: el propio §4 marca "selección/edición de estrategias,
+Advisor básico" como P0 ("sin esto no es Coral, es un shell vacío"), pero
+nunca se conectó a la UI de Windows — `ChatViewModel.cs`/`MainPage.xaml` no
+referenciaban `Strategy` en ningún sitio. El chat corría siempre en bruto,
+sin generar los ficheros de subagentes/`CLAUDE.md` que `StrategyWriter`
+(portado y probado desde Fase 2) sabe escribir desde hace meses. Antes de
+tocar código se pidió un plan detallado a un subagente de planificación,
+que investigó tanto el Swift original (`ChatView.swift`, `StrategyPickerColumn.swift`,
+`AdvisorEngine.swift` — ~4400 líneas en total) como el estado actual del
+port, y propuso cortar el trabajo en 4 fases. Fase 1 (esta entrada):
+selector de plantilla de solo lectura → generar sus ficheros → el chat
+corre contra el equipo generado. Sin edición de estrategia y sin Advisor
+todavía (fases separadas, ver el hallazgo original más abajo).
+
+Por qué Fase 1 es tan pequeña de lo que parece: el CLI `claude` lee
+`.claude/agents/*.md`/`CLAUDE.md`/`.mcp.json` de su propio directorio de
+trabajo — no hace falta decírselo por argumento. En cuanto `StrategyWriter.Write`
+deja esos ficheros en el repo, el SIGUIENTE turno del chat ya corre contra
+el equipo completo sin que `ChatViewModel` necesite saber nada de
+`Strategy`. El único cambio real necesario: `ChatViewModel._model` (privado,
+fijado una sola vez en el constructor) pasa a ser `ChatViewModel.Model`
+(propiedad pública mutable), para que elegir una plantilla pueda cambiar el
+modelo del orquestador del turno siguiente sin reconstruir el ViewModel ni
+perder la transcripción/`sessionId` en curso.
+
+Piezas nuevas:
+- `Coral.Core/ViewModels/StrategyPickerViewModel.cs` (nuevo). Expone
+  `Templates` (las 15 de `StrategyLibrary.All`), `SelectedStrategy`,
+  `IsBusy`, `StatusMessage`. `SelectAsync(strategy)` envuelve
+  `StrategyWriter.Write` (I/O síncrona) en `Task.Run`, igual que el resto
+  de ViewModels de este port envuelven trabajo síncrono. Sin dependencia de
+  `IProcessLauncher` — `StrategyWriter` nunca lanza un proceso, es
+  `System.IO` puro.
+- Botón "Strategy" nuevo en la cabecera de `MainPage.xaml`, mismo patrón de
+  `Flyout` ya usado tres veces (Connect Claude, Open Repo, el PR flyout de
+  Code Mode) — lista de las 15 plantillas (nombre + descripción, sin las
+  tarjetas visuales con diagrama de topología que tiene macOS, deliberadamente
+  fuera de alcance, ver más abajo), un `TextBlock` en la cabecera muestra el
+  nombre de la estrategia activa. Deliberadamente NO se cierra solo al
+  elegir una — el propio `StatusMessage` actualizándose in situ es la
+  confirmación, mismo razonamiento que el flyout de Pull Request no
+  cerrándose solo al crear/mergear.
+- `MainPage.xaml.cs`: `OnStrategySelectionChanged` llama a `SelectAsync` y,
+  si tiene éxito, pone `ViewModel.Model = strategy.Orchestrator.Model.ToRawValue()`.
+
+**Decisión deliberada, distinta de lo que proponía el plan del subagente:**
+NO se escribe ninguna estrategia por defecto al abrir la ventana. El plan
+sugería escribir `Solo()` automáticamente al arrancar como "cambio neutro
+de comportamiento" — pero se descartó tras comprobar dos cosas que el plan
+no había verificado: (1) `RepoPath` cae por defecto en la carpeta de
+usuario COMPLETA cuando no se abre un repo concreto, así que escribir
+ficheros ahí sin que el usuario haga nada sería una sorpresa real, no
+neutra; (2) `StrategyLibrary.Solo()` usa `ClaudeModel.Opus5` como modelo
+sugerido, mientras que el chat de hoy arranca en `claude-sonnet-5` por
+defecto — aplicar ese cambio automáticamente habría subido el coste de
+CADA chat sin que nadie lo pidiera. En vez de eso: el chat se comporta
+EXACTAMENTE igual que antes de que esta pieza existiera hasta que el
+usuario abre "Strategy" y elige algo explícitamente — cero acción
+requerida, cero efecto secundario sorpresa.
+
+Otros hallazgos del plan, documentados como cortes deliberados (mismo
+patrón que los diferidos de Fase 6/7):
+- La cuadrícula visual de tarjetas de macOS (diagrama de topología animado,
+  pastillas de coste, filtrado por tema, "mostrar solo estrategias para
+  principiantes") — puramente presentación, no bloquea "elegir una
+  plantilla y correr contra ella". Diferido a un pase de pulido futuro.
+- Los asistentes guiados (`ChooseStrategyWizard`, `TaskToStrategySheet`) —
+  redundantes una vez exista el Advisor (Fase 3), no vale la pena
+  construirlos dos veces.
+- El "Advisor" en sí NO es una llamada a un LLM — es un motor heurístico
+  local y determinista (palabras clave, longitud, idioma) que devuelve una
+  `Strategy` recomendada; la única parte que sí usa IA
+  (`adviseWithAI`, una mejora vía Apple Intelligence on-device) no tiene
+  equivalente en Windows y queda descartada de raíz, no como "pendiente".
+
+4 tests nuevos (`StrategyPickerViewModelTests`: todas las plantillas
+expuestas, escritura real a un directorio temporal, error controlado en
+vez de excepción sin capturar sobre una ruta no escribible;
+`ChatViewModelTests`: regresión confirmando que `Model` mutado después de
+construir el ViewModel se refleja en el `--model` del siguiente turno) —
+320 en total. Corrección de paso: el propio §4 decía "13 templates";
+tanto macOS como el port ya tienen 15 — número desactualizado, no una
+funcionalidad real que faltara.
+
+Cubierto por tests unitarios y build/test local (320/320) — pendiente de
+verificación de compilación en windows-latest CI (el nuevo botón/flyout es
+XAML) y de prueba a mano en Windows real (elegir una plantilla, confirmar
+que aparecen `.claude/agents/*.md` reales en el repo, y que el siguiente
+turno del chat delega de verdad en los subagentes generados).

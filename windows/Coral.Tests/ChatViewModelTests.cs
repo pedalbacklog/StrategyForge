@@ -65,6 +65,29 @@ public class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ModelIsMutableSoPickingAStrategyTakesEffectOnTheNextTurn()
+    {
+        // Regression test for StrategyPickerViewModel's integration
+        // (MainPage.xaml.cs's OnStrategySelectionChanged): Model used to be
+        // a constructor-only readonly field, snapshotted once. Picking a
+        // strategy template after a chat is already open needs the very
+        // next turn to run on that template's suggested model, without
+        // losing the transcript/session id — i.e. without reconstructing
+        // ChatViewModel itself.
+        var lines = new List<string> { """{"type":"result","subtype":"success","result":"done"}""" };
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(lines));
+        var vm = MakeViewModel(launcher);
+
+        vm.Model = "claude-opus-5";
+        vm.PromptText = "hi";
+        await vm.SendAsync();
+
+        var modelIndex = launcher.LastStart!.Value.Args.ToList().IndexOf("--model");
+        Assert.True(modelIndex >= 0);
+        Assert.Equal("claude-opus-5", launcher.LastStart.Value.Args[modelIndex + 1]);
+    }
+
+    [Fact]
     public async Task AssistantTextIsIgnoredOnceDeltasHaveStreamed()
     {
         // --include-partial-messages means both a delta AND the final full

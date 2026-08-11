@@ -40,6 +40,12 @@ public sealed partial class MainPage : Page
     /// than swapping this page's own (OneTime-bound) repo in place.</summary>
     public RepoPickerViewModel RepoPickerViewModel { get; }
 
+    /// <summary>Drives the "Strategy" flyout (P0 item 2, Phase 1) — pick one
+    /// of the 15 built-in templates and generate its files into
+    /// <see cref="RepoPath"/>. See its own doc comment for why nothing is
+    /// written here automatically on open.</summary>
+    public StrategyPickerViewModel StrategyPickerViewModel { get; }
+
     private ScrollViewer? _chatScrollViewer;
 
     public MainPage(string? repoPath = null)
@@ -53,6 +59,7 @@ public sealed partial class MainPage : Page
         ConnectViewModel = new ConnectViewModel(new RealProcessLauncher(), new Win32PseudoConsoleLauncher(),
             AIProvider.Claude);
         RepoPickerViewModel = new RepoPickerViewModel(new RealProcessLauncher());
+        StrategyPickerViewModel = new StrategyPickerViewModel(RepoPath);
 
         InitializeComponent();
 
@@ -108,6 +115,22 @@ public sealed partial class MainPage : Page
     private async void OnSubmitCodeClick(object sender, RoutedEventArgs e) => await ConnectViewModel.SubmitCodeAsync();
 
     private void OnCodeModeClick(object sender, RoutedEventArgs e) => new CodeModeWindow(RepoPath, ViewModel).Activate();
+
+    /// <summary>Picking a template writes its files (via
+    /// <see cref="StrategyPickerViewModel.SelectAsync"/>) and, on success,
+    /// updates <see cref="ChatViewModel.Model"/> to the orchestrator's
+    /// suggested model — so the very next turn runs against the newly
+    /// generated team, no restart needed. Every template has exactly one
+    /// orchestrator (<c>Strategy.Validate()</c> would flag anything else),
+    /// so the null-conditional below is defensive, not an expected path.</summary>
+    private async void OnStrategySelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (((ListView)sender).SelectedItem is not Strategy strategy) return;
+        if (await StrategyPickerViewModel.SelectAsync(strategy) && strategy.Orchestrator is { } orchestrator)
+        {
+            ViewModel.Model = orchestrator.Model.ToRawValue();
+        }
+    }
 
     private async void OnOpenRepoFlyoutOpened(object sender, object e) => await RepoPickerViewModel.LoadReposAsync();
 
