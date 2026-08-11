@@ -1461,3 +1461,36 @@ chat se quedó bloqueado por el bug #1 de esta entrada, así que el archivo
 nunca cambió), así que no hay diff real que ofrecer como PR. Con el bug #1
 arreglado, un intento futuro donde el agente sí complete la edición debería
 producir un PR real sin este error.
+
+**Confirmado en CI**: commit `b55abcc`, run
+[31467871783](https://github.com/pedalbacklog/StrategyForge/actions/runs/31467871783)
+(`windows-latest`, `workflow_dispatch`), verde a nivel de step incluyendo
+"Build the WinUI 3 app (Coral)" — el `permission-mode "acceptEdits"`, el
+`Closing`/botón "✕" del flyout de PR, y el `TextBlock` de estado nuevo junto
+a "Commit + PR" compilan bien.
+
+**Reconfirmación real: `"acceptEdits"` no bastaba — séptimo bug, mismo
+pase.** El founder pidió al chat crear una rama y comitear un cambio en el
+README; el `git add`/`git commit` se quedaron pidiendo aprobación otra vez,
+igual que antes de este fix. El propio modelo, al recibir la denegación,
+le pidió al usuario en el CHAT que "aceptara un diálogo" que nunca existió
+en la UI — confusión perfectamente esperable, porque el modelo asume que
+hay un canal de aprobación en vivo que este puerto no tiene. Causa raíz
+completa (encontrada revisando `ChatViewModel.swift` a fondo, no solo su
+valor por defecto): Swift usa `"acceptEdits"` como base, PERO ese modo
+también puede denegar llamadas a herramientas — cuando eso pasa, la app
+real muestra una UI de permisos en vivo ("Ask" mode: `pendingPermission`/
+`respondPermission`/`retryAllowingAll`) donde el usuario aprueba y el turno
+se reanuda con `"bypassPermissions"`. Esa UI es, desde el principio de este
+port, alcance deliberadamente diferido ("no 'Ask' live-permission mode",
+ver el doc comment de `ChatViewModel.cs` y el Status de `README.md`) — pero
+sin ella, un run headless de un solo turno (`-p`) que recibe una denegación
+no tiene ningún canal a mitad de turno para pedir/recibir aprobación: es un
+callejón sin salida, no un prompt recuperable. **Arreglo definitivo**:
+`ChatViewModel.RunTurnAsync` ahora usa `"bypassPermissions"` directamente
+desde el principio del turno — lo mismo que hace `retryAllowingAll` en
+Swift, aplicado sin condición porque aquí no existe la alternativa
+interactiva. 1 test actualizado (comprobaba `"acceptEdits"`, ahora
+comprueba `"bypassPermissions"`) — sigue en 299 en total (no se añadió,
+se corrigió). Si en el futuro se porta el modo "Ask" de verdad, este valor
+por defecto debería revisarse.

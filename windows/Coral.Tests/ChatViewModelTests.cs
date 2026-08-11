@@ -39,13 +39,19 @@ public class ChatViewModelTests
     }
 
     [Fact]
-    public async Task SendAsyncRunsWithAcceptEditsSoToolCallsDontHangOnApproval()
+    public async Task SendAsyncRunsWithBypassPermissionsSoToolCallsDontHangOnApproval()
     {
-        // Matches ChatViewModel.swift's own default ("acceptEdits", not
-        // "default") — a real bug found on real Windows: "default" requires
-        // interactive approval for most tool calls, which a headless -p run
-        // has no channel to give, so e.g. a requested `git checkout -b` just
-        // sat forever reporting "This command requires approval".
+        // Two real bugs found on real Windows, back to back. First:
+        // "default" (the original hardcoded value) requires interactive
+        // approval for most tool calls, which a headless -p run has no
+        // channel to give, so e.g. a requested `git checkout -b` just sat
+        // forever reporting "This command requires approval". Fixed to
+        // "acceptEdits" (Swift's own default) — insufficient by itself:
+        // acceptEdits ALSO denied a live `git add`/`git commit`, and Swift's
+        // escape hatch for that (the live "Ask" UI's "retry allowing all",
+        // which resumes with bypassPermissions) needs a mid-turn channel
+        // this one-shot run doesn't have. bypassPermissions from the start
+        // is the only option that doesn't dead-end on a denial.
         var lines = new List<string> { """{"type":"result","subtype":"success","result":"done"}""" };
         var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(lines));
         var vm = MakeViewModel(launcher);
@@ -55,7 +61,7 @@ public class ChatViewModelTests
 
         var pmIndex = launcher.LastStart!.Value.Args.ToList().IndexOf("--permission-mode");
         Assert.True(pmIndex >= 0);
-        Assert.Equal("acceptEdits", launcher.LastStart.Value.Args[pmIndex + 1]);
+        Assert.Equal("bypassPermissions", launcher.LastStart.Value.Args[pmIndex + 1]);
     }
 
     [Fact]

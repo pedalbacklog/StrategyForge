@@ -622,7 +622,27 @@ a headless `-p` run has no channel to give it. `ChatViewModel.swift`'s own
 default is `"acceptEdits"`; the port had `"default"` hardcoded, a real
 divergence rather than a deliberate choice. Fixed the literal, added a test
 asserting the actual `--permission-mode` argument passed to the process —
-299 total. (2) **The "Pull Request" flyout had the same missing
+299 total.
+
+**`"acceptEdits"` alone turned out not to be enough — a follow-up fix
+minutes later.** The founder tried it for real: asking the chat to create a
+branch and commit a README change, the `git add`/`git commit` calls got
+denied again, and the model itself asked the user in the chat to "accept a
+dialog" that doesn't exist in this UI — a reasonable thing for it to assume,
+since it has no way to know this port has no live approval channel. Root
+cause, found by reading `ChatViewModel.swift` all the way through this
+time: `"acceptEdits"` CAN still deny tool calls — Swift's answer to that is
+a live "Ask" permission UI (`pendingPermission`/`respondPermission`/
+`retryAllowingAll`) that resumes the denied turn with `"bypassPermissions"`
+once the user approves. That UI has been out of scope for this port from
+the start (see Status below) — but without it, a denial in a one-shot
+headless `-p` run is a dead end, not a recoverable prompt, since there's no
+mid-turn channel to ask through. Fixed by running with `"bypassPermissions"`
+directly from the start of every turn — the same thing `retryAllowingAll`
+does in Swift, just unconditional here since the interactive alternative
+doesn't exist. The earlier test was updated (not added) to assert
+`"bypassPermissions"` instead — still 299 total. If "Ask" mode is ever
+ported for real, this default is worth revisiting. (2) **The "Pull Request" flyout had the same missing
 light-dismiss guard "Connect Claude" already needed** (see the Fase 6
 update above) — switching windows while drafting a title/description
 closed it (the text survived, since it lives on the ViewModel, but the

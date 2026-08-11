@@ -56,7 +56,12 @@ public sealed record CommandRun(string Command, string Output, DateTimeOffset At
 /// <c>StrategyForge/ViewModels/ChatViewModel.swift</c> — only the plain
 /// single-provider <c>-p</c> path (no "Ask" live-permission mode, no
 /// cross-provider MetaOrchestrator, no persisted turn history); those are
-/// each their own, much larger feature and stay out of scope here. Takes an
+/// each their own, much larger feature and stay out of scope here. Runs
+/// with <c>permission-mode bypassPermissions</c> as a direct consequence of
+/// that gap: Swift's own default (<c>acceptEdits</c>) still denies plenty of
+/// tool calls, and its escape hatch when that happens (the live "Ask" UI's
+/// "retry allowing all") needs a mid-turn channel this one-shot headless run
+/// doesn't have — see <see cref="RunTurnAsync"/>. Takes an
 /// <see cref="IProcessLauncher"/> so it's unit-testable with a fake, same
 /// pattern as <see cref="ClaudeRunner"/> itself.
 /// </summary>
@@ -163,8 +168,20 @@ public sealed class ChatViewModel : ObservableObject
 
         try
         {
+            // "bypassPermissions", not Swift's own default ("acceptEdits") — a
+            // second real bug, found right after fixing the first: acceptEdits
+            // alone still denies plenty of tool calls (confirmed live — a
+            // requested `git add`/`git commit` sat asking for approval that
+            // never arrived). Swift's app can recover from that because it has
+            // a live "Ask" permission UI (ChatViewModel.swift's pendingPermission/
+            // respondPermission/retryAllowingAll — deliberately out of scope
+            // here, see this type's doc comment) that resumes the SAME run with
+            // "bypassPermissions" once the user answers. A one-shot headless -p
+            // run has no equivalent mid-turn channel to ask through, so a denial
+            // here is a dead end, not a recoverable prompt — bypassing from the
+            // start is the only sane option until "Ask" mode gets ported.
             await foreach (var evt in ClaudeRunner.Stream(_launcher, _binary, _repoPath, prompt, _model,
-                _sessionId, resume, permissionMode: "acceptEdits",
+                _sessionId, resume, permissionMode: "bypassPermissions",
                 inactivityTimeout: TimeSpan.FromMinutes(5), resolveBinary: _resolveBinary, ct: cts.Token))
             {
                 switch (evt)
