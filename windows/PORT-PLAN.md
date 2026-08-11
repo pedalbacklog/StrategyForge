@@ -1494,3 +1494,15 @@ interactiva. 1 test actualizado (comprobaba `"acceptEdits"`, ahora
 comprueba `"bypassPermissions"`) — sigue en 299 en total (no se añadió,
 se corrigió). Si en el futuro se porta el modo "Ask" de verdad, este valor
 por defecto debería revisarse.
+
+**Reconfirmado de verdad por el founder.** Le pidió al chat conectarse al
+repo, cambiar a la rama `embed-video`, y preparar un GIF local para el
+README — el agente encadenó `find`, `git status`, `git diff`,
+`git branch -a`, `git fetch`, copiar el archivo, y `ls`, todo sin
+bloquearse ni una vez pidiendo aprobación (visible en el panel de
+Activity, más de diez pasos de Bash seguidos). Un segundo mensaje ("haz
+commit y push") completó el ciclo con éxito: `README actualizado con el
+<img> y assets/test.gif añadido al repo`, commit `34a5caa`. Con esto, el
+séptimo bug de este pase (y el más disruptivo, porque bloqueaba el caso
+de uso central de Code Mode: que el agente haga trabajo de git de verdad)
+queda cerrado y confirmado en Windows real, no solo compilando.
