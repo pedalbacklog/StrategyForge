@@ -99,7 +99,10 @@ Puntos concretos que hacen de WinUI 3 un buen encaje mirando el código real:
    activity panel en vivo (streaming NDJSON → eventos → UI).
 2. Selección/edición de estrategias (los 15 templates — el "13" original de
    esta lista estaba desactualizado; tanto macOS como el port ya tienen 15),
-   Advisor básico.
+   Advisor básico. Selección de plantilla (Fase 1) y el motor del Advisor
+   en su mitad determinista, enganchado a la UI (Fase 3) — ambos ✅, ver
+   §10 (2026-08-11). Queda: edición de estrategia (Fase 2) y el pulido de
+   UI del Advisor con niveles Economy/Recommended/Max (Fase 4).
 3. Instalación guiada + login de al menos **Claude Code** (el proveedor
    principal); Codex y Gemini pueden ir en P1 si el adapter tarda.
 4. Generación de archivos (`.claude/agents/*.md`, `CLAUDE.md`) — portar
@@ -1906,3 +1909,86 @@ verificación de compilación en windows-latest CI (el nuevo botón/flyout es
 XAML) y de prueba a mano en Windows real (elegir una plantilla, confirmar
 que aparecen `.claude/agents/*.md` reales en el repo, y que el siguiente
 turno del chat delega de verdad en los subagentes generados).
+
+**2026-08-11 (mismo día) — Fase 3: el motor del Advisor, portado y
+enganchado a la UI (mitad heurística).** El founder no iba a poder probar
+en Windows real hasta pasadas unas horas, así que se pidió seguir
+avanzando todo lo posible mientras tanto — Fase 3 es exactamente el tipo
+de trabajo que se puede completar y verificar del todo SIN Windows: es
+lógica pura, cubierta al 100% por `dotnet test` en Linux.
+
+Hallazgo real durante la investigación: `AdvisorEngine.advise()` no es
+autocontenido — depende de `StrategyGenerator.swift` (351 líneas, el
+clasificador de tarea → forma de equipo), un fichero que el plan del
+subagente no había identificado como dependencia. Sin portarlo primero,
+Fase 3 no podía avanzar. Se portó:
+
+- `Coral.Core/Generators/StrategyGenerator.cs` (nuevo): `Classify(task)` (el
+  lector multi-eje por palabras clave — intención, alcance, si es adversarial,
+  si necesita "scouting", etc., bilingüe EN/ES con plegado de diacríticos vía
+  normalización Unicode NFD, equivalente .NET de `.folding(options:
+  .diacriticInsensitive)` de Swift), `ShapeFor(profile, connected)` (el mapa
+  determinista perfil → forma de equipo + tamaño), `BuildStrategy(shape,
+  teamSize)` (construye un `Strategy` real desde `StrategyLibrary` y lo pasa
+  por `AutoFixed()`), y `HeuristicShape` (los dos anteriores compuestos).
+  Deliberadamente NO portado, mismo criterio que Fase 6/7: el camino de IA
+  on-device de Apple (`generate(from:)`, `isAIAvailable`, `TaskRead`) y la
+  capa de "asistencia semántica" por embeddings (`SemanticClassifier`, otra
+  vez modelo on-device de Apple) que `heuristicShape` añade encima de una
+  lectura de baja confianza — ninguno de los dos tiene equivalente gratis/
+  privado en Windows. Sin ellos, una tarea parafraseada de forma rara puede
+  clasificar un poco menos fino que en macOS; nunca de forma incorrecta de
+  un modo que el camino por palabras clave no arriesgue también.
+- `Coral.Core/Services/AdvisorEngine.cs` (nuevo): `Advise(task, connected)`
+  — el árbol de decisión determinista completo (profundidad → modelo →
+  forma de equipo → ajustes de forma barata/no-delegable → tipo de loop →
+  esfuerzo), con `DecisionStep`/`Advice` portados como tipos con igualdad
+  semántica (Swift define `==`/`hash` a mano para que dos recomendaciones
+  idénticas comparen iguales aunque `Strategy.Id` sea un GUID fresco en
+  cada llamada — el port hace lo mismo con `IEquatable<Advice>` manual en
+  vez de confiar en la igualdad por defecto de un record, que compararía
+  por referencia en las colecciones). Alcance de ESTA pasada: solo
+  `Advise()` (el camino determinista). Deliberadamente no portados todavía:
+  `adviseWithAI` (mejora vía IA on-device, mismo motivo que arriba),
+  `adviseTiers` (la UI de tres niveles Economy/Recommended/Max — pertenece
+  al pase de pulido de UI, Fase 4, no al motor), y `assignProviders`
+  (`AdvisorEngine+Providers.swift`, reasignación de roles entre proveedores
+  — un seguimiento más pequeño, aparcado).
+
+**Decisión delicada documentada aparte: `Models/LoopKind.cs` (nuevo).**
+`Advice.loopKind` es parte del contrato de `advise()` — pero `LoopKind` se
+define en `Models/LoopPlan.swift`, uno de los cuatro ficheros que
+`CLAUDE.md` marca como vetados para cambios autónomos ("los cambios de
+loop necesitan lectura humana del diff, no solo tests... esto es un límite
+firme, no una cuestión de agenda"). NO se ha leído `LoopPlan.swift` para
+esto: los cuatro valores del enum (`turnBased`/`goalBased`/`timeBased`/
+`proactive`) ya eran visibles en `AdvisorEngine.swift` mismo (un fichero sí
+permitido), así que `LoopKind.cs` se escribió como un enum mínimo y
+autocontenido a partir de esa única fuente — sin tocar, leer ni depender de
+ningún fichero de la zona vetada, y sin habilitar ni acercar nada del
+propio Loop scheduling/running/generation (Fase 8 sigue sin empezar en
+Windows). Documentado aquí explícitamente para que quede claro que fue una
+decisión consciente, no un descuido del límite.
+
+**UI mínima enganchada, no solo el motor.** Dentro del mismo flyout
+"Strategy" de Fase 1: una sección "Or describe the task and let Advisor
+suggest a team" — un `TextBox` + botón "Suggest" (`AdvisorViewModel.Suggest()`,
+sujeta a `AdvisorEngine.Advise()`, sin red ni proceso, instantáneo) que
+muestra un resumen de una línea (equipo · modelo · esfuerzo) y un botón
+"Use this" que aplica la recomendación exactamente por el mismo camino que
+elegir una plantilla a mano (`StrategyPickerViewModel.SelectAsync` +
+actualizar `ChatViewModel.Model`). `AdvisorViewModel` es un ViewModel
+nuevo y separado de `StrategyPickerViewModel` — mismo criterio de una
+responsabilidad por ViewModel que el resto del port; nunca escribe
+ficheros él mismo, solo produce una recomendación.
+
+20 tests nuevos (`AdvisorEngineTests.cs`, traducción casi mecánica de
+`AdvisorEngineTests.swift` — los 18 casos migraron y pasaron a la primera,
+validando que el port es fiel al original; `AdvisorViewModelTests.cs`, 2
+casos) — 340 en total.
+
+Cubierto por tests unitarios y build/test local (340/340) — igual que la
+entrada anterior, pendiente de verificación de compilación en CI (nuevo
+XAML en el flyout) y de prueba a mano en Windows real (escribir una tarea,
+pulsar "Suggest", confirmar que la recomendación tiene sentido, pulsar
+"Use this" y confirmar que aplica igual que elegir una plantilla a mano).

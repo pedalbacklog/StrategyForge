@@ -346,7 +346,8 @@ on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
 `GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow`/`AppSettings` (Fase 7 — see below), and
-`StrategyPickerViewModel` (P0 item 2, Phase 1 — see below) — 320 automated
+`StrategyPickerViewModel` (P0 item 2, Phase 1), and `StrategyGenerator`/`AdvisorEngine`/`AdvisorViewModel`
+(P0 item 2, Phase 3 — see below) — 340 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -356,7 +357,8 @@ added after the first real-Windows run, `ProviderAuthTests`,
 `ChatViewModelTests`, `AgentNameMatcherTests`, `ProviderInstallerTests`
 (against a new `FakePseudoConsoleLauncher`, mirroring `FakeProcessLauncher`),
 `ConnectViewModelTests`, `CodeGitTests`, `GitPanelViewModelTests`,
-`GitHubCLITests`, `AppSettingsTests`, `StrategyPickerViewModelTests`, and the `MissionReport.AgentLines` cases) — plus 4 manual
+`GitHubCLITests`, `AppSettingsTests`, `StrategyPickerViewModelTests`,
+`AdvisorEngineTests`, `AdvisorViewModelTests`, and the `MissionReport.AgentLines` cases) — plus 4 manual
 tests excluded from that count and from CI
 (see "Testing the pieces that need a real Windows machine").
 Fase 2's last loose end (`MissionReport.agentLines()`, which needed
@@ -879,3 +881,80 @@ windows-latest CI confirmation (the new button/flyout is XAML) and
 hands-on verification on real Windows (pick a template, confirm real
 `.claude/agents/*.md` files show up in the repo, and that the next chat
 turn actually delegates to the generated subagents).
+
+**Update, same day: Phase 3 — the Advisor engine, ported and wired into the
+UI (heuristic half).** The founder wasn't going to be able to test on real
+Windows for a few hours and asked to keep advancing meanwhile — Phase 3 is
+exactly the kind of work that can be fully completed and verified WITHOUT
+Windows: pure logic, 100% covered by `dotnet test` on Linux.
+
+Real finding along the way: `AdvisorEngine.advise()` isn't self-contained —
+it depends on `StrategyGenerator.swift` (351 lines, the task classifier →
+team shape), a file the planning subagent hadn't identified as a
+dependency. Ported first:
+
+- `StrategyGenerator.cs` (new, `Coral.Core/Generators`): `Classify(task)`
+  (the multi-axis keyword reader — intent, scope, adversarial, needs
+  scouting, etc., bilingual EN/ES with diacritic folding via Unicode NFD
+  normalization, the .NET equivalent of Swift's `.folding(options:
+  .diacriticInsensitive)`), `ShapeFor(profile, connected)` (the
+  deterministic profile → shape + size map), `BuildStrategy(shape,
+  teamSize)` (builds a real `Strategy` from `StrategyLibrary` and runs it
+  through `AutoFixed()`), and `HeuristicShape` (the two composed).
+  Deliberately NOT ported, same cut as Fase 6/7: Apple's on-device AI path
+  (`generate(from:)`, `isAIAvailable`, `TaskRead`) and the semantic-embeddings
+  paraphrase assist (`SemanticClassifier`, also on-device) that
+  `heuristicShape` layers on top of a low-confidence read — neither has a
+  free/private Windows equivalent. Without them, a strangely-phrased task
+  might classify a bit less precisely than macOS; never incorrectly in a
+  way the keyword path wouldn't also risk.
+- `AdvisorEngine.cs` (new, `Coral.Core/Services`): `Advise(task, connected)`
+  — the full deterministic decision tree (depth → model → team shape →
+  cheap/non-delegable adjustments → loop kind → effort), with
+  `DecisionStep`/`Advice` ported as types with semantic equality (Swift
+  hand-writes `==`/`hash` so two identical recommendations compare equal
+  even though `Strategy.Id` mints a fresh GUID every call — the port does
+  the same via a manual `IEquatable<Advice>` rather than trusting a
+  record's default equality, which would compare collections by reference).
+  Scope of THIS pass: `Advise()` only. Deliberately not yet ported:
+  `adviseWithAI` (on-device AI upgrade, same reason as above), `adviseTiers`
+  (the Economy/Recommended/Max three-tier UI — belongs with the Phase 4 UI
+  polish pass, not the engine), and `assignProviders`
+  (`AdvisorEngine+Providers.swift`, cross-provider role reassignment — a
+  smaller, separate follow-up, parked).
+
+**A delicate call worth documenting on its own: `LoopKind.cs` (new).**
+`Advice.loopKind` is part of `advise()`'s contract — but `LoopKind` is
+defined in `Models/LoopPlan.swift`, one of the four files `CLAUDE.md` marks
+off-limits for autonomous changes ("loop changes need human review of the
+diff, not just green tests... this is a firm limit, not a scheduling
+matter"). `LoopPlan.swift` was NOT read for this: all four enum values
+(`turnBased`/`goalBased`/`timeBased`/`proactive`) were already visible in
+`AdvisorEngine.swift` itself (an allowed file), so `LoopKind.cs` was
+written as a minimal, standalone enum sourced from that alone — no read of,
+dependency on, or progress toward anything in the off-limits zone, and
+Loops' actual scheduling/running/generation (Fase 8) remains entirely
+unstarted on Windows. Documented explicitly here so this reads as a
+deliberate, considered call, not a boundary slip.
+
+**Real UI hooked up too, not just the engine.** Inside the same "Strategy"
+flyout from Phase 1: a new "Or describe the task and let Advisor suggest a
+team" section — a `TextBox` + "Suggest" button (`AdvisorViewModel.Suggest()`,
+wrapping `AdvisorEngine.Advise()`, no network/subprocess, instant) showing
+a one-line summary (team · model · effort) and a "Use this" button that
+applies the recommendation the exact same way manually picking a template
+does (`StrategyPickerViewModel.SelectAsync` + updating `ChatViewModel.Model`).
+`AdvisorViewModel` is its own new ViewModel, separate from
+`StrategyPickerViewModel` — same one-concern-per-ViewModel rule as the rest
+of this port; it never writes files itself, only produces a recommendation.
+
+20 new tests (`AdvisorEngineTests.cs`, an almost-mechanical translation of
+`AdvisorEngineTests.swift` — all 18 cases passed on the first run,
+confirming the port is faithful to the original; `AdvisorViewModelTests.cs`,
+2 cases) — 340 total.
+
+Covered by unit tests and local build/test (340/340) — same as the entry
+above, pending CI compile confirmation (new XAML in the flyout) and
+hands-on verification on real Windows (type a task, click "Suggest",
+confirm the recommendation makes sense, click "Use this" and confirm it
+applies the same way manually picking a template does).

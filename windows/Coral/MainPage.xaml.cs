@@ -46,6 +46,10 @@ public sealed partial class MainPage : Page
     /// written here automatically on open.</summary>
     public StrategyPickerViewModel StrategyPickerViewModel { get; }
 
+    /// <summary>Drives the same flyout's "Suggest a team" section (P0 item
+    /// 2, Phase 3 — the heuristic half only, see its own doc comment).</summary>
+    public AdvisorViewModel AdvisorViewModel { get; }
+
     private ScrollViewer? _chatScrollViewer;
 
     public MainPage(string? repoPath = null)
@@ -60,6 +64,7 @@ public sealed partial class MainPage : Page
             AIProvider.Claude);
         RepoPickerViewModel = new RepoPickerViewModel(new RealProcessLauncher());
         StrategyPickerViewModel = new StrategyPickerViewModel(RepoPath);
+        AdvisorViewModel = new AdvisorViewModel();
 
         InitializeComponent();
 
@@ -129,6 +134,22 @@ public sealed partial class MainPage : Page
         if (await StrategyPickerViewModel.SelectAsync(strategy) && strategy.Orchestrator is { } orchestrator)
         {
             ViewModel.Model = orchestrator.Model.ToRawValue();
+        }
+    }
+
+    private void OnSuggestTeamClick(object sender, RoutedEventArgs e) => AdvisorViewModel.Suggest();
+
+    /// <summary>Applies the Advisor's current recommendation the exact same
+    /// way manually picking a template does — writes the strategy, then
+    /// (on success) updates <see cref="ChatViewModel.Model"/>. A no-op if
+    /// "Suggest" hasn't produced anything yet (button is disabled in that
+    /// state, this is defensive).</summary>
+    private async void OnUseSuggestedTeamClick(object sender, RoutedEventArgs e)
+    {
+        if (AdvisorViewModel.Advice is not { } advice) return;
+        if (await StrategyPickerViewModel.SelectAsync(advice.Strategy))
+        {
+            ViewModel.Model = advice.Model.ToRawValue();
         }
     }
 

@@ -56,6 +56,32 @@
                                 </ListView>
                                 <TextBlock Text="{x:Bind StrategyPickerViewModel.StatusMessage, Mode=OneWay}"
                                            Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+
+                                <!-- Advisor (P0 item 2, Phase 3 — heuristic half only, see
+                                     AdvisorEngine.cs): describe the task in plain language,
+                                     get a recommended team instantly (no network, no LLM
+                                     call — a local deterministic heuristic), apply it the
+                                     same way picking a template above does. -->
+                                <TextBlock Text="Or describe the task and let Advisor suggest a team"
+                                           Opacity="0.6" FontSize="12" Margin="0,8,0,0" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" PlaceholderText="e.g. migrate this repo from bcrypt to argon2"
+                                             Text="{x:Bind AdvisorViewModel.Task, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <Button Grid.Column="1" Content="Suggest" Click="OnSuggestTeamClick" />
+                                </Grid>
+                                <Grid ColumnSpacing="8" Visibility="{x:Bind AdvisorViewModel.HasAdvice, Mode=OneWay, Converter={StaticResource Visible}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{x:Bind AdvisorViewModel.SummaryText, Mode=OneWay}"
+                                               FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Content="Use this" Click="OnUseSuggestedTeamClick" />
+                                </Grid>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
