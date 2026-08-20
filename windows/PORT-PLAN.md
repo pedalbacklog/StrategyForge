@@ -2058,8 +2058,10 @@ confirmada.**
    dos llamadas solapadas a `SelectAsync` confirmando que la segunda deja
    rastro) — 341 en total.
 
-Pendiente: build/test local confirmado (341/341); falta verificación de
-compilación en CI (nuevo `KeyDown`/`IsEnabled` en XAML) y, sobre todo, que
-el founder reconfirme "Use this" en Windows real para saber si el
-diagnóstico de "IsBusy atascado" era correcto o si queda una causa
-distinta por investigar.
+Build/test local confirmado (341/341) y CONFIRMADO compilando en
+windows-latest CI (commit `5d53e03`, run
+[32402981485](https://github.com/pedalbacklog/StrategyForge/actions/runs/32402981485) —
+"Test Coral.Core (via Coral.Tests)" y "Build the WinUI 3 app (Coral)" en
+verde). Pendiente, sobre todo: que el founder reconfirme "Use this" en
+Windows real para saber si el diagnóstico de "IsBusy atascado" era
+correcto o si queda una causa distinta por investigar.
