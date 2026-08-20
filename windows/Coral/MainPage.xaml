@@ -85,7 +85,8 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBox Grid.Column="0" PlaceholderText="e.g. migrate this repo from bcrypt to argon2"
-                                             Text="{x:Bind AdvisorViewModel.Task, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                             Text="{x:Bind AdvisorViewModel.Task, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             KeyDown="OnAdvisorTaskBoxKeyDown" />
                                     <Button Grid.Column="1" Content="Suggest" Click="OnSuggestTeamClick" />
                                 </Grid>
                                 <Grid ColumnSpacing="8" Visibility="{x:Bind AdvisorViewModel.HasAdvice, Mode=OneWay, Converter={StaticResource Visible}}">
@@ -95,7 +96,8 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{x:Bind AdvisorViewModel.SummaryText, Mode=OneWay}"
                                                FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Content="Use this" Click="OnUseSuggestedTeamClick" />
+                                    <Button Grid.Column="1" Content="Use this" Click="OnUseSuggestedTeamClick"
+                                            IsEnabled="{x:Bind StrategyPickerViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}" />
                                 </Grid>
                             </StackPanel>
                         </Flyout>

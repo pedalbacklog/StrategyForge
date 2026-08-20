@@ -50,6 +50,30 @@ public class StrategyPickerViewModelTests
     }
 
     [Fact]
+    public async Task SelectAsyncReportsBusyRatherThanSilentlyNoOpingWhileAlreadyRunning()
+    {
+        // Real bug caught on real Windows: this used to be a silent no-op —
+        // indistinguishable from "Use this"/the template list not being
+        // wired up at all. Fire two overlapping calls and assert the second
+        // (which hits the IsBusy guard) leaves a visible trace.
+        var tmp = TempDir();
+        try
+        {
+            var vm = new StrategyPickerViewModel(tmp);
+            var first = vm.SelectAsync(StrategyLibrary.OrchestratorWorkers());
+            var second = await vm.SelectAsync(StrategyLibrary.Solo());
+
+            Assert.False(second);
+            Assert.Equal("Busy — try again in a moment.", vm.StatusMessage);
+            Assert.True(await first);
+        }
+        finally
+        {
+            Directory.Delete(tmp, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task SelectAsyncReportsAnErrorRatherThanThrowingOnAnUnwritableRepoPath()
     {
         // A path that can't possibly exist as a writable directory (deep

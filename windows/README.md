@@ -980,3 +980,43 @@ XAML/code-behind only — 340/340 unchanged (nothing here is fake-testable,
 it's pure WinUI3 popup behavior). Pending: the founder reconfirming
 "Suggest"/"Use this" work without the premature close before Phase 3 is
 called fully closed.
+
+**Second round, same day: with the flyout no longer self-closing, two more
+findings — one cosmetic, one real without a confirmed root cause yet.**
+
+1. **Enter doesn't trigger "Suggest".** The task TextBox had no `KeyDown`,
+   unlike every other text box in this port (the main prompt, the new-branch
+   name box). Fixed by adding `OnAdvisorTaskBoxKeyDown` — the exact same
+   pattern as the others.
+2. **The recommendation in the attached screenshot ("Debate / Consensus
+   (mediated) · Sonnet 5 · Medium effort" for "define the architecture for
+   an android app") was NOT a bug — confirmed with the founder the
+   screenshot was just showing state, not a complaint.** It's actually the
+   correct result: "arquitectura" lands in `StrategyGenerator.Classify`'s
+   `Decide` intent group, which without `multiDomain`/`breadth` signals maps
+   to `DebateConsensus`; with no depth-group words, the model stays at
+   Sonnet 5. Matches exactly what the port predicts — another fidelity
+   confirmation, not a finding.
+3. **"Use this" produced no visible change at all — not the header, not the
+   status message, not the flyout.** Root cause NOT confirmed yet (not
+   reproducible remotely), but reviewing `StrategyPickerViewModel.SelectAsync`
+   turned up a real silent no-op: if `IsBusy` is already `true` when called
+   (e.g. an earlier write still in flight), the method returns `false`
+   without touching `StatusMessage` or `SelectedStrategy` at all —
+   indistinguishable from "the button isn't wired to anything," which is
+   exactly what the founder described. Fixed so that path leaves a visible
+   trace (`StatusMessage = "Busy — try again in a moment."`) instead of
+   staying silent, and added `IsEnabled` on "Use this" bound to `!IsBusy`
+   (same pattern the template list already had) for visual feedback while
+   busy. This turns a silent, undiagnosable bug into one with a trail — if
+   the founder retries and sees "Busy…", it confirms this hypothesis; if
+   they still see absolutely nothing, the cause is elsewhere (the click
+   isn't reaching the handler at all) and that's next time's investigation.
+   1 new test (`SelectAsyncReportsBusyRatherThanSilentlyNoOpingWhileAlreadyRunning`,
+   two overlapping `SelectAsync` calls confirming the second leaves a
+   trace) — 341 total.
+
+Pending: local build/test confirmed (341/341); still needs CI compile
+confirmation (new `KeyDown`/`IsEnabled` in XAML) and, most importantly, the
+founder retrying "Use this" on real Windows to know whether the "stuck
+IsBusy" diagnosis was right or there's still a different cause to chase.

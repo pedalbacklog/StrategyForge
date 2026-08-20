@@ -2015,3 +2015,47 @@ XAML/code-behind — 340/340 sin cambios en el conteo de tests (no hay
 nada que testear con fakes aquí, es puro comportamiento de WinUI3).
 Pendiente: que el founder reconfirme que "Suggest"/"Use this" funcionan
 ya sin el cierre prematuro, y solo entonces cerrar la Fase 3 del todo.
+
+**Segunda ronda de verificación, mismo día: con la flyout ya sin
+autocerrarse, dos hallazgos más — uno cosmético, uno real sin causa
+confirmada.**
+
+1. **Intro no dispara "Suggest".** La caja de texto de la tarea no tenía
+   `KeyDown`, a diferencia del resto de cajas de este port (el prompt
+   principal, la de nombre de rama nueva). Arreglado añadiendo
+   `OnAdvisorTaskBoxKeyDown` — mismo patrón exacto que los demás.
+2. **La recomendación de la captura adjunta ("Debate / Consensus
+   (mediated) · Sonnet 5 · Medium effort" para "define la arquitectura
+   para una app en android") NO era un bug — se confirmó con el founder
+   que la captura era solo para mostrar el estado, no una queja.** De
+   hecho es el resultado correcto: "arquitectura" cae en el grupo de
+   intención `Decide` de `StrategyGenerator.Classify`, que sin señales de
+   `multiDomain`/`breadth` mapea a `DebateConsensus`; sin palabras de
+   profundidad (`depthGroups`) el modelo se queda en Sonnet 5. Coincide
+   exactamente con lo que predice el port — una confirmación más de
+   fidelidad, no un hallazgo.
+3. **"Use this" no producía ningún cambio visible — ni cabecera, ni
+   mensaje de estado, ni la flyout.** Causa RAÍZ sin confirmar todavía
+   (no reproducible a distancia), pero revisando `StrategyPickerViewModel.SelectAsync`
+   se encontró un no-op silencioso real: si `IsBusy` ya es `true` cuando
+   se llama (p. ej. una escritura anterior todavía en marcha), el método
+   devuelve `false` sin tocar `StatusMessage` ni `SelectedStrategy` —
+   exactamente indistinguible de "el botón no está conectado a nada",
+   que es justo lo que describió el founder. Arreglado para que ese
+   camino deje rastro visible (`StatusMessage = "Busy — try again in a
+   moment."`) en vez de ser silencioso, y añadido `IsEnabled` a "Use
+   this" atado a `!IsBusy` (mismo patrón que la lista de plantillas ya
+   tenía) para dar señal visual mientras está ocupado. Esto convierte un
+   bug silencioso e indiagnosticable en uno con rastro — si el founder
+   vuelve a probar y ve "Busy…", confirma esta hipótesis; si sigue sin
+   ver NADA en absoluto, la causa es otra (el clic no llega al manejador)
+   y habrá que investigar por ahí la próxima vez. 1 test nuevo
+   (`SelectAsyncReportsBusyRatherThanSilentlyNoOpingWhileAlreadyRunning`,
+   dos llamadas solapadas a `SelectAsync` confirmando que la segunda deja
+   rastro) — 341 en total.
+
+Pendiente: build/test local confirmado (341/341); falta verificación de
+compilación en CI (nuevo `KeyDown`/`IsEnabled` en XAML) y, sobre todo, que
+el founder reconfirme "Use this" en Windows real para saber si el
+diagnóstico de "IsBusy atascado" era correcto o si queda una causa
+distinta por investigar.

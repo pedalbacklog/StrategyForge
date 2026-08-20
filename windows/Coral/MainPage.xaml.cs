@@ -162,6 +162,13 @@ public sealed partial class MainPage : Page
 
     private void OnSuggestTeamClick(object sender, RoutedEventArgs e) => AdvisorViewModel.Suggest();
 
+    private void OnAdvisorTaskBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter) return;
+        e.Handled = true;
+        AdvisorViewModel.Suggest();
+    }
+
     /// <summary>Applies the Advisor's current recommendation the exact same
     /// way manually picking a template does — writes the strategy, then
     /// (on success) updates <see cref="ChatViewModel.Model"/>. A no-op if

@@ -55,7 +55,12 @@ public sealed class StrategyPickerViewModel : ObservableObject
     /// update <c>ChatViewModel.Model</c>.</summary>
     public async Task<bool> SelectAsync(Strategy strategy)
     {
-        if (IsBusy) return false;
+        // Real bug caught on real Windows: this early return used to be
+        // silent — no StatusMessage, no visible change at all — which made
+        // "Use this"/picking a template while already busy indistinguishable
+        // from the button simply not being wired up. Surfacing it here turns
+        // a confusing no-op into a debuggable one.
+        if (IsBusy) { StatusMessage = "Busy — try again in a moment."; return false; }
         IsBusy = true;
         try
         {
