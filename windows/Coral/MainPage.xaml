@@ -37,10 +37,25 @@
                              the branch-create flyout): SelectedStrategy/StatusMessage
                              updating in place right here IS the confirmation, same
                              reasoning as the Pull Request flyout not auto-closing on
-                             create/merge. -->
-                        <Flyout Placement="Bottom">
+                             create/merge. Closing is blocked unconditionally (paired
+                             with the explicit ✕ button below) — same fix as the Pull
+                             Request flyout, for the same real bug: the "Use this" row
+                             appearing after "Suggest" grows this flyout's content,
+                             WinUI3 repositions it to stay anchored, and — without this
+                             guard — that reposition reads as an outside interaction and
+                             light-dismisses the flyout before the recommendation is
+                             even visible (confirmed on real Windows: looked like a
+                             flash to an identical flyout that then closed itself). -->
+                        <Flyout x:Name="StrategyFlyout" Placement="Bottom" Closing="OnStrategyFlyoutClosing">
                             <StackPanel Width="380" Spacing="6">
-                                <TextBlock Text="Choose a team" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Choose a team" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Content="✕" Click="OnCloseStrategyFlyoutClick" Padding="8,0" />
+                                </Grid>
                                 <ListView ItemsSource="{x:Bind StrategyPickerViewModel.Templates}" MaxHeight="320"
                                           SelectionChanged="OnStrategySelectionChanged" SelectionMode="Single"
                                           IsEnabled="{x:Bind StrategyPickerViewModel.IsBusy, Mode=OneWay, Converter={StaticResource Negate}}">

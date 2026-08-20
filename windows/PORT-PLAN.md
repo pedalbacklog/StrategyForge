@@ -1993,6 +1993,25 @@ Cubierto por tests unitarios, build/test local (340/340) y CONFIRMADO
 compilando en windows-latest CI (commit `cd871b0`, run
 [31490734337](https://github.com/pedalbacklog/StrategyForge/actions/runs/31490734337) —
 "Test Coral.Core (via Coral.Tests)" y "Build the WinUI 3 app (Coral)" en
-verde) — pendiente de prueba a mano en Windows real (escribir una tarea,
-pulsar "Suggest", confirmar que la recomendación tiene sentido, pulsar
-"Use this" y confirmar que aplica igual que elegir una plantilla a mano).
+verde).
+
+**Verificación en Windows real, mismo día: punto 1 (elegir plantilla)
+funciona perfecto — confirmado con captura, cabecera mostrando "Executor +
+Advisor" y el panel de Activity con "→ advisor" real. Bug real encontrado
+en "Suggest": la flyout se autocerraba sola a los pocos segundos, sin
+mostrar nunca la recomendación.** El founder lo describió con precisión:
+"hizo como un salto a otra ventana igual y a los pocos segundos se cerró
+sola". Causa: el mismo patrón de bug ya visto dos veces en este port
+(Connect Claude, Pull Request) — la fila "Use this" aparece cuando
+`AdvisorViewModel.HasAdvice` pasa a `true`, la flyout crece de alto,
+WinUI3 la reposiciona para seguir anclada al botón "Strategy", y ese
+reposicionamiento se interpreta como una interacción externa que dispara
+el light-dismiss por defecto — cerrándola antes de que la recomendación
+llegara a verse. Arreglado con el mismo patrón ya probado en la flyout de
+Pull Request: bloqueo incondicional de `Closing` (`FlyoutBase.Closing` +
+`e.Cancel = true`) emparejado con un botón "✕" explícito
+(`OnCloseStrategyFlyoutClick`) como única forma real de cerrarla. Solo
+XAML/code-behind — 340/340 sin cambios en el conteo de tests (no hay
+nada que testear con fakes aquí, es puro comportamiento de WinUI3).
+Pendiente: que el founder reconfirme que "Suggest"/"Use this" funcionan
+ya sin el cierre prematuro, y solo entonces cerrar la Fase 3 del todo.

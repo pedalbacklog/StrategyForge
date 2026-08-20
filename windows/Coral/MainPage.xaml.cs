@@ -137,6 +137,29 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private bool _strategyFlyoutClosingAllowed;
+
+    /// <summary>Blocks the Strategy flyout's light-dismiss unconditionally —
+    /// real bug caught on real Windows: the "Use this" row appearing after
+    /// "Suggest" grows this flyout's content, and the resulting reposition
+    /// (it stays anchored under the "Strategy" button) was enough to
+    /// light-dismiss it before the recommendation was ever visible — looked
+    /// like a flash to an identical flyout that then closed itself. Same
+    /// fix as the Pull Request flyout: unconditional block, paired with an
+    /// explicit ✕ button (<see cref="OnCloseStrategyFlyoutClick"/>) as the
+    /// only way to actually close it.</summary>
+    private void OnStrategyFlyoutClosing(FlyoutBase sender, FlyoutBaseClosingEventArgs e)
+    {
+        if (_strategyFlyoutClosingAllowed) { _strategyFlyoutClosingAllowed = false; return; }
+        e.Cancel = true;
+    }
+
+    private void OnCloseStrategyFlyoutClick(object sender, RoutedEventArgs e)
+    {
+        _strategyFlyoutClosingAllowed = true;
+        StrategyFlyout.Hide();
+    }
+
     private void OnSuggestTeamClick(object sender, RoutedEventArgs e) => AdvisorViewModel.Suggest();
 
     /// <summary>Applies the Advisor's current recommendation the exact same

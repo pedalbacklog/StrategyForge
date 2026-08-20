@@ -959,6 +959,24 @@ Covered by unit tests, local build/test (340/340), and CONFIRMED compiling
 on windows-latest CI (commit `cd871b0`, run
 [31490734337](https://github.com/pedalbacklog/StrategyForge/actions/runs/31490734337) —
 "Test Coral.Core (via Coral.Tests)" and "Build the WinUI 3 app (Coral)"
-both green) — pending hands-on verification on real Windows (type a task,
-click "Suggest", confirm the recommendation makes sense, click "Use this"
-and confirm it applies the same way manually picking a template does).
+both green).
+
+**Verified on real Windows, same day: point 1 (picking a template) works
+perfectly** — confirmed with a screenshot, header showing "Executor +
+Advisor" and the Activity panel with a real "→ advisor" delegation entry.
+**Real bug found in "Suggest": the flyout was closing itself a few seconds
+in, never showing the recommendation.** The founder described it
+precisely: "it jumped to what looked like an identical window, and after a
+few seconds it closed on its own." Cause: the same bug pattern already
+seen twice in this port (Connect Claude, Pull Request) — the "Use this"
+row appears once `AdvisorViewModel.HasAdvice` flips true, the flyout's
+content grows, WinUI3 repositions it to stay anchored under the "Strategy"
+button, and that reposition reads as an outside interaction that triggers
+the default light-dismiss — closing it before the recommendation was ever
+visible. Fixed with the same proven pattern as the Pull Request flyout:
+unconditional `Closing` block (`e.Cancel = true`) paired with an explicit
+✕ button (`OnCloseStrategyFlyoutClick`) as the only real way to close it.
+XAML/code-behind only — 340/340 unchanged (nothing here is fake-testable,
+it's pure WinUI3 popup behavior). Pending: the founder reconfirming
+"Suggest"/"Use this" work without the premature close before Phase 3 is
+called fully closed.
