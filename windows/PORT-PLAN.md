@@ -2062,6 +2062,14 @@ Build/test local confirmado (341/341) y CONFIRMADO compilando en
 windows-latest CI (commit `5d53e03`, run
 [32402981485](https://github.com/pedalbacklog/StrategyForge/actions/runs/32402981485) —
 "Test Coral.Core (via Coral.Tests)" y "Build the WinUI 3 app (Coral)" en
-verde). Pendiente, sobre todo: que el founder reconfirme "Use this" en
-Windows real para saber si el diagnóstico de "IsBusy atascado" era
-correcto o si queda una causa distinta por investigar.
+verde).
+
+**RECONFIRMADO en Windows real: "Suggest"/"Use this" funcionan de punta a
+punta.** El founder escribió una tarea, pulsó "Suggest", vio la
+recomendación ("Debate / Consensus (mediated) · Sonnet 5 · Medium
+effort"), pulsó "Use this", y la cabecera cambió a "Debate / Consensus
+(mediated)" — captura adjunta confirmándolo. Con esto, la Fase 3
+(Advisor, mitad heurística) queda cerrada del todo: motor portado,
+enganchado a la UI, los tres bugs reales encontrados en el camino
+(flyout autocerrándose, Intro sin disparar Suggest, "Use this" silencioso
+por `IsBusy` atascado) arreglados y verificados en Windows real.

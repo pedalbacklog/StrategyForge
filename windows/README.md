@@ -1025,6 +1025,13 @@ Local build/test confirmed (341/341) and CONFIRMED compiling on
 windows-latest CI (commit `5d53e03`, run
 [32402981485](https://github.com/pedalbacklog/StrategyForge/actions/runs/32402981485) —
 "Test Coral.Core (via Coral.Tests)" and "Build the WinUI 3 app (Coral)"
-both green). Pending, most importantly: the founder retrying "Use this" on
-real Windows to know whether the "stuck IsBusy" diagnosis was right or
-there's still a different cause to chase.
+both green).
+
+**RECONFIRMED on real Windows: "Suggest"/"Use this" work end to end.** The
+founder typed a task, clicked "Suggest," saw the recommendation ("Debate /
+Consensus (mediated) · Sonnet 5 · Medium effort"), clicked "Use this," and
+the header updated to "Debate / Consensus (mediated)" — screenshot
+confirmed it. With that, Phase 3 (Advisor, heuristic half) is fully
+closed: engine ported, wired into the UI, all three real bugs found along
+the way (the flyout self-closing, Enter not triggering Suggest, "Use this"
+going silent from a stuck `IsBusy`) fixed and verified on real Windows.
