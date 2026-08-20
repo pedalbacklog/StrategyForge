@@ -2013,8 +2013,12 @@ Pull Request: bloqueo incondicional de `Closing` (`FlyoutBase.Closing` +
 (`OnCloseStrategyFlyoutClick`) como única forma real de cerrarla. Solo
 XAML/code-behind — 340/340 sin cambios en el conteo de tests (no hay
 nada que testear con fakes aquí, es puro comportamiento de WinUI3).
-Pendiente: que el founder reconfirme que "Suggest"/"Use this" funcionan
-ya sin el cierre prematuro, y solo entonces cerrar la Fase 3 del todo.
+CONFIRMADO compilando en windows-latest CI (commit `8b498ea`, run
+[32400427691](https://github.com/pedalbacklog/StrategyForge/actions/runs/32400427691) —
+"Build the WinUI 3 app (Coral)" en verde). El founder ya lo reconfirmó en
+Windows real ese mismo día: la flyout dejó de cerrarse sola — ver los dos
+hallazgos siguientes (Intro y "Use this"), encontrados justo gracias a que
+ya se podía ver la recomendación con calma.
 
 **Segunda ronda de verificación, mismo día: con la flyout ya sin
 autocerrarse, dos hallazgos más — uno cosmético, uno real sin causa

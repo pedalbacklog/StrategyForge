@@ -977,9 +977,14 @@ visible. Fixed with the same proven pattern as the Pull Request flyout:
 unconditional `Closing` block (`e.Cancel = true`) paired with an explicit
 ✕ button (`OnCloseStrategyFlyoutClick`) as the only real way to close it.
 XAML/code-behind only — 340/340 unchanged (nothing here is fake-testable,
-it's pure WinUI3 popup behavior). Pending: the founder reconfirming
-"Suggest"/"Use this" work without the premature close before Phase 3 is
-called fully closed.
+it's pure WinUI3 popup behavior). CONFIRMED compiling on windows-latest CI
+(commit `8b498ea`, run
+[32400427691](https://github.com/pedalbacklog/StrategyForge/actions/runs/32400427691) —
+"Build the WinUI 3 app (Coral)" green). The founder already reconfirmed
+this on real Windows the same day: the flyout stopped self-closing — see
+the two follow-up findings below (Enter key, "Use this"), found precisely
+because the recommendation could finally be seen long enough to interact
+with it.
 
 **Second round, same day: with the flyout no longer self-closing, two more
 findings — one cosmetic, one real without a confirmed root cause yet.**
