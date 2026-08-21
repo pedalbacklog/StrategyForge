@@ -3131,3 +3131,9 @@ niveles, y `RedundantCount`.
 
 Cubierto por build/test local: 498/500 (los mismos 2 fallos preexistentes
 de los smoke tests manuales, sin relación).
+
+**`CodexUsageStore` confirmado en verde en CI con logs en bruto.** Run
+[32532534255](https://github.com/pedalbacklog/StrategyForge/actions/runs/32532534255)
+sobre el commit `523b808`: `Passed! - Failed: 0, Passed: 484, Skipped: 0,
+Total: 484` — la subida exacta de +10 que coincide con los nuevos
+`CodexUsageStoreTests` — y el build de la app WinUI 3 también en verde.

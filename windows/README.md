@@ -2019,3 +2019,9 @@ agent counted once), the three-way sort, and `RedundantCount`.
 
 Covered by local build/test: 498/500 (same 2 pre-existing manual-only
 failures, unrelated).
+
+**`CodexUsageStore` CI-confirmed green via raw logs.** Run
+[32532534255](https://github.com/pedalbacklog/StrategyForge/actions/runs/32532534255)
+on commit `523b808`: `Passed! - Failed: 0, Passed: 484, Skipped: 0, Total:
+484` — the exact +10 delta matching the new `CodexUsageStoreTests` — and
+the WinUI 3 app build also green.
