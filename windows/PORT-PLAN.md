@@ -2999,5 +2999,11 @@ norma que cualquier otro comportamiento compartido con Swift de esta
 sesión).
 
 Cubierto por build/test local: 454/456 (los mismos 2 fallos preexistentes
-de los smoke tests manuales, sin relación). Todavía sin empujar — próximo
-paso en cuanto esté listo para cerrar esta pasada autónoma.
+de los smoke tests manuales, sin relación).
+
+**CI confirmado en verde con logs en bruto.** Run
+[32531781896](https://github.com/pedalbacklog/StrategyForge/actions/runs/32531781896)
+sobre el commit `c4fc685`: `Passed! - Failed: 0, Passed: 451, Skipped: 0,
+Total: 451` — la subida exacta de +13 respecto a la línea base anterior de
+CI (438), que coincide con los 13 tests nuevos de esta ronda — y el build
+de la app WinUI 3 también en verde, "0 Warning(s), 0 Error(s)".
