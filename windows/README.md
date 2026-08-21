@@ -1991,3 +1991,31 @@ failures, unrelated).
 on commit `3b4447c`: `Passed! - Failed: 0, Passed: 474, Skipped: 0, Total:
 474` — the exact +23 delta matching the new `ClaudeUsageStoreTests` — and
 the WinUI 3 app build also green.
+
+**Ported `WastedWork` — a small, self-contained detector that operates on
+data this port's chat feature already produces.** "Your two agents are
+not collaborating — the second is redoing the first's work." Duplicated
+effort is invisible in the final answer and only shows in the
+TRAJECTORY: the same tool called with the same target by more than one
+agent means the team paid for that step twice. Port of
+`WastedWork.swift`: a pure detector walking a timeline of
+`ActivityStep`s (`ChatViewModel.cs`'s own activity-panel record, already
+produced by every real chat turn — not speculative data this port hasn't
+built yet, unlike most of Swift's `Services/` still left unported).
+`DuplicatedWork` (Title/Detail/Count/Agents, `CrossAgent` when more than
+one distinct agent repeated the same step) and `Detect(steps)` (excludes
+delegation markers and `role.*` heartbeats, requires a concrete
+target so a bare tool name like "TodoWrite" never counts as duplicated
+*work*, sorted most-repeated first with cross-agent — the worse kind —
+breaking ties before title) and `RedundantCount(dups)` (total occurrences
+beyond the first of each duplicate — the work paid for twice). No UI
+surfaces this yet — same reasoning as `DiagnosticsLog`/
+`ClaudeUsageStore`: where/how to show it in the activity panel is a
+product decision. 11 new tests (`WastedWorkTests.cs`): empty timeline,
+single occurrence not flagged, same-tool-different-target not flagged,
+target-less steps never counted, delegation/heartbeat exclusion, missing
+agent defaulting to "orchestrator", cross-agent tracking (each distinct
+agent counted once), the three-way sort, and `RedundantCount`.
+
+Covered by local build/test: 498/500 (same 2 pre-existing manual-only
+failures, unrelated).

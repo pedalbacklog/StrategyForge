@@ -3100,3 +3100,34 @@ de los smoke tests manuales, sin relación).
 sobre el commit `3b4447c`: `Passed! - Failed: 0, Passed: 474, Skipped: 0,
 Total: 474` — la subida exacta de +23 que coincide con los nuevos
 `ClaudeUsageStoreTests` — y el build de la app WinUI 3 también en verde.
+
+**Portado `WastedWork` — un detector pequeño y autocontenido que opera
+sobre datos que la función de chat de este port ya produce.** "Tus dos
+agentes no están colaborando — el segundo está rehaciendo el trabajo del
+primero." El esfuerzo duplicado es invisible en la respuesta final y solo
+se ve en la TRAYECTORIA: la misma herramienta llamada con el mismo
+objetivo por más de un agente significa que el equipo pagó ese paso dos
+veces. Puerto de `WastedWork.swift`: un detector puro que recorre una
+línea temporal de `ActivityStep` (el propio record del panel de
+actividad de `ChatViewModel.cs`, ya producido por cada turno de chat
+real — no datos especulativos que este port aún no haya construido, a
+diferencia de la mayoría de los `Services/` de Swift todavía sin portar).
+`DuplicatedWork` (Title/Detail/Count/Agents, `CrossAgent` cuando más de
+un agente distinto repitió el mismo paso) y `Detect(steps)` (excluye
+marcadores de delegación y latidos `role.*`, exige un objetivo concreto
+para que un nombre de herramienta pelado como "TodoWrite" nunca cuente
+como *trabajo* duplicado, ordenado por más repetido primero, con
+cross-agent — el peor tipo — desempatando antes que el título) y
+`RedundantCount(dups)` (total de repeticiones más allá de la primera de
+cada duplicado — el trabajo pagado dos veces). Ninguna UI muestra esto
+todavía — mismo razonamiento que `DiagnosticsLog`/`ClaudeUsageStore`:
+dónde/cómo mostrarlo en el panel de actividad es una decisión de
+producto. 11 tests nuevos (`WastedWorkTests.cs`): línea temporal vacía,
+una sola ocurrencia sin marcar, mismo tool con distinto objetivo sin
+marcar, pasos sin objetivo nunca contados, exclusión de
+delegación/latido, agente ausente por defecto a "orchestrator", conteo
+cross-agent (cada agente distinto contado una vez), el orden de tres
+niveles, y `RedundantCount`.
+
+Cubierto por build/test local: 498/500 (los mismos 2 fallos preexistentes
+de los smoke tests manuales, sin relación).
