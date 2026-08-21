@@ -333,4 +333,144 @@ public class CodeGitTests
         Assert.Equal("git not found", output);
         Assert.Null(launcher.LastStart);
     }
+
+    // MARK: - Worktree operations
+
+    [Fact]
+    public async Task AddWorktreeAsyncPassesTheBranchAndPath()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+
+        var (ok, _) = await CodeGit.AddWorktreeAsync(launcher, "/repo", "/worktrees/w1", "arena/w1",
+            resolveBinary: n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.True(ok);
+        Assert.Contains("worktree", launcher.LastStart!.Value.Args);
+        Assert.Contains("add", launcher.LastStart.Value.Args);
+        Assert.Contains("arena/w1", launcher.LastStart.Value.Args);
+        Assert.Contains("/worktrees/w1", launcher.LastStart.Value.Args);
+    }
+
+    [Fact]
+    public async Task CommitAllAsyncStagesEverythingThenCommits()
+    {
+        var calls = new List<IReadOnlyList<string>>();
+        var launcher = new FakeProcessLauncher((_, args) =>
+        {
+            calls.Add(args);
+            return new FakeChildProcess(new List<string>());
+        });
+
+        var (ok, _) = await CodeGit.CommitAllAsync(launcher, "/worktree", "msg",
+            resolveBinary: n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.True(ok);
+        Assert.Equal(2, calls.Count);
+        Assert.Contains("-A", calls[0]);
+        Assert.Contains("commit", calls[1]);
+    }
+
+    [Fact]
+    public async Task CommitAllAsyncReportsFailureWhenThereIsNothingToCommit()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>(), exitCode: 1));
+
+        var (ok, _) = await CodeGit.CommitAllAsync(launcher, "/worktree", "msg",
+            resolveBinary: n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.False(ok);
+    }
+
+    [Fact]
+    public async Task MergeNoFFAsyncPassesTheBranchAndMessage()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+
+        var (ok, _) = await CodeGit.MergeNoFFAsync(launcher, "/repo", "arena/w1", "Arena winner",
+            resolveBinary: n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.True(ok);
+        Assert.Contains("--no-ff", launcher.LastStart!.Value.Args);
+        Assert.Contains("arena/w1", launcher.LastStart.Value.Args);
+        Assert.Contains("Arena winner", launcher.LastStart.Value.Args);
+    }
+
+    [Fact]
+    public async Task RemoveWorktreeAsyncForcesRemoval()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+
+        await CodeGit.RemoveWorktreeAsync(launcher, "/repo", "/worktrees/w1",
+            resolveBinary: n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.Contains("--force", launcher.LastStart!.Value.Args);
+        Assert.Contains("/worktrees/w1", launcher.LastStart.Value.Args);
+    }
+
+    [Fact]
+    public async Task DeleteBranchAsyncForceDeletes()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+
+        await CodeGit.DeleteBranchAsync(launcher, "/repo", "arena/w1",
+            resolveBinary: n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.Contains("-D", launcher.LastStart!.Value.Args);
+        Assert.Contains("arena/w1", launcher.LastStart.Value.Args);
+    }
+
+    [Fact]
+    public async Task WorktreeOperationsNoOpWhenGitIsMissing()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+        Func<string, string?> noGit = _ => null;
+
+        Assert.False((await CodeGit.AddWorktreeAsync(launcher, "/repo", "/w", "b", noGit)).Ok);
+        Assert.False((await CodeGit.CommitAllAsync(launcher, "/w", "m", noGit)).Ok);
+        Assert.False((await CodeGit.MergeNoFFAsync(launcher, "/repo", "b", "m", noGit)).Ok);
+        await CodeGit.RemoveWorktreeAsync(launcher, "/repo", "/w", noGit);
+        await CodeGit.DeleteBranchAsync(launcher, "/repo", "b", noGit);
+        Assert.Null(launcher.LastStart);
+    }
+
+    // MARK: - FullDiffAsync
+
+    [Fact]
+    public async Task FullDiffAsyncReturnsNullWhenNothingChanged()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+
+        var diff = await CodeGit.FullDiffAsync(launcher, "/repo", resolveBinary: n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.Null(diff);
+    }
+
+    [Fact]
+    public async Task FullDiffAsyncIncludesTrackedChanges()
+    {
+        var launcher = new FakeProcessLauncher((_, args) => args.Contains("HEAD") && args.Contains("diff") && !args.Contains("--no-index")
+            ? new FakeChildProcess(new List<string> { "@@ -1 +1 @@", "-old", "+new" })
+            : new FakeChildProcess(new List<string>()));
+
+        var diff = await CodeGit.FullDiffAsync(launcher, "/repo", resolveBinary: n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.NotNull(diff);
+        Assert.Contains("+new", diff);
+    }
+
+    [Fact]
+    public async Task FullDiffAsyncIncludesUntrackedFilesDiffedAgainstDevNull()
+    {
+        var launcher = new FakeProcessLauncher((_, args) =>
+        {
+            if (args.Contains("--others")) return new FakeChildProcess(new List<string> { "new.txt\0" });
+            if (args.Contains("--no-index")) return new FakeChildProcess(new List<string> { "+brand new content" }, exitCode: 1);
+            return new FakeChildProcess(new List<string>());
+        });
+
+        var diff = await CodeGit.FullDiffAsync(launcher, "/repo", resolveBinary: n => n == "git" ? "/usr/bin/git" : null);
+
+        Assert.NotNull(diff);
+        Assert.Contains("brand new content", diff);
+    }
 }

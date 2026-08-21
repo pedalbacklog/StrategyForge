@@ -1494,3 +1494,100 @@ crucially, "Build succeeded. 0 Warning(s) 0 Error(s)" for `Coral.csproj`'s
 tier-chip row, the "Why?" flyout, the provider-mix row, and the new
 converter). Pending: verification on real Windows by the founder
 (describe a task, switch between tiers, open "Why?", apply/switch team).
+
+**2026-08-21 — Real cross-provider execution (engine), minimal cut: "run the
+current team," not the full Arena.** The founder asked to continue with
+real cross-provider execution. Before writing any code it turned out that
+in macOS this isn't wired into normal chat at all: a grep of
+`CrossProviderEditor`/`CodeArenaEngine` only finds `ArenaView.swift` (1054
+lines of UI) — the "Code Arena" mode, where several contestants race the
+same task, each in its own isolated worktree, and the diffs are compared.
+Normal chat never touches them. The founder was asked with this finding:
+build the full Arena, a minimal cut ("just run the current team," diverging
+a bit from macOS), or park it — chose the minimal cut.
+
+**An additional finding that reverses a prior decision in the port
+itself:** `CodeGit.cs` already had a class doc comment explaining why the
+worktree primitives (`addWorktree`/`mergeNoFF`/`commitAll`/
+`removeWorktree`/`deleteBranch`) had been left unported — "these exist ONLY
+for loop isolation," Fase 8's vetoed zone. Grepping those functions in
+Swift shows THREE callers: `LoopRunner.swift` (Fase 8, still vetoed), but
+ALSO `CodeArenaEngine.swift` (the Arena itself) and `ChatViewModel.swift`
+(its own "isolated-turn worktree" toggle, a normal-chat feature unrelated
+to Loops). These are generic `git worktree`/`git merge`/`git branch`
+wrappers with no reference to `LoopPlan`/`LoopScheduler`/`LoopRunner`/
+`LoopFileGenerator` (the four files `CLAUDE.md` actually names) — being a
+Loop DEPENDENCY isn't the same as BEING Loop code, and the earlier note
+conflated the two. Corrected in `CodeGit.cs`'s own class doc comment, citing
+the three real consumers.
+
+- `Coral.Core/Services/CodeGit.cs`: added `FullDiffAsync` (the whole
+  uncommitted diff, including untracked files, with the same 256KB
+  per-untracked-file cap as the original) and the worktree primitives:
+  `AddWorktreeAsync`, `CommitAllAsync`, `MergeNoFFAsync`,
+  `RemoveWorktreeAsync`, `DeleteBranchAsync`. 15 new tests.
+- `Coral.Core/Services/OneShotProcess.cs`: a root-cause fix found while
+  designing the new runner's timeout — cancelling `RunAsync`'s
+  `CancellationToken` threw the expected exception but NEVER killed the
+  child process (`Dispose()` only releases the .NET handle, it sends no
+  signal) — a cancelled `git`/`gh` process was left running orphaned in the
+  background. A `finally { live.Kill(); }` now guarantees it never outlives
+  the call, on every exit path — `Kill()` is already a documented no-op
+  once a process has exited normally, so this changes nothing on the happy
+  path. Benefits EVERY existing caller of `OneShotProcess` (`CodeGit`,
+  `GitHubCLI`), not just the new code.
+- `Coral.Core/Services/ProviderOneShotRunner.cs` (new): ports
+  `ProviderRun.swift`'s `OneShotRunner`/`CLIOneShotRunner`, only the
+  buffered half (no live-streaming `onEvent` variant — its only consumer,
+  `TeamRunEngine`, shows a final diff, not step-by-step progress, so that
+  cut is deliberate and smaller than the original, same as other Phase
+  2/3 cuts). Claude runs over plain pipes via `IProcessLauncher` (its
+  `--output-format json` doesn't need a real terminal — reuses
+  `ClaudeRunner.BuildEnvironment`, now `internal` instead of `private`, so
+  the `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` stripping isn't
+  duplicated); Codex/Gemini run under the same pseudo-console
+  infrastructure (`IPseudoConsoleLauncher`) already proven in production
+  for their sign-ins in `ProviderInstaller.cs` — same reasoning as the
+  Swift original (these CLIs can block-buffer on a plain pipe). A 600s
+  watchdog (test-overridable), live auth-prompt detection (reuses
+  `IsAuthPrompt`/`AuthFailureMessage`/`StripAnsi`/`EstimateTokens`/
+  `EstimatedCostUsd`, already ported in `CLIOneShotRunner.cs`), preferring
+  an alternative binary when installed (Antigravity's `agy` over the
+  retired `gemini`). 10 new tests, including one that verifies the
+  timeout actually kills the session with an injected 50ms timeout.
+- `Coral.Core/Services/EditProvenance.cs` (new): `EditProvenance` (record),
+  `EditProvenanceResolver.Attribute` (resolves an active-subagent name to
+  the responsible team member, using the already-ported
+  `AgentNameMatcher.TitlesMatch`), `LineAttributor.Attribute` (pure LCS
+  alignment, same 400,000-line-pair cap as the original — past that,
+  the whole file is credited to the current editor instead of aligning). A
+  1:1 port of `EditProvenance.swift` with its tests
+  (`EditProvenanceTests.swift`), 12 total.
+- `Coral.Core/Services/CrossProviderEditor.cs` (new): `IsCrossProvider`,
+  `Editors` (the subagents, or the orchestrator alone for a solo team), and
+  `RunAsync` — runs each team member in SEQUENCE inside the worktree,
+  re-attributing every changed file after each turn via `LineAttributor`.
+  Only needed ONE function from `MetaOrchestrator.swift` (`modelID(for:)`,
+  3 lines) — inlined rather than porting the whole 390-line file (meta-
+  orchestration outside a worktree is a bigger, separate piece, out of
+  scope). 5 new tests, with fakes (no real process, no real disk) — unlike
+  the Swift original (a real temp repo), matching this port's already-
+  established test style (`CodeGitTests`, `ProviderInstallerTests`).
+- `Coral.Core/Services/TeamRunEngine.cs` (new): the piece that ties it all
+  together — isolates the CURRENT strategy in a fresh worktree off HEAD,
+  writes its files (`StrategyWriter`, already ported), commits them as a
+  baseline, runs (cross-provider via `CrossProviderEditor`, or a single
+  native call for a Claude-only team — same as `CodeArenaEngine.swift`'s
+  own non-cross-provider branch), captures the diff, commits the work.
+  `ApplyAsync`/`DiscardAsync` merge or discard. Deliberately NOT the full
+  `CodeArenaEngine`: a single contestant (the team you already have), not a
+  race between several — see its own class doc comment for why. 4 new
+  tests against a REAL git repo (unlike the rest of this port — here it's
+  worth it: `TeamRunEngine` chains several git operations together, and a
+  real integration test proves far more than mocking each call separately
+  — `CrossProviderEditorTests` already covers that lower layer with fakes).
+
+Covered by local build/test: 436/438 (the 2 failures are the pre-existing
+manual smoke tests, unrelated). No file in this cut touches XAML, so this
+layer is verified without needing CI. Pending: the UI ("Run for real") and,
+after that, CI plus real-Windows verification.

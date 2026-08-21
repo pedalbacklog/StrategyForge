@@ -2562,3 +2562,106 @@ el XAML nuevo: la fila de chips de nivel, el flyout "Why?", la fila de
 mezcla de proveedores, y el converter nuevo). Pendiente: verificación
 en Windows real por el founder (describir una tarea, cambiar entre
 niveles, abrir "Why?", aplicar/cambiar de equipo).
+
+**2026-08-21 — Ejecución cross-provider real (motor), corte mínimo: "ejecutar
+el equipo actual", no el Arena completo.** El founder pidió seguir con la
+ejecución cross-provider real. Antes de escribir código se descubrió que en
+macOS esto NO está conectado al chat normal en absoluto: un grep de
+`CrossProviderEditor`/`CodeArenaEngine` solo encuentra `ArenaView.swift`
+(1054 líneas de UI) — el modo "Code Arena", donde varios contendientes
+compiten en la misma tarea, cada uno en su propio worktree aislado, y se
+comparan los diffs. El chat normal nunca los toca. Se preguntó al founder
+con este hallazgo: construir el Arena completo, un corte mínimo ("solo
+ejecutar el equipo actual", divergiendo un poco de macOS), o aparcarlo —
+eligió el corte mínimo.
+
+**Hallazgo adicional que revierte una decisión previa del propio port:**
+`CodeGit.cs` ya tenía un comentario de clase explicando por qué las
+primitivas de worktree (`addWorktree`/`mergeNoFF`/`commitAll`/
+`removeWorktree`/`deleteBranch`) se habían dejado sin portar — "existen SOLO
+para el aislamiento de loops", la zona vetada de Fase 8. Un grep de estas
+funciones en Swift muestra que las llaman TRES sitios:
+`LoopRunner.swift` (Fase 8, sigue vetado), pero TAMBIÉN
+`CodeArenaEngine.swift` (el propio Arena) y `ChatViewModel.swift` (su propio
+toggle de "turno aislado en worktree", una función del chat normal sin
+relación con Loops). Son wrappers genéricos de `git worktree`/`git merge`/
+`git branch`, sin ninguna referencia a `LoopPlan`/`LoopScheduler`/
+`LoopRunner`/`LoopFileGenerator` (los cuatro ficheros que `CLAUDE.md`
+nombra explícitamente) — ser una DEPENDENCIA de Loop no es lo mismo que SER
+código de Loop, y la nota anterior conflacionaba ambas cosas. Corregido en
+el propio comentario de clase de `CodeGit.cs`, con la cita exacta de los
+tres consumidores.
+
+- `Coral.Core/Services/CodeGit.cs`: añadidas `FullDiffAsync` (el diff
+  completo sin comitear, incluyendo archivos sin trackear, con el mismo
+  tope de 256KB por archivo sin trackear que el original) y las primitivas
+  de worktree: `AddWorktreeAsync`, `CommitAllAsync`, `MergeNoFFAsync`,
+  `RemoveWorktreeAsync`, `DeleteBranchAsync`. 15 tests nuevos.
+- `Coral.Core/Services/OneShotProcess.cs`: arreglo de raíz encontrado al
+  diseñar el timeout del runner nuevo — cancelar el `CancellationToken` de
+  `RunAsync` lanzaba la excepción esperada pero NUNCA mataba el proceso hijo
+  (`Dispose()` solo libera el handle .NET, no manda ninguna señal) — un
+  proceso `git`/`gh` cancelado quedaba huérfano corriendo en segundo plano.
+  Ahora un `finally { live.Kill(); }` garantiza que nunca sobrevive a la
+  llamada, en cualquier camino de salida — `Kill()` ya es un no-op
+  documentado si el proceso terminó normal, así que no cambia el
+  comportamiento en el camino feliz. Beneficia a TODO el que ya usaba
+  `OneShotProcess` (`CodeGit`, `GitHubCLI`), no solo el código nuevo.
+- `Coral.Core/Services/ProviderOneShotRunner.cs` (nuevo): port de
+  `ProviderRun.swift`'s `OneShotRunner`/`CLIOneShotRunner`, SOLO la mitad
+  "buffered" (sin la variante `onEvent` de streaming en vivo — el único
+  consumidor de esto, `TeamRunEngine`, muestra un diff final, no el progreso
+  paso a paso, así que ese recorte es deliberado y más pequeño que el
+  original, igual que otros cortes de Fase 2/3). Claude corre por tuberías
+  planas vía `IProcessLauncher` (su `--output-format json` no necesita
+  terminal real — reutiliza `ClaudeRunner.BuildEnvironment` ahora `internal`
+  en vez de `private`, para no duplicar el stripping de
+  `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`); Codex/Gemini corren bajo la
+  misma infraestructura de pseudo-consola (`IPseudoConsoleLauncher`) ya
+  probada en producción para sus logins en `ProviderInstaller.cs` — mismo
+  razonamiento que el original Swift (estos CLIs pueden bloquear el buffer
+  en una tubería plana). Watchdog de 600s (configurable solo para tests),
+  detección de prompts de auth en vivo (reutiliza `IsAuthPrompt`/
+  `AuthFailureMessage`/`StripAnsi`/`EstimateTokens`/`EstimatedCostUsd`, ya
+  portados en `CLIOneShotRunner.cs`), preferencia por binarios alternativos
+  (Antigravity `agy` sobre el `gemini` retirado). 10 tests nuevos, incluido
+  uno que verifica el timeout real matando la sesión con un timeout
+  inyectado de 50ms.
+- `Coral.Core/Services/EditProvenance.cs` (nuevo): `EditProvenance` (record),
+  `EditProvenanceResolver.Attribute` (resuelve un nombre de subagente activo
+  al miembro del equipo responsable, con `AgentNameMatcher.TitlesMatch` ya
+  portado), `LineAttributor.Attribute` (alineación LCS pura, con el mismo
+  tope de 400.000 pares de líneas del original — pasado ese tope se
+  atribuye todo el fichero al editor actual en vez de alinear). Port 1:1 de
+  `EditProvenance.swift` con sus tests (`EditProvenanceTests.swift`), 12 en
+  total.
+- `Coral.Core/Services/CrossProviderEditor.cs` (nuevo): `IsCrossProvider`,
+  `Editors` (subagentes, o el orquestador solo para un equipo solo), y
+  `RunAsync` — ejecuta cada miembro del equipo EN SECUENCIA dentro del
+  worktree, re-atribuyendo cada archivo cambiado tras cada turno vía
+  `LineAttributor`. Solo necesitaba UNA función de
+  `MetaOrchestrator.swift` (`modelID(for:)`, 3 líneas) — se puso en línea en
+  vez de portar el fichero de 390 líneas entero (la meta-orquestación fuera
+  de worktree es una pieza mayor y distinta, fuera de alcance). 5 tests
+  nuevos, con fakes (ni proceso real ni disco real) — a diferencia del
+  original Swift (repo temporal real), coherente con el estilo de test ya
+  establecido en este port (`CodeGitTests`, `ProviderInstallerTests`).
+- `Coral.Core/Services/TeamRunEngine.cs` (nuevo): la pieza que ata todo —
+  aísla la estrategia ACTUAL en un worktree nuevo off HEAD, escribe sus
+  ficheros (`StrategyWriter`, ya portado), los comitea como base, ejecuta
+  (cross-provider vía `CrossProviderEditor`, o una sola llamada nativa si es
+  Claude-solo — igual que la propia rama no-cross-provider de
+  `CodeArenaEngine.swift`), captura el diff, comitea el trabajo.
+  `ApplyAsync`/`DiscardAsync` fusionan o descartan. Deliberadamente NO es
+  `CodeArenaEngine` completo: un solo contendiente (el equipo que ya tienes),
+  no una carrera entre varios — ver el propio comentario de clase para el
+  porqué. 4 tests nuevos, contra un repo git REAL (a diferencia del resto de
+  este port, aquí sí vale la pena: `TeamRunEngine` encadena varias
+  operaciones de git seguidas, y un test de integración real prueba mucho
+  más que simular cada llamada por separado — `CrossProviderEditorTests` ya
+  cubre esa capa inferior con fakes).
+
+Cubierto por build/test local: 436/438 (los 2 fallos son los smoke tests
+manuales preexistentes, sin relación). Ningún fichero de este corte toca
+XAML, así que esta capa queda verificada sin necesitar CI. Pendiente: la UI
+("Run for real") y, después, verificación en CI + Windows real.

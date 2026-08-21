@@ -139,7 +139,11 @@ public static class ClaudeRunner
     /// provider auth keys stripped so only what the user configured IN Coral
     /// takes effect — an inherited key from the launching shell would silently
     /// override the subscription login.</summary>
-    private static Dictionary<string, string?> BuildEnvironment(string resolvedBinaryPath)
+    /// <summary>Internal (not private): also reused by
+    /// <see cref="ProviderOneShotRunner"/>'s Claude path — same env-stripping
+    /// requirement (a stray inherited API key would silently override the
+    /// subscription login), no reason to duplicate it.</summary>
+    internal static Dictionary<string, string?> BuildEnvironment(string resolvedBinaryPath)
     {
         var overrides = new Dictionary<string, string?>();
         var binDir = Path.GetDirectoryName(resolvedBinaryPath);

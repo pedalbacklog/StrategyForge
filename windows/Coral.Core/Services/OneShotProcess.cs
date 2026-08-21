@@ -30,12 +30,26 @@ internal static class OneShotProcess
         var live = child!;
         using (live)
         {
-            var stdoutTask = CollectLinesAsync(live.ReadStandardOutputLinesAsync(ct), ct);
-            var stderrTask = live.ReadStandardErrorToEndAsync();
-            var stdoutLines = await stdoutTask;
-            var stderr = await stderrTask;
-            var exitCode = await live.WaitForExitAsync(ct);
-            return (exitCode == 0, string.Join("\n", stdoutLines), stderr);
+            // Guarantee the child is never left running past this call — a
+            // cancelled `ct` (a caller's watchdog, a UI Cancel) otherwise
+            // orphans the process: cancelling an await here throws, but
+            // Dispose() alone only releases the .NET Process handle, it
+            // doesn't send a kill signal. Kill() is a documented best-effort
+            // no-op once the process has already exited normally, so this
+            // adds no behavior on the happy path.
+            try
+            {
+                var stdoutTask = CollectLinesAsync(live.ReadStandardOutputLinesAsync(ct), ct);
+                var stderrTask = live.ReadStandardErrorToEndAsync();
+                var stdoutLines = await stdoutTask;
+                var stderr = await stderrTask;
+                var exitCode = await live.WaitForExitAsync(ct);
+                return (exitCode == 0, string.Join("\n", stdoutLines), stderr);
+            }
+            finally
+            {
+                live.Kill();
+            }
         }
     }
 

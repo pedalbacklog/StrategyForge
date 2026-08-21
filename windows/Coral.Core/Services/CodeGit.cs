@@ -46,18 +46,23 @@ public sealed record BranchStat(string Branch, string Base, int Insertions, int 
 /// correct regardless of who calls them (the same reversal that already
 /// applied to the write operations applies here too).
 ///
-/// DEFERRED, deliberately, and each for a real reason (not "hasn't gotten to
-/// it yet"):
-/// - <c>fullDiff</c> (the whole uncommitted diff incl. untracked files, with
-///   per-file size capping) — only has a consumer once an automated diff
-///   reviewer is ported, which hasn't happened yet; the shape of what it
-///   needs isn't settled.
-/// - Every WORKTREE operation (addWorktree/mergeNoFF/commitAll/removeWorktree/
-///   deleteBranch) — these exist ONLY for loop isolation, which is Fase 8's
-///   explicitly vetoed zone (CLAUDE.md: loop-related changes need a human
-///   reading the diff, not just tests). Porting them here would put loop
-///   plumbing outside that review gate — a firm boundary, not a scheduling
-///   choice.
+/// UPDATE (2026-08-21): both items below WERE ported, once each had a real
+/// consumer (the "run the current team for real, isolated in a worktree"
+/// work — see <c>TeamRunEngine.cs</c>). The worktree deferral's original reason
+/// no longer held up under a check: grepping the Swift source shows
+/// <c>addWorktree</c>/<c>mergeNoFF</c>/<c>commitAll</c>/<c>removeWorktree</c>/
+/// <c>deleteBranch</c> are called from THREE places — <c>LoopRunner.swift</c>
+/// (Fase 8, still vetoed), but ALSO <c>CodeArenaEngine.swift</c> (the Code
+/// Arena feature) and <c>ChatViewModel.swift</c> (its own worktree-isolated-
+/// turn toggle) — neither of which is Loop code. These are generic `git
+/// worktree`/`git merge`/`git branch` wrappers with no reference to
+/// <c>LoopPlan</c>/<c>LoopScheduler</c>/<c>LoopRunner</c>/<c>LoopFileGenerator</c>
+/// (the four files CLAUDE.md actually names) — being a Loop DEPENDENCY isn't
+/// the same as BEING Loop code, and conflating the two was overcautious, not
+/// the firm boundary the earlier note claimed. Ported below:
+/// <see cref="FullDiffAsync"/>, <see cref="AddWorktreeAsync"/>,
+/// <see cref="CommitAllAsync"/>, <see cref="MergeNoFFAsync"/>,
+/// <see cref="RemoveWorktreeAsync"/>, <see cref="DeleteBranchAsync"/>.
 /// </summary>
 public static class CodeGit
 {
@@ -297,6 +302,122 @@ public static class CodeGit
         if (git is null) return false;
         var (ok, stdout, _) = await RunGitAsync(launcher, git, repo, new[] { "status", "--porcelain" }, ct);
         return ok && stdout.Trim().Length > 0;
+    }
+
+    /// <summary>Largest untracked file diffed inline before it's noted with a
+    /// stub hunk instead — a huge generated/vendored file would otherwise
+    /// balloon a reviewer prompt for no benefit. Matches
+    /// <c>CodeGit.swift</c>'s <c>fullDiff</c>.</summary>
+    private const int FullDiffMaxUntrackedFileBytes = 256 * 1024;
+
+    /// <summary>The WHOLE uncommitted diff as raw unified-diff text (null if
+    /// none / not a repo): tracked changes (<c>git diff HEAD</c>) PLUS each
+    /// untracked file diffed against <c>/dev/null</c> — never-staged new
+    /// files (the typical agent output) are invisible to <c>diff HEAD</c> but
+    /// WILL be committed by a default <c>add -A</c>, so a diff reviewer must
+    /// see them too. Port of <c>CodeGit.swift</c>'s <c>fullDiff(repo:)</c>.</summary>
+    public static async Task<string?> FullDiffAsync(IProcessLauncher launcher, string repo,
+        Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        resolveBinary ??= BinaryResolver.Resolve;
+        var git = resolveBinary("git");
+        if (git is null) return null;
+
+        var pieces = new List<string>();
+        // Fails on an unborn HEAD — treat that as "no tracked changes" and
+        // still report untracked files.
+        var (trackedOk, trackedOut, _) = await RunGitAsync(launcher, git, repo, new[] { "diff", "--no-color", "HEAD" }, ct);
+        if (trackedOk && trackedOut.Trim().Length > 0) pieces.Add(trackedOut);
+
+        var (untrackedOk, untrackedOut, _) = await RunGitAsync(launcher, git, repo,
+            new[] { "-c", "core.quotePath=false", "ls-files", "--others", "--exclude-standard", "-z" }, ct);
+        if (untrackedOk)
+        {
+            foreach (var rel in untrackedOut.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var abs = Path.Combine(repo, rel);
+                var size = File.Exists(abs) ? new FileInfo(abs).Length : 0;
+                if (size > FullDiffMaxUntrackedFileBytes)
+                {
+                    pieces.Add($"diff --git a/{rel} b/{rel}\nnew file, {size} bytes — too large to inline for review\n");
+                    continue;
+                }
+                // --no-index exits 1 when the files differ (the expected case
+                // here) and 0 when they're identical (an empty untracked
+                // file) — accept either as long as there's output, matching
+                // the Swift original's r.status == 0 || r.status == 1 check.
+                var (_, diffOut, _) = await RunGitAsync(launcher, git, repo,
+                    new[] { "diff", "--no-color", "--no-index", "--", "/dev/null", rel }, ct);
+                if (diffOut.Length > 0) pieces.Add(diffOut);
+            }
+        }
+
+        var full = string.Concat(pieces);
+        return full.Trim().Length == 0 ? null : full;
+    }
+
+    // MARK: - Worktree operations (isolated team runs — see TeamRunEngine.cs)
+
+    /// <summary>Create a new worktree at <paramref name="path"/> on a fresh
+    /// <paramref name="branch"/> off HEAD. Port of <c>CodeGit.swift</c>'s
+    /// <c>addWorktree(repo:path:branch:)</c>.</summary>
+    public static async Task<(bool Ok, string Output)> AddWorktreeAsync(IProcessLauncher launcher, string repo,
+        string path, string branch, Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return (false, "git not found");
+        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, repo, new[] { "worktree", "add", "-b", branch, path, "HEAD" }, ct);
+        return (ok, CombineOutput(stdout, stderr));
+    }
+
+    /// <summary>Stage everything and commit in <paramref name="dir"/>
+    /// (typically a worktree). <c>Ok == false</c> when there was nothing to
+    /// commit — the caller treats that as "no work produced". Port of
+    /// <c>CodeGit.swift</c>'s <c>commitAll(dir:message:)</c>.</summary>
+    public static async Task<(bool Ok, string Output)> CommitAllAsync(IProcessLauncher launcher, string dir,
+        string message, Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return (false, "git not found");
+        _ = await RunGitAsync(launcher, git, dir, new[] { "add", "-A" }, ct);
+        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, dir, new[] { "commit", "-m", message }, ct);
+        return (ok, CombineOutput(stdout, stderr));
+    }
+
+    /// <summary>Merge <paramref name="branch"/> into whatever <paramref name="repo"/>
+    /// has checked out, no-ff so the work stays a reviewable unit. On
+    /// conflict git leaves a merge in progress — the caller decides whether
+    /// to resolve or abort. Port of <c>CodeGit.swift</c>'s
+    /// <c>mergeNoFF(repo:branch:message:)</c>.</summary>
+    public static async Task<(bool Ok, string Output)> MergeNoFFAsync(IProcessLauncher launcher, string repo,
+        string branch, string message, Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return (false, "git not found");
+        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, repo, new[] { "merge", "--no-ff", branch, "-m", message }, ct);
+        return (ok, CombineOutput(stdout, stderr));
+    }
+
+    /// <summary>Remove a worktree (force, since it may hold committed-but-
+    /// unmerged work kept intentionally on its branch). Best-effort. Port of
+    /// <c>CodeGit.swift</c>'s <c>removeWorktree(repo:path:)</c>.</summary>
+    public static async Task RemoveWorktreeAsync(IProcessLauncher launcher, string repo, string path,
+        Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return;
+        _ = await RunGitAsync(launcher, git, repo, new[] { "worktree", "remove", path, "--force" }, ct);
+    }
+
+    /// <summary>Delete a local branch (cleanup after a merge or a discard).
+    /// Best-effort. Port of <c>CodeGit.swift</c>'s
+    /// <c>deleteBranch(repo:name:)</c>.</summary>
+    public static async Task DeleteBranchAsync(IProcessLauncher launcher, string repo, string name,
+        Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
+    {
+        var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
+        if (git is null) return;
+        _ = await RunGitAsync(launcher, git, repo, new[] { "branch", "-D", name }, ct);
     }
 
     // MARK: - Write operations (Code Mode git panel)
