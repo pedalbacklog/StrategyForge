@@ -2342,3 +2342,14 @@ cerrado en su alcance acordado: motor puro + tests + conexión a los
 otros dos proveedores desde la UI. El selector de proveedor por rol en
 el editor y la ejecución cross-provider real quedan como trabajo futuro,
 explícitamente fuera de este corte.
+
+CONFIRMADO compilando en windows-latest CI (commit `b19d982`, run
+[32467676681](https://github.com/pedalbacklog/StrategyForge/actions/runs/32467676681) —
+log real: "Passed! - Failed: 0, Passed: 372, Skipped: 0, Total: 372" y,
+por separado, "Build succeeded. 0 Warning(s) 0 Error(s)" para el `dotnet
+build` de la app WinUI 3 (`Coral.csproj`) — este segundo build es el que
+de verdad ejercita el XAML nuevo de "Connect Codex"/"Connect Gemini" en
+`MainPage.xaml`, imposible de compilar en este sandbox Linux). Pendiente
+de verificación real: los botones "Connect Codex"/"Connect Gemini" no se
+han pulsado aún contra esos dos CLIs de verdad en Windows — solo
+"Connect Claude" lo está (Fase 6). No bloqueante para este corte.

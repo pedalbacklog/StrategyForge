@@ -1285,3 +1285,14 @@ its agreed scope: the pure engine plus tests, plus connecting the other
 two providers from the UI. The per-role provider picker in the editor
 and real cross-provider execution remain explicitly out of scope, future
 work.
+
+CONFIRMED compiling on windows-latest CI (commit `b19d982`, run
+[32467676681](https://github.com/pedalbacklog/StrategyForge/actions/runs/32467676681) —
+raw log: "Passed! - Failed: 0, Passed: 372, Skipped: 0, Total: 372" and,
+separately, "Build succeeded. 0 Warning(s) 0 Error(s)" for the WinUI 3
+app's own `dotnet build` (`Coral.csproj`) — that second build is what
+actually exercises the new "Connect Codex"/"Connect Gemini" XAML in
+`MainPage.xaml`, which this Linux sandbox can't compile at all). Still
+pending real verification: the two new Connect buttons haven't been
+clicked against those real CLIs on Windows yet — only "Connect Claude"
+has (Phase 6). Not blocking for this cut.
