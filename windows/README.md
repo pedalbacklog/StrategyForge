@@ -1485,6 +1485,12 @@ same model as Recommended" guarantee, determinism, and
 longer exists) plus 6 new tests for tiers/mix/loop hint/chosen team.
 
 Covered by local build/test: 395/397 (the 2 failures are the
-pre-existing manual smoke tests, unrelated). Pending: CI confirmation of
-the real WinUI 3 app build (the new XAML can't compile in this Linux
-sandbox) and verification on real Windows by the founder.
+pre-existing manual smoke tests, unrelated). CONFIRMED compiling on
+windows-latest CI (commit `7d0ac54`, run
+[32477877689](https://github.com/pedalbacklog/StrategyForge/actions/runs/32477877689) —
+raw log: "Passed! - Failed: 0, Passed: 392, Skipped: 0, Total: 392" and,
+crucially, "Build succeeded. 0 Warning(s) 0 Error(s)" for `Coral.csproj`'s
+`dotnet build` — the step that actually compiles all the new XAML: the
+tier-chip row, the "Why?" flyout, the provider-mix row, and the new
+converter). Pending: verification on real Windows by the founder
+(describe a task, switch between tiers, open "Why?", apply/switch team).

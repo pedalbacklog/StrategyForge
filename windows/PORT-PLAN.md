@@ -2552,6 +2552,13 @@ reescrito (la antigua API de `Advice` único ya no existe) más 6 tests
 nuevos para los niveles/mezcla/loop hint/equipo elegido.
 
 Cubierto por build/test local: 395/397 (los 2 fallos son los smoke
-tests manuales preexistentes, sin relación). Pendiente: confirmación en
-CI del build real de la app WinUI 3 (el XAML nuevo no se puede compilar
-en este sandbox Linux) y verificación en Windows real por el founder.
+tests manuales preexistentes, sin relación). CONFIRMADO compilando en
+windows-latest CI (commit `7d0ac54`, run
+[32477877689](https://github.com/pedalbacklog/StrategyForge/actions/runs/32477877689) —
+log real: "Passed! - Failed: 0, Passed: 392, Skipped: 0, Total: 392" y,
+crucialmente, "Build succeeded. 0 Warning(s) 0 Error(s)" para el
+`dotnet build` de `Coral.csproj` — el paso que de verdad compila todo
+el XAML nuevo: la fila de chips de nivel, el flyout "Why?", la fila de
+mezcla de proveedores, y el converter nuevo). Pendiente: verificación
+en Windows real por el founder (describir una tarea, cambiar entre
+niveles, abrir "Why?", aplicar/cambiar de equipo).
