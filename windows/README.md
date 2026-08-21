@@ -1146,6 +1146,40 @@ found by actually running the app on Windows, exactly as happened.
 CONFIRMED compiling on windows-latest CI (commit `6ffdccd`, run
 [32433412699](https://github.com/pedalbacklog/StrategyForge/actions/runs/32433412699) —
 raw log: "Passed! - Failed: 0, Passed: 345, Skipped: 0, Total: 345" and
-"Build succeeded. 0 Warning(s) 0 Error(s)"). Pending: the founder
-reconfirming "Issues"/"Save" now react live to a duplicate name and a
-blank count.
+"Build succeeded. 0 Warning(s) 0 Error(s)"). Reconfirmed by the founder:
+"Save" DID stay disabled with the error visible — the block works.
+
+**Same day — a second real finding testing "Fix All" against a trickier
+case: two identically-named roles, one of them with more than one
+instance.** The founder deduplicated "curri"/"curri" by hand (worked
+fine, "Issues" caught it live) and clicked "Fix All". Result: the second
+role got renamed to "curri-2" — but the FIRST role ("curri", `Count=2`)
+itself generates `curri-1.md`/`curri-2.md`, so the auto-rename collided
+with its own second instance. `Issues` correctly caught it ("Two
+subagents both generate 'curri-2.md'") and `Save` stayed disabled — the
+system didn't go quiet on the problem, but "Fix All" hadn't actually
+resolved it.
+
+Checked first whether this was a port-introduced bug: Swift's
+`Strategy.autoFixed()` (`StrategyForge/Models/Strategy.swift`) has the
+EXACT same purely-literal dedup logic — so this is a pre-existing macOS
+limitation, not something the port introduced. Asked the founder whether
+to fix it (touches model logic conceptually shared with macOS, though the
+Swift file itself isn't touched) or leave it — they chose to fix it, in
+`Coral.Core` only (not `StrategyForge/Models/Strategy.swift`, out of
+scope for this Windows-focused session).
+
+**Fix:** `AutoFixed()`'s dedup (`Coral.Core/Models/Strategy.cs`) now
+reserves, alongside each role's literal name, the full set of files that
+role will generate given its `Count` (`name` if Count≤1, `name-1..name-Count`
+otherwise) — and tries `-2`, `-3`… suffixes until it finds a name whose
+file set doesn't collide with ANY role processed so far, not just its
+literal name. Deterministic: same role order, same result every time. 1
+new test (`DeduplicationAvoidsCollidingWithAnotherRolesExpandedInstanceFiles`,
+reproduces the exact "curri"/"curri" with Count=2 case and confirms
+`Strategy.Validate()` comes back empty after `AutoFixed()`) — 346 total.
+Existing `AutoFixTests.cs` cases still pass unchanged (the simple
+no-multi-instance case behaves exactly as before).
+
+Covered by unit tests and local build/test (346/346) — pending CI and the
+founder reconfirming "Fix All" on this exact case.

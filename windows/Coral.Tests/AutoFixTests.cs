@@ -35,4 +35,30 @@ public class AutoFixTests
         var names = fixedStrategy.Roles.Select(r => r.Name).ToList();
         Assert.Equal(names.Count, names.Distinct().Count()); // all unique now
     }
+
+    [Fact]
+    public void DeduplicationAvoidsCollidingWithAnotherRolesExpandedInstanceFiles()
+    {
+        // Real bug caught on real Windows (Strategy Editor, Fix All): a
+        // literal-only dedup can rename a duplicate onto exactly the slot a
+        // fan-out role's own Nth instance already claims — e.g. two roles
+        // named "curri" where one has Count 2 renaming the second to
+        // "curri-2" collides with the first's own "curri-2.md". Confirmed
+        // present in the Swift original too (Strategy.swift's autoFixed()
+        // is a plain literal dedup) — fixed only in this port, see
+        // PORT-PLAN.md for why Swift wasn't touched.
+        var worker = new AgentRole("curri", RoleKind.Worker, ClaudeModel.Sonnet5, "x", "y", count: 2);
+        var reviewer = new AgentRole("curri", RoleKind.Reviewer, ClaudeModel.Haiku45, "x", "y");
+        var s = new Strategy("Test", "Test", new List<AgentRole>
+        {
+            new("orchestrator", RoleKind.Orchestrator, ClaudeModel.Sonnet5, "x", "y", isOrchestrator: true),
+            worker,
+            reviewer,
+        }, "notes");
+
+        var fixedStrategy = s.AutoFixed();
+
+        Assert.True(fixedStrategy.IsValid);
+        Assert.Empty(fixedStrategy.Validate());
+    }
 }

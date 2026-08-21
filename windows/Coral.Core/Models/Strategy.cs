@@ -250,21 +250,40 @@ public sealed class Strategy
             if (role.IsOrchestrator) role.Count = 1;
         }
 
-        // De-duplicate names deterministically (append -2, -3, … to later dupes).
-        var seen = new Dictionary<string, int>();
+        // De-duplicate names deterministically (append -2, -3, … to later
+        // dupes) — and, unlike a plain literal-name dedup (Swift's
+        // autoFixed() included — this diverges from it on purpose, see
+        // PORT-PLAN.md), also avoid colliding with any OTHER role's own
+        // expanded instance file names (the same rule Validate()'s
+        // "Expanded-name collisions" check enforces: a role with Count > 1
+        // generates name-1..name-Count). A plain literal rename can land a
+        // dedup suffix (e.g. "-2") on exactly the slot a fan-out role's own
+        // second instance already claims — Validate() would still flag
+        // that as broken immediately after AutoFixed() claimed to fix it.
+        // Both literal-name uniqueness AND expanded-slot uniqueness are
+        // enforced together so AutoFixed()'s own output can never trip
+        // Validate() again for something it just "fixed".
+        var reservedNames = new HashSet<string>();
+        var reservedSlots = new HashSet<string>();
         foreach (var role in newRoles)
         {
-            var name = role.Name;
-            if (seen.TryGetValue(name, out var n))
+            var baseName = role.Name;
+            List<string> Slots(string name) => role.Count <= 1
+                ? new List<string> { name }
+                : Enumerable.Range(1, role.Count).Select(i => $"{name}-{i}").ToList();
+
+            var attempt = 1;
+            string candidate;
+            while (true)
             {
-                var next = n + 1;
-                seen[name] = next;
-                role.Name = $"{name}-{next}";
+                candidate = attempt == 1 ? baseName : $"{baseName}-{attempt}";
+                var slots = Slots(candidate);
+                if (!reservedNames.Contains(candidate) && !slots.Any(reservedSlots.Contains)) break;
+                attempt++;
             }
-            else
-            {
-                seen[name] = 1;
-            }
+            role.Name = candidate;
+            reservedNames.Add(candidate);
+            foreach (var slot in Slots(candidate)) reservedSlots.Add(slot);
         }
 
         return new Strategy(Name, Description, newRoles, OrchestrationNotes,
