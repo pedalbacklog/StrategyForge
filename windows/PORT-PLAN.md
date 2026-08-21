@@ -3137,3 +3137,37 @@ de los smoke tests manuales, sin relación).
 sobre el commit `523b808`: `Passed! - Failed: 0, Passed: 484, Skipped: 0,
 Total: 484` — la subida exacta de +10 que coincide con los nuevos
 `CodexUsageStoreTests` — y el build de la app WinUI 3 también en verde.
+
+**Portado `ProvenanceDiff` — a diferencia de los otros tres puertos de
+capa de datos de arriba, este tiene un consumidor ya calculado
+esperándolo.** `CrossProviderEditor.RunAsync` ya calcula
+`CrossProviderResult.LineAuthors` (autoría por archivo y por línea) en
+cada run cross-provider de "Run for real" — pero `TeamRunPage` ahora
+mismo solo muestra el resumen plano por archivo
+(`TeamRunViewModel.AuthorshipLines`, "file.md: worker, advisor"), sin
+colorear nunca el propio diff según quién escribió cada línea. Puerto de
+`ProvenanceDiff.swift`: `Annotate(diff, lineAuthors)` recorre un diff
+unificado de git línea a línea, clasificando cada una en
+`FileHeader`/`HunkHeader`/`Added`/`Removed`/`Context`, y para las líneas
+`Added` mapea el contador de línea del archivo nuevo en curso (rastreado
+desde cada cabecera de hunk `@@ -a,b +c,d @@`) a través de
+`lineAuthors[currentFile][newLineNo - 1]?.Provider` — el mismo mapa de
+autoría por línea que `CrossProviderEditor` ya produce, así que una
+futura vista de diff podría colorear cada línea `+` por proveedor sin
+ningún cableado de datos nuevo. 6 tests nuevos (`ProvenanceDiffTests.cs`,
+los 3 primeros puerto 1:1 de `ProvenanceDiffTests.swift`): líneas
+añadidas etiquetadas con su proveedor, mapeo de línea por desplazamiento
+de hunk, archivo desconocido/autor ausente deja `Provider` nulo, líneas
+eliminadas/de contexto nunca atribuidas, una cabecera de diff con
+`/dev/null` manejada sin problema, y varios archivos rastreando cada uno
+su propio contador de línea de forma independiente.
+
+**Sigue sin cambio de UI** — mismo razonamiento de "señalar, no inventar"
+que `DiagnosticsLog`/`ClaudeUsageStore`/`WastedWork`: si/cómo re-estilizar
+el `ListView` de diff de `TeamRunPage` para usar esto lo decide el
+founder, no algo que se cablee sin preguntar. El hueco de datos-a-UI ahora
+es puramente un cambio de UI, eso sí — la lógica de anotación en sí ya
+está lista y probada.
+
+Cubierto por build/test local: 504/506 (los mismos 2 fallos preexistentes
+de los smoke tests manuales, sin relación).

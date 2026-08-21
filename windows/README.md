@@ -2025,3 +2025,33 @@ failures, unrelated).
 on commit `523b808`: `Passed! - Failed: 0, Passed: 484, Skipped: 0, Total:
 484` — the exact +10 delta matching the new `CodexUsageStoreTests` — and
 the WinUI 3 app build also green.
+
+**Ported `ProvenanceDiff` — unlike the other three data-layer ports above,
+this one has an obvious, already-computed consumer waiting for it.**
+`CrossProviderEditor.RunAsync` already computes `CrossProviderResult.LineAuthors`
+(per-file, per-line authorship) for every cross-provider "Run for real"
+call — but `TeamRunPage` currently only shows the flat per-file summary
+(`TeamRunViewModel.AuthorshipLines`, "file.md: worker, advisor"), never
+coloring the diff itself by who wrote each line. Port of
+`ProvenanceDiff.swift`: `Annotate(diff, lineAuthors)` walks a unified git
+diff line by line, classifying each into `FileHeader`/`HunkHeader`/
+`Added`/`Removed`/`Context`, and for `Added` lines maps the running
+new-file line counter (tracked from each `@@ -a,b +c,d @@` hunk header)
+through `lineAuthors[currentFile][newLineNo - 1]?.Provider` — the exact
+per-line authorship map `CrossProviderEditor` already produces, so a
+future diff view could color each `+` line by provider with zero new data
+plumbing. 6 new tests (`ProvenanceDiffTests.cs`, the first 3 a 1:1 port of
+`ProvenanceDiffTests.swift`): added lines tagged with their provider,
+hunk-offset line mapping, unknown-file/missing-author leaves `Provider`
+null, removed/context lines never attributed, a `/dev/null` diff header
+handled cleanly, and multiple files each tracking their own line counter
+independently.
+
+**Still no UI change** — same "flag, don't invent" reasoning as
+`DiagnosticsLog`/`ClaudeUsageStore`/`WastedWork`: whether/how to restyle
+`TeamRunPage`'s diff `ListView` to use this is for the founder to decide,
+not something to wire in unprompted. The data-to-UI gap is now purely a
+UI change, though — the annotation logic itself is ready and tested.
+
+Covered by local build/test: 504/506 (same 2 pre-existing manual-only
+failures, unrelated).
