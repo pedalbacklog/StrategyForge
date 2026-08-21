@@ -2753,3 +2753,18 @@ en Swift para "divergir" de él): arreglado añadiendo el mismo
 sin preguntar. Cubierto por build/test local: 440/442 (los 2 fallos siguen
 siendo los smoke tests manuales preexistentes). Pendiente: confirmación en
 CI de que esto cierra los últimos 2 fallos.
+
+**CI en verde, confirmado con logs en bruto.** Run
+[32484080792](https://github.com/pedalbacklog/StrategyForge/actions/runs/32484080792)
+sobre el commit `e8841f8`: `Passed! - Failed: 0, Passed: 437, Skipped: 0,
+Total: 437` y el build de la app WinUI 3 (`dotnet build ... Coral.csproj`)
+también en verde, "0 Warning(s), 0 Error(s)". Con esto queda cerrado todo
+el corte mínimo de "ejecución cross-provider real": motor (worktrees +
+`ProviderOneShotRunner` + `EditProvenance`/`LineAttributor` +
+`CrossProviderEditor` + `TeamRunEngine`), UI (`TeamRunViewModel`/
+`TeamRunWindow`/`TeamRunPage`, botón "Run for real…") y los tres arreglos
+de CI específicos de Windows (limpieza de tests con objetos de solo
+lectura, identidad de git en `CommitAllAsync`, identidad de git en
+`MergeNoFFAsync`). Pendiente: confirmación en Windows real por el founder,
+probando "Run for real" de principio a fin (elegir equipo, tarea corta,
+Run, revisar diff, Apply o Discard).

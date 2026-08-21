@@ -1676,3 +1676,17 @@ counterpart to diverge from): fixed by adding the same
 without asking first. Covered by local build/test: 440/442 (the 2 failures
 are still the pre-existing manual smoke tests). Pending: CI confirmation
 that this closes out the last 2 failures.
+
+**CI green, confirmed via raw logs.** Run
+[32484080792](https://github.com/pedalbacklog/StrategyForge/actions/runs/32484080792)
+on commit `e8841f8`: `Passed! - Failed: 0, Passed: 437, Skipped: 0, Total:
+437`, and the WinUI 3 app build (`dotnet build ... Coral.csproj`) also
+green, "0 Warning(s), 0 Error(s)". This closes out the whole "real
+cross-provider execution" minimal cut: the engine (worktrees +
+`ProviderOneShotRunner` + `EditProvenance`/`LineAttributor` +
+`CrossProviderEditor` + `TeamRunEngine`), the UI (`TeamRunViewModel`/
+`TeamRunWindow`/`TeamRunPage`, the "Run for real…" button), and all three
+Windows-specific CI fixes (read-only-object test cleanup, git identity in
+`CommitAllAsync`, git identity in `MergeNoFFAsync`). Pending: confirmation
+on real Windows by the founder, exercising "Run for real" end to end
+(pick a team, a small task, Run, review the diff, Apply or Discard).
