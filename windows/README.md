@@ -2055,3 +2055,9 @@ UI change, though — the annotation logic itself is ready and tested.
 
 Covered by local build/test: 504/506 (same 2 pre-existing manual-only
 failures, unrelated).
+
+**`WastedWork` CI-confirmed green via raw logs.** Run
+[32532760305](https://github.com/pedalbacklog/StrategyForge/actions/runs/32532760305)
+on commit `e40ff60`: `Passed! - Failed: 0, Passed: 495, Skipped: 0, Total:
+495` — the exact +11 delta matching the new `WastedWorkTests` — and the
+WinUI 3 app build also green.

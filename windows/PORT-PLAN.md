@@ -3171,3 +3171,9 @@ está lista y probada.
 
 Cubierto por build/test local: 504/506 (los mismos 2 fallos preexistentes
 de los smoke tests manuales, sin relación).
+
+**`WastedWork` confirmado en verde en CI con logs en bruto.** Run
+[32532760305](https://github.com/pedalbacklog/StrategyForge/actions/runs/32532760305)
+sobre el commit `e40ff60`: `Passed! - Failed: 0, Passed: 495, Skipped: 0,
+Total: 495` — la subida exacta de +11 que coincide con los nuevos
+`WastedWorkTests` — y el build de la app WinUI 3 también en verde.
