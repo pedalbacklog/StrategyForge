@@ -1908,3 +1908,45 @@ on commit `c4fc685`: `Passed! - Failed: 0, Passed: 451, Skipped: 0, Total:
 451` — the exact +13 delta from the previous CI baseline (438), matching
 the 13 new tests added this round — and the WinUI 3 app build also green,
 "0 Warning(s), 0 Error(s)".
+
+**Ported `ClaudeUsageStore` (P1 backlog item #10, "usage view") — data
+layer only, ahead of any UI.** `ClaudeUsageStore.swift` reads Claude
+Code's local session logs (`~/.claude/projects/**/*.jsonl`) and aggregates
+real token usage into a 5-hour rate-limit "block" plus a rolling 7-day
+window, per model — pure log parsing, no CLI spawning, no UI dependency,
+so (like this port's Generators and `CLIOneShotRunner`'s command-building
+half) it's useful and fully testable standing entirely on its own, well
+before the ViewModel/View (`UsageStore.swift`/`UsageView.swift`, 622
+lines combined) get ported. Faithful port: `ModelUsage`/`UsageSummary`
+records, `LoadUncached(homeDirectory, now)` (pure — same
+*Uncached-plus-real-wrapper shape as `ProviderAuth`) walks
+`%USERPROFILE%\.claude\projects\**\*.jsonl` (Windows' equivalent of
+Swift's `~/.claude/projects`, matching the home-dir convention
+`ProviderAuth.cs` already established), skips files untouched in the
+last 8 days before doing any JSON work, tolerantly parses each
+`"assistant"`-typed line with `System.Text.Json` (malformed/legacy lines
+skipped, never fatal — same contract as `ClaudeStreamParser`), sums
+`input_tokens + output_tokens + cache_creation_input_tokens +
+cache_read_input_tokens`, floors the earliest sample to the hour to
+anchor the current 5-hour block (restarting whenever a sample lands past
+the running block's reset), and ranks models by capability
+(`PowerRank`) rather than raw usage for display ordering — `Fable`/`Opus`
+first, `Haiku`/`mini`/`flash` last, matching the Swift original exactly.
+`FriendlyModel` maps a raw model id ("claude-opus-4-7") to a short name
+("Opus 4.7"), filtering out a trailing build-date suffix
+("claude-haiku-4-5-20251001" → "Haiku 4.5", not "Haiku 5.20251001") the
+same way Swift does. 23 new tests (`ClaudeUsageStoreTests.cs`): empty/
+missing directory, malformed-line tolerance, multi-field token
+aggregation, zero-token lines skipped, the 8-day file cutoff, the 7-day
+sample window, block restart after 5 hours idle, block reporting zero
+once elapsed, capability-based model ordering, `FriendlyModel`/
+`PowerRank` table cases.
+
+**No ViewModel/View ported yet** — same reasoning as `DiagnosticsLog`
+above: what this should look like in the Windows UI (a tab? a flyout? how
+much of the 541-line `UsageView.swift` layout to carry over vs. simplify)
+is a product decision for the founder, not a mechanical port. The data
+layer is ready whenever that's decided.
+
+Covered by local build/test: 477/479 (same 2 pre-existing manual-only
+failures, unrelated).

@@ -3007,3 +3007,49 @@ sobre el commit `c4fc685`: `Passed! - Failed: 0, Passed: 451, Skipped: 0,
 Total: 451` — la subida exacta de +13 respecto a la línea base anterior de
 CI (438), que coincide con los 13 tests nuevos de esta ronda — y el build
 de la app WinUI 3 también en verde, "0 Warning(s), 0 Error(s)".
+
+**Portado `ClaudeUsageStore` (ítem #10 del backlog P1, "vista de uso") —
+solo la capa de datos, por delante de cualquier UI.** `ClaudeUsageStore.swift`
+lee los logs de sesión locales de Claude Code
+(`~/.claude/projects/**/*.jsonl`) y agrega el uso real de tokens en un
+"bloque" de límite de tasa de 5 horas más una ventana rodante de 7 días,
+por modelo — parseo puro de logs, sin spawnear ninguna CLI, sin depender
+de UI, así que (igual que los Generators de este port o la mitad de
+construcción de comandos de `CLIOneShotRunner`) es útil y totalmente
+testeable por sí solo, mucho antes de que se porte el ViewModel/View
+(`UsageStore.swift`/`UsageView.swift`, 622 líneas combinadas). Puerto
+fiel: records `ModelUsage`/`UsageSummary`, `LoadUncached(homeDirectory, now)`
+(puro — misma forma *Uncached-más-envoltorio-real que `ProviderAuth`)
+recorre `%USERPROFILE%\.claude\projects\**\*.jsonl` (el equivalente en
+Windows del `~/.claude/projects` de Swift, siguiendo la misma convención
+de directorio home que ya estableció `ProviderAuth.cs`), se salta ficheros
+sin tocar en los últimos 8 días antes de hacer ningún trabajo de JSON,
+parsea con tolerancia cada línea de tipo `"assistant"` con
+`System.Text.Json` (líneas malformadas/antiguas se descartan, nunca es
+fatal — mismo contrato que `ClaudeStreamParser`), suma
+`input_tokens + output_tokens + cache_creation_input_tokens +
+cache_read_input_tokens`, redondea a la hora la muestra más antigua para
+anclar el bloque de 5 horas actual (reiniciándolo cada vez que una
+muestra cae más allá del reinicio del bloque en curso), y ordena los
+modelos por capacidad (`PowerRank`) en vez de por uso bruto para la
+visualización — `Fable`/`Opus` primero, `Haiku`/`mini`/`flash` al final,
+igual que el original Swift. `FriendlyModel` traduce un id de modelo en
+bruto ("claude-opus-4-7") a un nombre corto ("Opus 4.7"), filtrando un
+sufijo de fecha de build al final ("claude-haiku-4-5-20251001" → "Haiku
+4.5", no "Haiku 5.20251001") igual que hace Swift. 23 tests nuevos
+(`ClaudeUsageStoreTests.cs`): directorio vacío/inexistente, tolerancia a
+líneas malformadas, agregación de tokens de varios campos, líneas de
+cero tokens descartadas, el corte de 8 días por fichero, la ventana de
+7 días por muestra, reinicio de bloque tras 5 horas sin actividad, bloque
+que reporta cero una vez transcurrido, orden de modelos por capacidad,
+casos de tabla de `FriendlyModel`/`PowerRank`.
+
+**Todavía sin ViewModel/View portados** — mismo razonamiento que
+`DiagnosticsLog` más arriba: cómo debería verse esto en la UI de Windows
+(¿una pestaña? ¿un flyout? cuánto del layout de 541 líneas de
+`UsageView.swift` conservar frente a simplificar) es una decisión de
+producto del founder, no un puerto mecánico. La capa de datos está lista
+para cuando se decida.
+
+Cubierto por build/test local: 477/479 (los mismos 2 fallos preexistentes
+de los smoke tests manuales, sin relación).
