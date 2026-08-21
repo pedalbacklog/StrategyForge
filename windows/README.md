@@ -1358,6 +1358,17 @@ confirmed on real Windows, with a screenshot, that after Google's
 success screen the "Connect Gemini" button DID flip to "Connected." —
 the creds watcher (`WatchGeminiCredsAsync`) correctly catches the real
 success; the only fragile part was multi-screen human login timing,
-already mitigated by the wider window above. Still to reconfirm on real
-Windows: that "Connect Codex" now completes without the 150s timeout,
-under the new 300s limit. Not blocking for this cut.
+already mitigated by the wider window above. **Reconfirmed by the founder on real Windows: "Connect Codex" no longer
+hits the 150s timeout — it completed, and a second click correctly shows
+"Already connected."** (the same freshness-check logic that skips
+re-running a login when one's already valid, built for Claude in Phase
+6, working the same way here for Codex — confirms that piece
+generalizes cleanly to the other providers). An honest caveat from the
+founder themself: they already had a ChatGPT browser session open and
+had just installed the ChatGPT desktop app before this attempt, so this
+doesn't fully isolate whether the new 300s limit alone saved it (sign-in
+may have simply gone faster this time, with no credentials to type from
+scratch) — but the observable result (no timeout, connection completed)
+is what matters, and it's exactly what the fix was for. With that, this
+first cut of cross-provider reassignment is fully closed: engine + tests
++ connecting all three providers, all three verified on real Windows. Not blocking for this cut.

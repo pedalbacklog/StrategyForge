@@ -2418,6 +2418,18 @@ founder confirmó en Windows real, con captura, que tras la pantalla de
 éxito de Google el botón "Connect Gemini" SÍ llegó a mostrar
 "Connected." — el detector de credenciales (`WatchGeminiCredsAsync`)
 engancha bien el éxito real; lo único frágil era el timing del login
-humano multi-pantalla, ya mitigado por la ventana más larga. Pendiente
-de reconfirmar en Windows real: que "Connect Codex" ahora complete sin
-el timeout de 150s con el nuevo límite de 300s.
+humano multi-pantalla, ya mitigado por la ventana más larga. **Reconfirmado por el founder en Windows real: "Connect Codex" ya no
+salta el timeout de 150s — completó, y un segundo clic muestra
+correctamente "Already connected."** (la misma lógica de freshness-check
+que evita relanzar el login si ya hay uno válido, construida para Claude
+en Fase 6, funcionando igual aquí para Codex — confirma que esa pieza
+generaliza bien a los otros proveedores). Precisión honesta del propio
+founder: ya tenía sesión de navegador abierta en ChatGPT y acababa de
+instalar la app de escritorio de ChatGPT antes de este intento, así que
+no aísla al 100% si fue el nuevo límite de 300s por sí solo lo que lo
+salvó (el login pudo ir más rápido esta vez al no requerir escribir
+credenciales desde cero) — pero el resultado observable (sin timeout,
+conexión completada) es el que importa, y es justo lo que el fix busca.
+Con esto, este primer corte de reasignación entre proveedores queda
+cerrado del todo: motor + tests + conexión a los tres proveedores, los
+tres verificados en Windows real.
