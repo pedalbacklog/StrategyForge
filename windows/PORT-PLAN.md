@@ -3094,3 +3094,9 @@ longitud de ventana.
 
 Cubierto por build/test local: 487/489 (los mismos 2 fallos preexistentes
 de los smoke tests manuales, sin relación).
+
+**`ClaudeUsageStore` confirmado en verde en CI con logs en bruto.** Run
+[32532290778](https://github.com/pedalbacklog/StrategyForge/actions/runs/32532290778)
+sobre el commit `3b4447c`: `Passed! - Failed: 0, Passed: 474, Skipped: 0,
+Total: 474` — la subida exacta de +23 que coincide con los nuevos
+`ClaudeUsageStoreTests` — y el build de la app WinUI 3 también en verde.

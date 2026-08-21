@@ -1985,3 +1985,9 @@ and the window-length classification table.
 
 Covered by local build/test: 487/489 (same 2 pre-existing manual-only
 failures, unrelated).
+
+**`ClaudeUsageStore` CI-confirmed green via raw logs.** Run
+[32532290778](https://github.com/pedalbacklog/StrategyForge/actions/runs/32532290778)
+on commit `3b4447c`: `Passed! - Failed: 0, Passed: 474, Skipped: 0, Total:
+474` — the exact +23 delta matching the new `ClaudeUsageStoreTests` — and
+the WinUI 3 app build also green.
