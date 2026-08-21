@@ -190,6 +190,14 @@ public static class ProviderInstaller
         }
     }
 
+    /// <summary>How long a hidden sign-in is allowed to run before it's killed
+    /// as hung. See the inline note at its one use in <see cref="RunSignInAsync"/>
+    /// for why this is longer than the Swift original's 150s. Gemini's own
+    /// creds-mtime watcher (<see cref="WatchGeminiCredsAsync"/>) uses a
+    /// slightly shorter deadline so it always gives up before this outer
+    /// timeout fires, not after.</summary>
+    private static readonly TimeSpan SignInTimeout = TimeSpan.FromSeconds(300);
+
     /// <summary>Web sign-in without a visible terminal: run the CLI's login
     /// command attached to a hidden pseudo-console, stream its output, and
     /// finish when the process exits (or, for Gemini, when its creds file
@@ -265,7 +273,15 @@ public static class ProviderInstaller
                 input?.Attach(session);
 
                 // Never hang forever on a login (esp. an interactive TUI that won't exit).
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(150));
+                // 150s (matching the Swift original) proved too short for a REAL human
+                // login on real Windows — Codex's ChatGPT sign-in (email, password,
+                // maybe 2FA) routinely takes longer, and the multi-screen Google flow
+                // Gemini goes through (account chooser, native-app warning, consent,
+                // plus a one-time Windows Firewall prompt for the local OAuth callback
+                // server) isn't much faster. Bumped here only (not in the Swift
+                // original — same "Windows-only fix, shared limitation" pattern as
+                // Strategy.AutoFixed()'s dedup fix, see PORT-PLAN.md).
+                using var timeoutCts = new CancellationTokenSource(SignInTimeout);
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
                 // Gemini has no login command: it's a first-run TUI that DOESN'T exit
@@ -304,7 +320,8 @@ public static class ProviderInstaller
                 catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
                 {
                     session.Kill();
-                    await WriteTerminalAsync(new InstallEvent.Failed("Sign-in timed out after 150 seconds."));
+                    await WriteTerminalAsync(new InstallEvent.Failed(
+                        $"Sign-in timed out after {(int)SignInTimeout.TotalSeconds} seconds."));
                 }
 
                 if (Volatile.Read(ref terminalWritten) == 0)
@@ -360,7 +377,10 @@ public static class ProviderInstaller
             }, ct);
         }
 
-        var deadline = DateTime.UtcNow.AddSeconds(140);
+        // 10s short of SignInTimeout — matches the Swift original's 140-vs-150
+        // relationship, so this watcher always gives up before the outer kill
+        // fires (never after, which would leave no one to report the outcome).
+        var deadline = DateTime.UtcNow + (SignInTimeout - TimeSpan.FromSeconds(10));
         while (DateTime.UtcNow < deadline)
         {
             try { await Task.Delay(TimeSpan.FromSeconds(1.5), ct); }

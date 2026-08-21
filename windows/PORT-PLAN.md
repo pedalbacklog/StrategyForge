@@ -2349,7 +2349,61 @@ log real: "Passed! - Failed: 0, Passed: 372, Skipped: 0, Total: 372" y,
 por separado, "Build succeeded. 0 Warning(s) 0 Error(s)" para el `dotnet
 build` de la app WinUI 3 (`Coral.csproj`) — este segundo build es el que
 de verdad ejercita el XAML nuevo de "Connect Codex"/"Connect Gemini" en
-`MainPage.xaml`, imposible de compilar en este sandbox Linux). Pendiente
-de verificación real: los botones "Connect Codex"/"Connect Gemini" no se
-han pulsado aún contra esos dos CLIs de verdad en Windows — solo
-"Connect Claude" lo está (Fase 6). No bloqueante para este corte.
+`MainPage.xaml`, imposible de compilar en este sandbox Linux).
+
+**2026-08-21 — El founder pulsó los botones nuevos en Windows real: dos
+problemas reales encontrados, ambos heredados de macOS, no del port.**
+"Connect Codex" abrió de verdad la página de login de ChatGPT
+(`auth.openai.com/log-in`), pero saltó "Sign-in timed out after 150
+seconds" antes de que el founder terminara de iniciar sesión — y
+`localhost:1455` (el callback local de Codex) quedó en "Not Found"
+justo después, porque a los 150s se mata el proceso oculto y el
+servidor local que esperaba la redirección ya no existe. "Connect
+Gemini" mostró un panel con escapes ANSI en crudo ("1. Yes / 2. No ...
+Enter to select") en vez de un menú legible — Gemini no tiene comando
+de login, es un TUI de primer arranque, y Coral (en las dos apps) lo
+"empuja" a ciegas con 3 Enters a los 1.2s/2.8s/4.4s esperando aceptar lo
+resaltado por defecto, sin leer el menú de verdad. Se comprobó primero
+si esto era un bug del port: `ProviderInstaller.swift` tiene el MISMO
+timeout de 150s (línea 246) y el MISMO nudge a ciegas de 3 Enters
+(líneas 258-262) — confirmado, ambos son limitaciones ya presentes en
+macOS. Se preguntó al founder antes de tocar nada.
+
+**Codex:** confirmó alargar el timeout, solo en el port de Windows (sin
+tocar `ProviderInstaller.swift`) — mismo criterio que el fix de
+`AutoFixed()`. `ProviderInstaller.cs`: el timeout pasa de 150s a un
+nuevo `SignInTimeout = TimeSpan.FromSeconds(300)` (constante nombrada,
+el mensaje de error ahora se deriva de ella en vez de un "150" suelto),
+y el watcher de credenciales de Gemini (`WatchGeminiCredsAsync`) pasa su
+plazo interno de 140s (fijo) a `SignInTimeout - 10s`, conservando la
+misma relación "10s de margen antes del kill externo" del original
+Swift — así el watcher de Gemini siempre se rinde ANTES de que salte el
+timeout general, nunca después (si se rindiera después, nadie
+reportaría el resultado). Efecto secundario deliberado y positivo: al
+subir el timeout general, la ventana de Gemini también se alarga (de
+140s a 290s), lo cual ayuda aunque el nudge a ciegas en sí no se tocó.
+
+**Gemini (el nudge a ciegas):** el founder no pidió el parche mínimo
+propuesto (más intentos de nudge) — en su lugar, reintentó en Windows
+real y reportó que en un segundo intento SÍ llegó hasta el login de
+Google, y más tarde confirmó con capturas que la autenticación se
+completó del todo por el lado de Google ("La autenticación se realizó
+correctamente" en developers.google.com), pasando por el selector de
+cuenta, el aviso nativo de "comprueba que hayas descargado esta app", y
+un aviso de Seguridad de Windows pidiendo permitir Node.js JavaScript
+Runtime a través del firewall (esperable: Gemini levanta un servidor
+local para el callback de OAuth, igual que Codex con `localhost:1455` —
+hay que pulsar "Permitir"). Con esto confirmado: el mecanismo de login
+en sí FUNCIONA de extremo a extremo en Windows real; lo frágil es solo
+el nudge a ciegas de Coral (mismo diseño que macOS) más el tiempo real
+que toma un login multi-pantalla humano — parcialmente mitigado por la
+ventana más larga de arriba. Queda aparcado por diseño, no arreglado de
+raíz (leer el menú real en vez de un nudge a ciegas sería un cambio de
+fondo). Pendiente de reconfirmar: si tras esta pantalla de éxito de
+Google, el botón "Connect Gemini" de Coral llegó a mostrar "Connected."
+de verdad (si el detector de mtime del fichero de credenciales lo captó
+a tiempo) — el founder no lo ha confirmado todavía.
+
+Cubierto por build/test local (375/377, los 2 fallos son los smoke
+tests manuales preexistentes que necesitan CLIs reales en PATH, sin
+relación con este cambio) — pendiente de confirmación en CI.

@@ -1292,7 +1292,58 @@ raw log: "Passed! - Failed: 0, Passed: 372, Skipped: 0, Total: 372" and,
 separately, "Build succeeded. 0 Warning(s) 0 Error(s)" for the WinUI 3
 app's own `dotnet build` (`Coral.csproj`) — that second build is what
 actually exercises the new "Connect Codex"/"Connect Gemini" XAML in
-`MainPage.xaml`, which this Linux sandbox can't compile at all). Still
-pending real verification: the two new Connect buttons haven't been
-clicked against those real CLIs on Windows yet — only "Connect Claude"
-has (Phase 6). Not blocking for this cut.
+`MainPage.xaml`, which this Linux sandbox can't compile at all).
+
+**2026-08-21 — the founder clicked the new buttons on real Windows: two
+real findings, both inherited from macOS, not the port.** "Connect
+Codex" really opened ChatGPT's login page (`auth.openai.com/log-in`),
+but "Sign-in timed out after 150 seconds" fired before the founder
+finished signing in — and `localhost:1455` (Codex's local OAuth
+callback) went to "Not Found" right after, since the hidden process
+gets killed at 150s and the local server waiting for the redirect no
+longer exists. "Connect Gemini" showed a panel of raw ANSI escapes
+("1. Yes / 2. No ... Enter to select") instead of a readable menu —
+Gemini has no login command, it's a first-run TUI, and Coral (in both
+apps) blindly nudges it with 3 Enters at 1.2s/2.8s/4.4s hoping to accept
+whatever's highlighted, never actually reading the menu. Checked
+whether either was a port bug first: `ProviderInstaller.swift` has the
+SAME 150s timeout (line 246) and the SAME blind 3-Enter nudge (lines
+258-262) — confirmed, both are pre-existing macOS limitations. Asked
+the founder before touching anything.
+
+**Codex:** the founder confirmed lengthening the timeout, in the
+Windows port only (not touching `ProviderInstaller.swift`) — same
+treatment as the `AutoFixed()` fix. `ProviderInstaller.cs`: the timeout
+goes from 150s to a new named `SignInTimeout = TimeSpan.FromSeconds(300)`
+(the error message now derives from it instead of a bare "150"), and
+Gemini's creds watcher (`WatchGeminiCredsAsync`) moves its own fixed
+140s inner deadline to `SignInTimeout - 10s`, keeping the same "10s of
+slack before the outer kill" relationship the Swift original has — so
+Gemini's watcher always gives up BEFORE the overall timeout fires, never
+after (giving up after would mean nobody reports the outcome). Deliberate,
+positive side effect: bumping the overall timeout also widens Gemini's
+own window (140s → 290s), which helps even though the blind nudge itself
+wasn't touched.
+
+**Gemini (the blind nudge):** the founder didn't ask for the minimal
+mitigation offered (more nudge attempts) — instead retried on real
+Windows and reported that a second attempt DID reach Google's sign-in,
+and later confirmed with screenshots that authentication fully completed
+on Google's side ("Authentication was successful" on
+developers.google.com), passing through the account chooser, the native-
+app-warning screen, and a Windows Security prompt asking to allow Node.js
+JavaScript Runtime through the firewall (expected: Gemini spins up a
+local server for its OAuth callback, same as Codex's `localhost:1455` —
+needs "Allow"). With that confirmed: the login mechanism itself DOES work
+end to end on real Windows; what's fragile is only Coral's blind nudge
+(same design as macOS) plus how long a real multi-screen human login
+takes — partially mitigated by the wider window above. Left parked by
+design, not fixed at the root (actually reading the menu instead of
+blindly nudging would be a bigger change). Still to reconfirm: whether,
+after that Google success screen, Coral's own "Connect Gemini" button
+actually flipped to "Connected." (whether the creds-file mtime detector
+caught it in time) — the founder hasn't confirmed that part yet.
+
+Covered by local build/test (375/377 — the 2 failures are the
+pre-existing manual smoke tests needing real CLIs on PATH, unrelated to
+this change) — pending CI confirmation. Not blocking for this cut.
