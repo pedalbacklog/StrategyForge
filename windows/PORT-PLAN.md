@@ -3195,3 +3195,17 @@ automáticamente es justo el tipo de cosa que merece que lo lea el
 founder antes de que entre en este port, así que se dejó tal cual en vez
 de portarlo con el mismo razonamiento de "es solo lógica pura" que
 justificó los demás de arriba.
+
+**`ProvenanceDiff` confirmado en verde en CI con logs en bruto — cierra
+esta pasada autónoma.** Run
+[32532964301](https://github.com/pedalbacklog/StrategyForge/actions/runs/32532964301)
+sobre el commit `3a923e0`: `Passed! - Failed: 0, Passed: 501, Skipped: 0,
+Total: 501` — la subida exacta de +6 que coincide con los nuevos
+`ProvenanceDiffTests` — y el build de la app WinUI 3 también en verde.
+Todos los cambios de esta pasada (`DiagnosticsLog`, `ClaudeUsageStore`,
+`CodexUsageStore`, `WastedWork`, `ProvenanceDiff`, más el empujón de
+"edita directamente" y el arreglo de Enter-para-enviar de la sesión de
+pruebas de "Run for real" anterior) ya están empujados y confirmados en
+CI sobre `windows-latest`. La verificación en Windows real sigue
+pendiente para todo esto — igual que el resto de este port, hasta que el
+founder lo ejecute él mismo.

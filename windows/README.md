@@ -2077,3 +2077,16 @@ classifier whose entire purpose is judging what's safe to auto-merge is
 exactly the kind of thing that deserves the founder's read before it
 enters this port, so it was left alone rather than ported on the
 "it's just pure logic" reasoning that justified the others above.
+
+**`ProvenanceDiff` CI-confirmed green via raw logs — closes out this
+autonomous pass.** Run
+[32532964301](https://github.com/pedalbacklog/StrategyForge/actions/runs/32532964301)
+on commit `3a923e0`: `Passed! - Failed: 0, Passed: 501, Skipped: 0, Total:
+501` — the exact +6 delta matching the new `ProvenanceDiffTests` — and
+the WinUI 3 app build also green. Every change from this pass
+(`DiagnosticsLog`, `ClaudeUsageStore`, `CodexUsageStore`, `WastedWork`,
+`ProvenanceDiff`, plus the direct-edit nudge and Enter-to-submit fixes
+from the "Run for real" testing session before it) is now pushed and
+CI-confirmed on `windows-latest`. Real-Windows verification is still
+outstanding for all of it — same as everything else in this port until
+the founder runs it himself.
