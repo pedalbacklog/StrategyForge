@@ -118,7 +118,14 @@ public sealed class ProviderOneShotRunner : IOneShotRunner
         {
             var authMessage = CLIOneShotRunner.AuthFailureMessage(provider, stdout, stderr);
             if (authMessage is not null) throw new OneShotException(OneShotErrorKind.AuthRequired, authMessage);
+            // Prefer stderr (matches ProviderRun.swift's own fallback), but fall back to
+            // stdout rather than discarding it: with --output-format json, a failure that
+            // never reaches a valid JSON result often puts its only diagnostic text there
+            // instead of stderr — Swift keeps that text too, via a DiagnosticsLog capture
+            // this port hasn't ported yet, so the thrown message is the only place left to
+            // carry it.
             var trimmed = stderr.Trim();
+            if (trimmed.Length == 0) trimmed = stdout.Trim();
             throw new OneShotException(OneShotErrorKind.Failed,
                 trimmed.Length > 0 ? trimmed : $"{provider.DisplayName()} exited with an error.");
         }

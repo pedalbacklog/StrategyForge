@@ -2768,3 +2768,49 @@ lectura, identidad de git en `CommitAllAsync`, identidad de git en
 `MergeNoFFAsync`). Pendiente: confirmación en Windows real por el founder,
 probando "Run for real" de principio a fin (elegir equipo, tarea corta,
 Run, revisar diff, Apply o Discard).
+
+**Primera prueba en Windows real: un crash y un error mudo.** El founder
+probó "Run for real" en su máquina. Primer intento (equipo "Executor +
+Advisor", ambos Claude): la app crasheó (`0xc0000005`, violación de
+acceso nativa dentro de `Microsoft.UI.Xaml.dll`) al cambiar de ventana
+mientras el run seguía en curso. Se descartaron dos hipótesis por
+evidencia directa antes de pedir ayuda a ciegas: (1) el código ConPTY sin
+probar (`Win32PseudoConsoleLauncher`) no fue el culpable — como
+"Executor + Advisor" es 100% Claude, `CrossProviderEditor.IsCrossProvider`
+da `false` y el run va por la ruta de pipes normales
+(`OneShotProcess`/`RealProcessLauncher`), nunca toca ConPTY; (2) tampoco
+encaja el patrón típico de "actualizar UI desde el hilo equivocado" — en
+el instante del crash el `TeamRunViewModel` no tocaba ninguna propiedad
+enlazada, solo esperaba (`await`) al proceso `claude`. El founder confirmó
+además que cambiar de ventana SIN ejecutar nada no crashea (descarta un
+problema general de WinUI3 multi-ventana en su máquina) — así que el
+crash es específico de tener un run en curso, pero su causa exacta sigue
+sin confirmarse: sin volcado de memoria analizado (el `.dmp` de WER existe
+pero no se ha podido abrir con depurador todavía), no hay pila de llamadas
+real que lo localice. Queda pendiente hasta que el founder pueda sacar esa
+pila (Visual Studio → abrir el `.dmp`) o reproducirlo de forma fiable.
+
+Segundo intento (equipo "Orchestrator + workers (fan-out)"): no crasheó,
+pero dio `Error: Claude exited with an error.` — un fallo real,
+reproducible, y sin crash, mucho más fácil de diagnosticar. Comparando
+`ProviderOneShotRunner.RunClaudeAsync` contra `ProviderRun.swift`'s propio
+`run(prompt:...)` (línea 154 en adelante): Swift SÍ registra `stdout`
+(hasta 500 caracteres) junto con `stderr`/args/cwd en un
+`DiagnosticsLog.record(...)` exportable antes de lanzar el error — pieza
+de infraestructura que este port todavía no tiene — pero el mensaje que
+lanza como excepción, igual que el port, solo mira `stderr`. La diferencia
+real es que el port, al no tener ese log de diagnóstico de respaldo,
+estaba tirando el `stdout` a la basura sin dejar NINGÚN rastro en ningún
+sitio — con `--output-format json`, un fallo que nunca llega a un JSON
+válido a menudo deja su único texto de diagnóstico ahí, no en stderr.
+Arreglado en `ProviderOneShotRunner.RunClaudeAsync`: el mensaje de error
+ahora cae a `stdout` cuando `stderr` está vacío, en vez del genérico
+`"Claude exited with an error."` Es un hueco introducido por el port (no
+compartido con Swift — Swift conserva ese texto por otra vía), así que se
+arregló directamente, sin preguntar. 1 test nuevo
+(`ClaudeFallsBackToStdoutWhenStderrIsEmptyOnAnOrdinaryError`) fijando el
+comportamiento. Cubierto por build/test local: 441/443 (los 2 fallos
+siguen siendo los smoke tests manuales preexistentes, ninguno relacionado).
+Pendiente: push, CI, y que el founder repita el mismo run para ver el
+mensaje de error real esta vez — con eso sí se podrá diagnosticar la causa
+de fondo de por qué esa CLI concreta salió con error.

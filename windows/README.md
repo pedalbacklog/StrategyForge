@@ -1690,3 +1690,47 @@ Windows-specific CI fixes (read-only-object test cleanup, git identity in
 `CommitAllAsync`, git identity in `MergeNoFFAsync`). Pending: confirmation
 on real Windows by the founder, exercising "Run for real" end to end
 (pick a team, a small task, Run, review the diff, Apply or Discard).
+
+**First real-Windows test: a crash and a silent error.** The founder
+tried "Run for real" on his machine. First attempt (team "Executor +
+Advisor", both Claude): the app crashed (`0xc0000005`, a native access
+violation inside `Microsoft.UI.Xaml.dll`) while switching windows during
+an in-progress run. Two hypotheses were ruled out with direct evidence
+before asking for help blind: (1) the untested ConPTY code
+(`Win32PseudoConsoleLauncher`) wasn't the culprit — "Executor + Advisor"
+is 100% Claude, so `CrossProviderEditor.IsCrossProvider` is `false` and
+the run takes the plain-pipe route (`OneShotProcess`/
+`RealProcessLauncher`), never touching ConPTY; (2) it also doesn't match
+the usual "updating UI from the wrong thread" pattern — at the moment of
+the crash `TeamRunViewModel` wasn't touching any bound property, only
+awaiting the `claude` process. The founder also confirmed switching
+windows with nothing running doesn't crash (rules out a general WinUI3
+multi-window issue on his machine) — so the crash is specific to having a
+run in progress, but its exact cause is still unconfirmed: no memory dump
+analyzed yet (WER's `.dmp` exists but hasn't been opened in a debugger),
+so no real call stack to pin it down. Pending until the founder can pull
+that stack (Visual Studio → open the `.dmp`) or get a reliable repro.
+
+Second attempt (team "Orchestrator + workers (fan-out)"): no crash, but
+`Error: Claude exited with an error.` — a real, reproducible failure with
+no crash, much easier to diagnose. Comparing
+`ProviderOneShotRunner.RunClaudeAsync` against `ProviderRun.swift`'s own
+`run(prompt:...)` (line 154 onward): Swift DOES log `stdout` (up to 500
+chars) alongside stderr/args/cwd to an exportable
+`DiagnosticsLog.record(...)` before throwing — infrastructure this port
+doesn't have yet — but the message it actually throws, same as the port,
+only looks at `stderr`. The real difference is that the port, having no
+diagnostics-log fallback, was discarding `stdout` with no trace left
+anywhere — with `--output-format json`, a failure that never reaches a
+valid JSON result often puts its only diagnostic text there instead of on
+stderr. Fixed in `ProviderOneShotRunner.RunClaudeAsync`: the error message
+now falls back to `stdout` when `stderr` is empty, instead of the generic
+`"Claude exited with an error."` This is a gap the port introduced (not
+shared with Swift — Swift keeps that text a different way), so fixed it
+directly, without asking. 1 new test
+(`ClaudeFallsBackToStdoutWhenStderrIsEmptyOnAnOrdinaryError`) locks in the
+behavior. Covered by local build/test: 441/443 (the 2 failures are still
+the pre-existing manual smoke tests, neither related). Pending: push, CI,
+and having the founder repeat the same run to see the real error message
+this time — that's what will let us diagnose why that particular CLI call
+actually failed.

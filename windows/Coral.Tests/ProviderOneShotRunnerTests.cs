@@ -70,6 +70,23 @@ public class ProviderOneShotRunnerTests
     }
 
     [Fact]
+    public async Task ClaudeFallsBackToStdoutWhenStderrIsEmptyOnAnOrdinaryError()
+    {
+        // Real bug found via a Windows crash report: with --output-format json, a
+        // failure that never reaches a valid JSON result can put its only
+        // diagnostic text on stdout instead of stderr — discarding stdout left the
+        // user with nothing but "Claude exited with an error."
+        var pipes = new FakeProcessLauncher((_, _) =>
+            new FakeChildProcess(new List<string> { "the real reason is here" }, exitCode: 1, stderr: ""));
+
+        var ex = await Assert.ThrowsAsync<OneShotException>(
+            () => Runner(pipes, NoPty()).RunAsync("task", AIProvider.Claude, "claude-sonnet-5", "/repo"));
+
+        Assert.Equal(OneShotErrorKind.Failed, ex.Kind);
+        Assert.Equal("the real reason is here", ex.Message);
+    }
+
+    [Fact]
     public async Task ClaudeThrowsFailedWhenOutputIsNotParseableJson()
     {
         var pipes = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string> { "not json" }));
