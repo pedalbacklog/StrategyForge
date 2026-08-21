@@ -1734,3 +1734,19 @@ the pre-existing manual smoke tests, neither related). Pending: push, CI,
 and having the founder repeat the same run to see the real error message
 this time — that's what will let us diagnose why that particular CLI call
 actually failed.
+
+**Confirmed — the stdout fallback works, and the real cause is account
+credits, not a Coral bug.** CI went green on commit `2d6248c` (438/438
+tests, WinUI 3 build clean), and the founder repeated the same
+"Orchestrator + Workers (Fan-out)" run: this time the UI showed the real
+`claude` JSON payload instead of the generic message —
+`"api_error_status":429`, `"result":"Fable 5 requires usage credits. Run
+/usage-credits to continue or switch models with /model."`. This
+strategy's orchestrator role is configured with `ClaudeModel.Fable5`
+(`StrategyLibrary.cs:49`, the most expensive model available) — the 429
+means the account ran out of usage credits for that specific model, an
+account-level limit, not a code defect. No further fix needed here; this
+closes out the "Claude exited with an error" investigation as a genuine
+success for the stdout-fallback fix — it did exactly what it was for.
+The crash from the first attempt (see above) remains open, still pending
+a real call stack from the founder's WER dump.

@@ -2814,3 +2814,20 @@ siguen siendo los smoke tests manuales preexistentes, ninguno relacionado).
 Pendiente: push, CI, y que el founder repita el mismo run para ver el
 mensaje de error real esta vez — con eso sí se podrá diagnosticar la causa
 de fondo de por qué esa CLI concreta salió con error.
+
+**Confirmado — el respaldo a stdout funciona, y la causa real es crédito
+de cuenta, no un bug de Coral.** CI quedó en verde en el commit `2d6248c`
+(438/438 tests, build de la app WinUI 3 limpio), y el founder repitió el
+mismo run de "Orchestrator + Workers (Fan-out)": esta vez la UI mostró el
+JSON real de `claude` en vez del mensaje genérico —
+`"api_error_status":429`, `"result":"Fable 5 requires usage credits. Run
+/usage-credits to continue or switch models with /model."`. El rol
+orquestador de esta plantilla está configurado con `ClaudeModel.Fable5`
+(`StrategyLibrary.cs:49`, el modelo más caro disponible) — el 429
+significa que la cuenta se quedó sin crédito de uso para ese modelo en
+concreto, un límite de cuenta, no un defecto de código. No hace falta
+ningún arreglo más aquí; esto cierra la investigación de "Claude exited
+with an error" como un éxito genuino del arreglo del respaldo a stdout —
+hizo exactamente lo que se esperaba de él. El crash del primer intento
+(ver arriba) sigue abierto, todavía pendiente de una pila de llamadas real
+del volcado de WER del founder.
