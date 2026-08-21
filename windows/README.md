@@ -1371,4 +1371,19 @@ may have simply gone faster this time, with no credentials to type from
 scratch) — but the observable result (no timeout, connection completed)
 is what matters, and it's exactly what the fix was for. With that, this
 first cut of cross-provider reassignment is fully closed: engine + tests
-+ connecting all three providers, all three verified on real Windows. Not blocking for this cut.
++ connecting all three providers, all three verified on real Windows.
+
+**A stronger Codex reconfirmation:** the founder logged out of EVERY
+ChatGPT session before retrying "Connect Codex", isolating for real
+whether the 300s limit — not an already-warm browser session — is what
+fixes it. It completed with no timeout. Along the way they reported two
+UI issues, neither blocking, both confirmed by reading the code before
+replying: (1) the "Signing in..." panel shows raw ANSI control
+sequences (`[?9001h[?1004h...`) instead of readable text — the same
+issue already seen with Gemini's TUI, a UI-polish item, not fixed in
+this cut; (2) two browser tabs open (sign-in + `localhost:1455`) —
+confirmed Coral itself only ever opens ONE (the `!openedUrl` guard at
+`ProviderInstaller.cs:312`), the second is codex's own OAuth redirect
+flow, not a Coral duplicate. Left for the UI-polish pass (alongside the
+Advisor's Economy/Recommended/Max tiers): strip the ANSI control codes
+from the log panel and clarify these connect flyouts' messaging.

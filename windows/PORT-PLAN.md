@@ -2433,3 +2433,19 @@ conexión completada) es el que importa, y es justo lo que el fix busca.
 Con esto, este primer corte de reasignación entre proveedores queda
 cerrado del todo: motor + tests + conexión a los tres proveedores, los
 tres verificados en Windows real.
+
+**Reconfirmación más fuerte de Codex:** el founder cerró TODAS las
+sesiones de ChatGPT antes de reintentar "Connect Codex", aislando así
+de verdad que el límite de 300s (no una sesión de navegador ya
+caliente) es lo que lo resuelve — completó sin timeout. De paso reportó
+dos cosas de UI, ninguna bloqueante, ambas confirmadas leyendo el
+código antes de responder: (1) el panel "Signing in..." muestra
+secuencias de control ANSI en crudo (`[?9001h[?1004h...`) en vez de
+texto legible — mismo problema ya visto con el TUI de Gemini, pendiente
+de pulido de UI, no arreglado en este corte; (2) se abren dos pestañas
+de navegador (login + `localhost:1455`) — confirmado que Coral solo
+abre UNA (guarda `!openedUrl` en `ProviderInstaller.cs:312`), la
+segunda es el propio flujo de redirección OAuth de `codex`, no un
+duplicado de Coral. Pendiente para el pase de pulido de UI (junto con
+el Advisor Economy/Recommended/Max): limpiar los códigos ANSI del panel
+de log y aclarar el mensaje de estas modales/flyouts de conexión.
