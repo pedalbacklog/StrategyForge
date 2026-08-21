@@ -373,14 +373,30 @@ public static class CodeGit
     /// <summary>Stage everything and commit in <paramref name="dir"/>
     /// (typically a worktree). <c>Ok == false</c> when there was nothing to
     /// commit — the caller treats that as "no work produced". Port of
-    /// <c>CodeGit.swift</c>'s <c>commitAll(dir:message:)</c>.</summary>
+    /// <c>CodeGit.swift</c>'s <c>commitAll(dir:message:)</c>, with one
+    /// deliberate addition the Swift original doesn't have: the commit
+    /// always self-identifies as <c>Coral &lt;coral@localhost&gt;</c> via
+    /// <c>-c user.name</c>/<c>-c user.email</c>, instead of relying on the
+    /// host machine having a global git identity configured. Real bug found
+    /// on windows-latest CI (no default identity there): without this,
+    /// <c>git commit</c> fails with "Please tell me who you are", silently
+    /// leaving <c>TeamRunEngine</c>'s baseline/work commits uncommitted —
+    /// every caller of this method is an app-owned, throwaway scratch commit
+    /// (never something attributed to the real user, unlike
+    /// <see cref="CommitAsync"/>/<see cref="CommitStagedAsync"/>, the git
+    /// panel's user-facing commit path, deliberately left untouched), so
+    /// there's no reason for it to depend on host config at all — this
+    /// isn't a Windows-only fix so much as a robustness gap neither app had
+    /// a reason to hit before <c>TeamRunEngine</c> existed.</summary>
     public static async Task<(bool Ok, string Output)> CommitAllAsync(IProcessLauncher launcher, string dir,
         string message, Func<string, string?>? resolveBinary = null, CancellationToken ct = default)
     {
         var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
         if (git is null) return (false, "git not found");
-        _ = await RunGitAsync(launcher, git, dir, new[] { "add", "-A" }, ct);
-        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, dir, new[] { "commit", "-m", message }, ct);
+        var identity = new[] { "-c", "user.name=Coral", "-c", "user.email=coral@localhost" };
+        _ = await RunGitAsync(launcher, git, dir, identity.Concat(new[] { "add", "-A" }).ToArray(), ct);
+        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, dir,
+            identity.Concat(new[] { "commit", "-m", message }).ToArray(), ct);
         return (ok, CombineOutput(stdout, stderr));
     }
 

@@ -2705,3 +2705,34 @@ objetos de solo lectura — así que es un arreglo solo de limpieza de tests,
 no de lógica. Arreglado con un `DeleteDirectoryRobustly` que quita
 `FileAttributes.ReadOnly` de cada fichero antes de borrar, en los dos
 ficheros de test afectados.
+
+**Segundo intento de CI, también en rojo — esta vez un hallazgo real, no
+solo de test.** Con la limpieza arreglada, bajó de 6 a 3 fallos: `CLAUDE.md`
+seguía apareciendo como fichero nuevo sin comitear en el diff final, y el
+"Apply" fallaba al fusionar. Causa raíz: el runner `windows-latest` de CI
+no tiene identidad de git configurada globalmente (ni `user.name` ni
+`user.email`), así que `git commit` dentro de `CodeGit.CommitAllAsync`
+fallaba silenciosamente con "Please tell me who you are" — el commit base
+nunca se hacía de verdad, así que `CLAUDE.md`/los ficheros `.claude/agents`
+quedaban sin trackear, y el trabajo real tampoco llegaba a comitearse en la
+rama del run, así que "Apply" fusionaba una rama vacía.
+
+Se comprobó primero si esto también afecta a Swift: `CodeGit.swift` tampoco
+configura ninguna identidad para sus commits de `arena`/`loop` — confirmado
+con un grep, cero resultados. No es un bug introducido por el port; es una
+suposición compartida (que la máquina anfitriona ya tiene git configurado)
+que nunca se puso a prueba hasta que `TeamRunEngine` empezó a comitear de
+verdad. Dado que todo lo que pasa por `CommitAllAsync` es SIEMPRE un commit
+interno, desechable, propiedad de la app (nunca algo que se le atribuya al
+usuario real — a diferencia de `CommitAsync`/`CommitStagedAsync`, el
+camino de commits del panel de git, deliberadamente sin tocar), no hay
+ninguna razón para que dependa de la configuración del host. Arreglado
+directamente en `CodeGit.CommitAllAsync`: ahora siempre se autoidentifica
+como `Coral <coral@localhost>` vía `-c user.name=`/`-c user.email=`, sin
+preguntar (es código nuevo de este port, sin equivalente exacto en Swift
+que "divergir" — ambos comparten el mismo hueco de fondo, y arreglarlo
+aquí no toca ningún fichero ni comportamiento compartido/visible para el
+usuario). Verificado manualmente fuera de los tests: un `git commit` sin
+identidad configurada falla con "Please tell me who you are"; con el
+override `-c` nuevo, funciona igual sin importar la configuración del
+host — reproduce y confirma el arreglo exacto que necesita CI.

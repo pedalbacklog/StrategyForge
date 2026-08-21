@@ -1629,3 +1629,33 @@ this — `TeamRunEngine`/`CodeGit` remove a worktree via
 objects — so this is a test-cleanup-only fix. Fixed with a
 `DeleteDirectoryRobustly` helper that clears `FileAttributes.ReadOnly`
 from every file before deleting, in both affected test files.
+
+**A second red CI run — this time a real finding, not just a test one.**
+With cleanup fixed, failures dropped from 6 to 3: `CLAUDE.md` still showed
+up as an uncommitted new file in the final diff, and "Apply" failed to
+merge. Root cause: the `windows-latest` CI runner has no global git
+identity configured (`user.name`/`user.email`), so `git commit` inside
+`CodeGit.CommitAllAsync` was silently failing with "Please tell me who you
+are" — the baseline commit never actually happened, so
+`CLAUDE.md`/`.claude/agents` files stayed untracked, and the real work
+never landed on the run's branch either, so "Apply" merged an empty
+branch.
+
+Checked whether this affects Swift too first: `CodeGit.swift` doesn't
+configure any identity for its arena/loop commits either — confirmed via
+grep, zero results. Not a port-introduced bug; a shared assumption (that
+the host machine already has git configured) that was never exercised
+until `TeamRunEngine` started actually committing. Since everything going
+through `CommitAllAsync` is ALWAYS an internal, disposable, app-owned
+commit (never something attributed to the real user — unlike
+`CommitAsync`/`CommitStagedAsync`, the git panel's commit path,
+deliberately left untouched), there's no reason for it to depend on host
+config at all. Fixed directly in `CodeGit.CommitAllAsync`: it now always
+self-identifies as `Coral <coral@localhost>` via
+`-c user.name=`/`-c user.email=`, without asking first (this is new code
+from this port with no exact Swift counterpart to "diverge" from — both
+apps share the same underlying gap, and fixing it here touches no shared
+or user-visible behavior). Verified manually outside the test suite: a
+`git commit` with no identity configured fails with "Please tell me who
+you are"; with the new `-c` override, it succeeds regardless of host
+config — reproduces and confirms the exact fix CI needs.
