@@ -3053,3 +3053,44 @@ para cuando se decida.
 
 Cubierto por build/test local: 477/479 (los mismos 2 fallos preexistentes
 de los smoke tests manuales, sin relación).
+
+**También se portó `CodexUsageStore` — el compañero natural de
+`ClaudeUsageStore`.** Mismo razonamiento de alcance exacto (parseo puro
+de logs, sin spawnear CLI, sin depender de UI, capa de datos por delante
+de cualquier View) — una "vista de uso" real querría ambos proveedores
+lado a lado, y este era un avance pequeño y autocontenido con el patrón
+todavía fresco. Puerto fiel de `CodexUsageStore.swift`: a diferencia de
+Claude (que no publica ningún tope, así que solo se pueden contar
+tokens), la CLI de Codex escribe en disco el porcentaje de límite de tasa
+AUTORITATIVO DEL SERVIDOR en cada turno
+(`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, líneas con
+`payload.type == "token_count"`), así que esto puede mostrar un
+"% de tu plan usado" real con la hora exacta de reinicio, sin llamada de
+red y sin API key. Records `CodexWindow`/`CodexUsage`,
+`LoadUncached(homeDirectory, now)` recorre
+`%USERPROFILE%\.codex\sessions\**\*.jsonl`, se salta ficheros sin tocar
+en los últimos 4 días (más estricto que los 8 de Claude — el estado de
+límite de tasa es inherentemente reciente), ordena el resto de más
+reciente a más antiguo, y devuelve el primer fichero (de hasta 40
+comprobados) que dé una línea `token_count` — quedándose con la línea MÁS
+RECIENTE dentro de ese fichero si hay más de una, ya que los contadores
+son de toda la cuenta y solo importa el evento más fresco. Devuelve
+`null` (no un centinela vacío) cuando no se encuentra nada usable, igual
+que el propio retorno opcional de Swift — una diferencia deliberada
+respecto a `ClaudeUsageStore.Empty`, ya que la búsqueda de este store
+puede legítimamente no encontrar nada en absoluto.
+`CodexWindow.KindLabelKey` lleva el mismo nombrado de clave de
+localización que usa Swift ("usage.codex.window.week/day/5h") para
+paridad con la forma de datos que consumiría una futura vista de uso,
+aunque este port todavía no tiene ningún sistema de localización que la
+resuelva. 10 tests nuevos (`CodexUsageStoreTests.cs`): directorio
+inexistente, ninguna línea usable, tolerancia a líneas malformadas
+(incluida una línea `token_count` sin ningún objeto `rate_limits` —
+sigue siendo válida según el propio encadenamiento opcional de Swift),
+parseo de tipo de plan/hora de reinicio, selección de la línea más
+reciente dentro de un fichero, selección del fichero más reciente entre
+varios, el corte de 4 días por fichero, y la tabla de clasificación por
+longitud de ventana.
+
+Cubierto por build/test local: 487/489 (los mismos 2 fallos preexistentes
+de los smoke tests manuales, sin relación).

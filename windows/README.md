@@ -1950,3 +1950,38 @@ layer is ready whenever that's decided.
 
 Covered by local build/test: 477/479 (same 2 pre-existing manual-only
 failures, unrelated).
+
+**Ported `CodexUsageStore` too — the natural companion to
+`ClaudeUsageStore`.** Same exact scope reasoning (pure log parsing, no
+CLI spawning, no UI dependency, data layer ahead of any View) — a real
+"usage view" would want both providers side by side, and this one's a
+small, self-contained win once the pattern was already fresh. Faithful
+port of `CodexUsageStore.swift`: unlike Claude (which publishes no cap,
+so only tokens can be counted), the Codex CLI writes the SERVER's
+authoritative rate-limit percentage to disk on every turn
+(`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, lines with
+`payload.type == "token_count"`), so this can show a true "% of your plan
+used" with an exact reset time, no network call and no API key.
+`CodexWindow`/`CodexUsage` records, `LoadUncached(homeDirectory, now)`
+scans `%USERPROFILE%\.codex\sessions\**\*.jsonl`, skips files untouched
+in the last 4 days (tighter than Claude's 8 — rate-limit state is
+inherently recent), sorts the rest newest-first, and returns the first
+file (of up to 40 checked) that yields a `token_count` line — picking the
+LATEST such line within that file if there's more than one, since the
+counters are account-wide and only the freshest event matters. Returns
+`null` (not an empty sentinel) when nothing usable is found, matching
+Swift's own optional return exactly — a deliberate difference from
+`ClaudeUsageStore.Empty`, since this store's search can legitimately turn
+up nothing at all. `CodexWindow.KindLabelKey` carries the same
+localization-key naming Swift uses ("usage.codex.window.week/day/5h") for
+parity with the data shape a future usage view would consume, even though
+this port has no localization system yet to resolve it. 10 new tests
+(`CodexUsageStoreTests.cs`): missing directory, no usable line,
+malformed-line tolerance (including a `token_count` line with no
+`rate_limits` object at all — still valid per Swift's own optional
+chaining), plan type/resets-at parsing, freshest-line-within-a-file
+selection, freshest-file-across-files selection, the 4-day file cutoff,
+and the window-length classification table.
+
+Covered by local build/test: 487/489 (same 2 pre-existing manual-only
+failures, unrelated).
