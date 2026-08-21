@@ -78,15 +78,16 @@ public sealed partial class StrategyEditorPage : Page
 
     private void OnCountBoxTextChanged(object sender, TextChangedEventArgs e)
     {
+        // Real bug caught on real Windows: leaving this parse-failure case
+        // untouched (role.Count kept its last valid value) meant a blank or
+        // non-numeric box never actually became an invalid model state, so
+        // Validate()/IsValid/Save's IsEnabled had nothing to catch — the box
+        // LOOKED broken but the underlying Strategy quietly stayed valid.
+        // Writing 0 on a parse failure makes Validate()'s own "count below 1"
+        // rule catch it for real, the same way any other bad edit does.
         if (RoleOf(sender) is not { } role) return;
-        if (int.TryParse(((TextBox)sender).Text, out var count) && count > 0)
-        {
-            role.Count = count;
-            ViewModel.Revalidate();
-        }
-        // A blank/non-numeric box is left alone rather than forced back to a
-        // valid value mid-keystroke — Validate() already flags "count below
-        // 1" if the field is left in a bad state, same as any other issue.
+        role.Count = int.TryParse(((TextBox)sender).Text, out var count) ? count : 0;
+        ViewModel.Revalidate();
     }
 
     private void OnToolsBoxLoaded(object sender, RoutedEventArgs e)

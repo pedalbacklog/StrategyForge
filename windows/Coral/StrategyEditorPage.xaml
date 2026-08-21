@@ -49,7 +49,7 @@
                                         <!-- The orchestrator's name isn't renamed here (matches
                                              StrategyEditorView.swift) — it's the main session, not
                                              a generated subagent file. -->
-                                        <TextBox Grid.Column="1" Text="{x:Bind Name, Mode=TwoWay}"
+                                        <TextBox Grid.Column="1" Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                  IsEnabled="{x:Bind IsOrchestrator, Converter={StaticResource Negate}}"
                                                  TextChanged="OnRoleFieldChanged" />
                                     </Grid>

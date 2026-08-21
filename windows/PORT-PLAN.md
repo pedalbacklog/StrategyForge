@@ -2160,3 +2160,34 @@ sin advertencias). Pendiente, sobre todo: prueba a mano en Windows real —
 es la pieza de UI más grande de todo este bloque de trabajo, así que hay
 que contar con al menos una ronda de "el founder lo prueba y aparece un
 bug de WinUI", como en cada fase anterior.
+
+**Verificación en Windows real, mismo día: un único bug real explica los
+tres síntomas reportados.** El founder probó dejar la cantidad de un rol
+en blanco (esperando que bloqueara "Save" — no lo hizo) y poner el mismo
+nombre en dos roles (esperando que apareciera en "Issues" y bloqueara
+"Save" — tampoco pasó nada, y guardó igualmente con los dos roles
+llamados "curri"). Causa raíz única: el `TextBox` del nombre usaba
+`Text="{x:Bind Name, Mode=TwoWay}"` SIN `UpdateSourceTrigger=PropertyChanged`
+— el valor por defecto de WinUI3 para un `TextBox.Text` de doble vía es
+`LostFocus`, no cada pulsación. `TextChanged` sí dispara `Revalidate()` en
+cada tecla, pero en ese momento el `Name` real del `AgentRole` TODAVÍA no
+se había actualizado (solo se comprometía al perder el foco) — así que la
+validación se ejecutaba siempre contra el nombre ANTERIOR, nunca contra
+el duplicado recién escrito, y "Issues"/`IsValid` quedaban con un estado
+obsoleto. Arreglado añadiendo `UpdateSourceTrigger=PropertyChanged`, mismo
+patrón que ya usan `PromptText`/`CloneUrl`/etc. en el resto de este port —
+un descuido real al escribir esta pieza, no algo nuevo de WinUI3.
+
+De paso, se corrigió un problema relacionado en el campo de cantidad: al
+fallar el `int.TryParse` de una caja en blanco, el código dejaba
+`role.Count` con su último valor válido en vez de reflejar el estado roto
+— por eso "Save" tampoco se deshabilitaba ahí. Ahora un parseo fallido
+escribe `role.Count = 0`, que la propia regla de `Strategy.Validate()`
+("count below 1") capta igual que cualquier otro dato mal puesto.
+
+Ninguno de los dos es testeable con los fakes de `Coral.Tests` — son
+puro comportamiento de binding de WinUI3 en tiempo de ejecución, no
+lógica de `Coral.Core` — así que este bug solo podía encontrarse
+probando la app de verdad en Windows, exactamente como ha pasado.
+Pendiente: que el founder reconfirme que "Issues"/"Save" reaccionan ya en
+vivo a un nombre duplicado y a una cantidad en blanco.

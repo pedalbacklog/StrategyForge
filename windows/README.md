@@ -1116,3 +1116,32 @@ warnings). Pending, most importantly: hands-on verification on real
 Windows — this is the biggest single UI surface in this whole block of
 work, so expect at least one round of "the founder tries it and a WinUI
 bug shows up," same as every phase before it.
+
+**Verified on real Windows, same day: one real bug explained all three
+reported symptoms.** The founder tried leaving a role's instance count
+blank (expecting it to block "Save" — it didn't) and giving two roles the
+same name (expecting an "Issues" entry and a blocked "Save" — neither
+happened, and it saved anyway with two roles both named "curri"). Single
+root cause: the name `TextBox` used `Text="{x:Bind Name, Mode=TwoWay}"`
+WITHOUT `UpdateSourceTrigger=PropertyChanged` — WinUI3's default for a
+two-way `TextBox.Text` binding is `LostFocus`, not every keystroke.
+`TextChanged` does fire `Revalidate()` on every key, but at that moment
+the `AgentRole`'s real `Name` hadn't been written yet (only committed on
+focus loss) — so validation always ran against the PREVIOUS name, never
+the duplicate just typed, leaving "Issues"/`IsValid` stuck on stale state.
+Fixed by adding `UpdateSourceTrigger=PropertyChanged`, the same pattern
+`PromptText`/`CloneUrl`/etc. already use elsewhere in this port — a real
+oversight writing this piece, not a new WinUI3 quirk.
+
+Along the way, a related bug in the count field: on a failed
+`int.TryParse` from a blank box, the code left `role.Count` at its last
+valid value instead of reflecting the broken state — which is why "Save"
+didn't disable there either. A failed parse now writes `role.Count = 0`,
+which `Strategy.Validate()`'s own "count below 1" rule catches the same
+as any other bad edit.
+
+Neither is testable with `Coral.Tests`'s fakes — pure WinUI3 runtime
+binding behavior, not `Coral.Core` logic — so this bug could only be
+found by actually running the app on Windows, exactly as happened.
+Pending: the founder reconfirming "Issues"/"Save" now react live to a
+duplicate name and a blank count.
