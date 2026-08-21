@@ -2874,4 +2874,31 @@ de `TeamRunEngine.RunAsync` ahora lo añade a la tarea antes de llamar a
 fallos preexistentes de los smoke tests manuales). Pendiente: push, CI, y
 que el founder vuelva a probar "Orchestrator + Workers" varias veces más
 para ver si los runs mudos se vuelven raros en vez de desaparecer del todo
-(el empujón inclina al modelo, no puede forzarlo).
+(el empujón inclina al modelo, no puede forzarlo). CI confirmado en verde
+en el commit `9946d08` (438/438 tests, build de la app WinUI 3 limpio)
+antes de que el founder repitiera la prueba.
+
+**Empujón confirmado funcionando en el primer reintento.** "Crea un
+archivo NOTES.md con tres líneas explicando qué es este repositorio"
+(prompt de prueba #1) produjo un diff real a la primera — el archivo se
+creó con contenido de verdad, no un no-op. No es prueba de que el
+empujón arregle todos los casos (inclina al modelo, no lo obliga — el
+plan es seguir probando el resto de prompts para ver con qué frecuencia
+sigue apareciendo algún no-op), pero es una primera señal sólida.
+
+**Hueco pequeño de UX encontrado en la misma pasada: Enter no enviaba la
+caja de tarea.** La caja de prompt del chat en `MainPage` y la caja de
+tarea del Advisor envían con Enter
+(`OnPromptBoxKeyDown`/`OnAdvisorTaskBoxKeyDown`, una convención ya
+establecida en esta app) — el `TextBox` de tarea de `TeamRunPage` nunca
+tuvo ese mismo cableado cuando se construyó. Arreglado: añadido
+`KeyDown="OnTaskBoxKeyDown"` al `TextBox` de `TeamRunPage.xaml` y un
+manejador en `TeamRunPage.xaml.cs` que llama a `ViewModel.RunAsync()` con
+Enter, igual forma que los otros dos. `RunAsync()` ya es no-op con tarea
+en blanco o mientras ya está corriendo, así que no hace falta guarda
+extra en el manejador. Cambio solo de XAML — no se puede comprobar que
+compile `Coral.csproj` en este sandbox Linux
+(`EnableWindowsTargeting`, misma limitación que cualquier otro cambio de
+UI de este port), así que hace falta CI para confirmar que compila de
+verdad, más que el founder confirme que Enter ya funciona en Windows
+real.

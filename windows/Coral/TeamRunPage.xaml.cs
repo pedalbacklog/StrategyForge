@@ -3,6 +3,8 @@ using Coral.Core.Services;
 using Coral.Core.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.System;
 
 namespace Coral;
 
@@ -25,6 +27,13 @@ public sealed partial class TeamRunPage : Page
     }
 
     private async void OnRunClick(object sender, RoutedEventArgs e) => await ViewModel.RunAsync();
+
+    private async void OnTaskBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter) return;
+        e.Handled = true;
+        await ViewModel.RunAsync();
+    }
 
     private async void OnApplyClick(object sender, RoutedEventArgs e) => await ViewModel.ApplyAsync();
 

@@ -35,7 +35,8 @@
                 </Grid.ColumnDefinitions>
                 <TextBox Grid.Column="0" PlaceholderText="What should this team do?"
                          Text="{x:Bind ViewModel.Task, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         IsEnabled="{x:Bind ViewModel.IsRunning, Mode=OneWay, Converter={StaticResource Negate}}" />
+                         IsEnabled="{x:Bind ViewModel.IsRunning, Mode=OneWay, Converter={StaticResource Negate}}"
+                         KeyDown="OnTaskBoxKeyDown" />
                 <Button Grid.Column="1" Content="Run" Click="OnRunClick"
                         IsEnabled="{x:Bind ViewModel.IsRunning, Mode=OneWay, Converter={StaticResource Negate}}" />
             </Grid>

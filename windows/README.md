@@ -1786,6 +1786,27 @@ toward acting). Fixed: extracted the suffix as
 sites share the literal, and `TeamRunEngine.RunAsync`'s native-Claude
 branch now appends it to the task before calling `runner.RunAsync`.
 Covered by local build/test: 441/443 (same 2 pre-existing manual-only
-failures). Pending: push, CI, and the founder re-testing "Orchestrator +
-Workers" a few more times to see whether no-op runs become rare instead
-of gone entirely (the nudge biases the model, it can't force it).
+failures). CI confirmed green on commit `9946d08` (438/438 tests, WinUI 3
+build clean) before the founder retested.
+
+**Nudge confirmed working on the first retest.** "Crea un archivo
+NOTES.md con tres líneas explicando qué es este repositorio" (test
+prompt #1) produced a real diff on the first try — the file was created
+with actual content, not a no-op. Not proof the nudge fixes every case
+(it biases the model, doesn't force it — the plan is to keep retrying
+the other prompts to see how often a no-op still shows up), but a solid
+first signal.
+
+**Small UX gap found in the same pass: Enter didn't submit the task
+box.** `MainPage`'s chat prompt box and the Advisor task box both submit
+on Enter (`OnPromptBoxKeyDown`/`OnAdvisorTaskBoxKeyDown`, an established
+convention in this app) — `TeamRunPage`'s task `TextBox` never got the
+same wiring when it was built. Fixed: added `KeyDown="OnTaskBoxKeyDown"`
+to the `TextBox` in `TeamRunPage.xaml` and a handler in
+`TeamRunPage.xaml.cs` that calls `ViewModel.RunAsync()` on Enter, same
+shape as the other two. `RunAsync()` already no-ops on a blank task or
+while already running, so no extra guard needed in the handler. XAML-only
+change — can't compile-check `Coral.csproj` in this Linux sandbox
+(`EnableWindowsTargeting`, same limitation as every other UI change in
+this port), so this needs CI to actually confirm it builds, plus the
+founder confirming Enter now works on real Windows.
