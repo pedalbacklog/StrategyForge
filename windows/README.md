@@ -1181,5 +1181,17 @@ reproduces the exact "curri"/"curri" with Count=2 case and confirms
 Existing `AutoFixTests.cs` cases still pass unchanged (the simple
 no-multi-instance case behaves exactly as before).
 
-Covered by unit tests and local build/test (346/346) — pending CI and the
-founder reconfirming "Fix All" on this exact case.
+Covered by unit tests, local build/test (346/346), and CONFIRMED compiling
+on windows-latest CI (commit `3d59a54`, run
+[32464962533](https://github.com/pedalbacklog/StrategyForge/actions/runs/32464962533) —
+raw log: "Passed! - Failed: 0, Passed: 346, Skipped: 0, Total: 346" and
+"Build succeeded. 0 Warning(s) 0 Error(s)"). **RECONFIRMED by the founder
+on real Windows: "Fix All" now fully resolves the "curri"/"curri" with
+Count=2 case, leaving no remaining error.**
+
+With that, Phase 2 (strategy editing, first cut) is closed: edit
+name/model/instance-count/tools per role, live validation, "Fix All" —
+all three real bugs found along the way (stale validation from a missing
+`UpdateSourceTrigger`, a blank count not reflecting an invalid state, and
+`AutoFixed()` itself colliding with its own fan-out case) fixed and
+verified on real Windows.

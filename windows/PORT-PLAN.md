@@ -101,10 +101,10 @@ Puntos concretos que hacen de WinUI 3 un buen encaje mirando el código real:
    esta lista estaba desactualizado; tanto macOS como el port ya tienen 15),
    Advisor básico. Selección de plantilla (Fase 1) y el motor del Advisor
    en su mitad determinista, enganchado a la UI (Fase 3) — ambos ✅, ver
-   §10 (2026-08-11). Edición de estrategia (Fase 2) — 🔶 primer corte
-   escrito (nombre/modelo/instancias/herramientas por rol + validación +
-   Fix All), pendiente de CI y de prueba en Windows real (2026-08-21).
-   Queda: el pulido de UI del Advisor con niveles Economy/Recommended/Max
+   §10 (2026-08-11). Edición de estrategia (Fase 2, primer corte:
+   nombre/modelo/instancias/herramientas por rol + validación + Fix All)
+   — ✅ cerrada y verificada en Windows real (2026-08-21). Queda: el
+   pulido de UI del Advisor con niveles Economy/Recommended/Max
    (Fase 4).
 3. Instalación guiada + login de al menos **Claude Code** (el proveedor
    principal); Codex y Gemini pueden ir en P1 si el adapter tarda.
@@ -2229,5 +2229,17 @@ reproduce exactamente el caso "curri"/"curri" con Count=2 y confirma
 existentes de `AutoFixTests.cs` siguen pasando sin cambios (el caso simple
 sin instancias múltiples se comporta igual que antes).
 
-Cubierto por tests unitarios y build/test local (346/346) — pendiente de
-CI y de que el founder reconfirme "Fix All" en este caso concreto.
+Cubierto por tests unitarios, build/test local (346/346) y CONFIRMADO
+compilando en windows-latest CI (commit `3d59a54`, run
+[32464962533](https://github.com/pedalbacklog/StrategyForge/actions/runs/32464962533) —
+log real: "Passed! - Failed: 0, Passed: 346, Skipped: 0, Total: 346" y
+"Build succeeded. 0 Warning(s) 0 Error(s)"). **RECONFIRMADO por el
+founder en Windows real: "Fix All" ahora resuelve el caso "curri"/"curri"
+con Count=2 del todo, sin dejar ningún error pendiente.**
+
+Con esto, la Fase 2 (edición de estrategia, primer corte) queda cerrada:
+editar nombre/modelo/instancias/herramientas por rol, validación en vivo,
+"Fix All" — los tres bugs reales encontrados en el camino (validación
+obsoleta por falta de `UpdateSourceTrigger`, cantidad en blanco sin
+reflejar estado inválido, y el propio `AutoFixed()` colisionando consigo
+mismo en el caso de fan-out) arreglados y verificados en Windows real.
