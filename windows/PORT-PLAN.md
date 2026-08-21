@@ -246,7 +246,13 @@ Fase 6 — Instalación de CLIs         ✅ ProviderInstaller.cs + ConnectViewMo
                                       ejercitarse contra un CLI real en vivo
                                       (dos intentos, los dos resueltos por
                                       loopback antes de necesitarlo) — cubierto
-                                      por tests con fakes, no bloqueante
+                                      por tests con fakes, no bloqueante.
+                                      Botones "Connect Codex"/"Connect Gemini"
+                                      añadidos (2026-08-21, ver §10) —
+                                      reutilizan el mismo ConnectViewModel
+                                      genérico, sin verificar aún contra esos
+                                      dos CLIs reales en Windows (solo Claude
+                                      lo está)
 Fase 7 — Code mode                   ✅ cerrada — capa de servicio completa +
                                       UI real (git panel, diff viewer, flujo
                                       de PR, selector de repo, panel de
@@ -1956,9 +1962,9 @@ Fase 3 no podía avanzar. Se portó:
   `Advise()` (el camino determinista). Deliberadamente no portados todavía:
   `adviseWithAI` (mejora vía IA on-device, mismo motivo que arriba),
   `adviseTiers` (la UI de tres niveles Economy/Recommended/Max — pertenece
-  al pase de pulido de UI, Fase 4, no al motor), y `assignProviders`
-  (`AdvisorEngine+Providers.swift`, reasignación de roles entre proveedores
-  — un seguimiento más pequeño, aparcado).
+  al pase de pulido de UI, Fase 4, no al motor). `assignProviders`
+  (`AdvisorEngine+Providers.swift`, reasignación de roles entre proveedores)
+  SÍ se portó después, el 2026-08-21 — ver §10 para el detalle completo.
 
 **Decisión delicada documentada aparte: `Models/LoopKind.cs` (nuevo).**
 `Advice.loopKind` es parte del contrato de `advise()` — pero `LoopKind` se
@@ -2243,3 +2249,96 @@ editar nombre/modelo/instancias/herramientas por rol, validación en vivo,
 obsoleta por falta de `UpdateSourceTrigger`, cantidad en blanco sin
 reflejar estado inválido, y el propio `AutoFixed()` colisionando consigo
 mismo en el caso de fan-out) arreglados y verificados en Windows real.
+
+**2026-08-21 — Reasignación entre proveedores, primer corte: motor
+`assignProviders` portado + botones "Connect Codex"/"Connect Gemini".**
+El founder pidió explicación de por qué "no hay forma de conectar
+Codex/Gemini" (dicho en una respuesta anterior de esta misma sesión) y,
+tras ver el hueco real (motor genérico ya portado en Fase 6, pero solo
+UN botón "Connect Claude" cableado en `MainPage`, y `assignProviders`
+sin portar), pidió empezar. Alcance acordado explícitamente con el
+founder antes de escribir código (recorte igual que Fase 2): SÍ el motor
+puro `assignProviders` + sus tests, SÍ los botones de conexión para los
+otros dos proveedores; NO la ejecución real cross-provider
+(`CrossProviderEditor.swift` — depende de `CodeArenaEngine`,
+`LineAttributor` y aislamiento de worktree, ninguno portado aún, una
+fase propia y más grande).
+
+- `Coral.Core/Services/AdvisorEngine.Providers.cs` (nuevo, `partial class`
+  compartida con `AdvisorEngine.cs` — mismo split que el fichero de
+  extensión `AdvisorEngine+Providers.swift` en Swift). Porta
+  `AssignProviders` completo: catálogo `ModelProfiles` (5 modelos Claude +
+  3 OpenAI + 2 Gemini, puntuados 1-5 en 4 ejes — razonamiento/código/
+  amplitud/velocidad), `PrimaryAxis` por tipo de rol, banda de coste
+  (`CostBand`, para que un asiento barato no se encarezca al cambiar de
+  proveedor), el pase 1 (eje primario por rol, orquestador nunca en
+  Gemini — se cuelga en el run "meta" real, ver el comentario de Swift),
+  el pase 2 (revisor forzado a una familia de modelo DISTINTA a la del
+  "coder", diversidad por diseño), el pase 3 (`EnsureCoverage` — todo
+  proveedor conectado aparece en el equipo al menos una vez, con pérdida
+  ≤1 punto en el eje del rol), desempate determinista (score desc →
+  orden de proveedor asc → id de modelo asc, mismo orden que
+  `AIProvider.allCases`/`Enum.GetValues<AIProvider>()`), y
+  `CollapsingLocked` (un login de Codex vía cuenta ChatGPT rechaza
+  `--model`, así que un proveedor "locked" colapsa a un único perfil
+  "cuenta por defecto"). Deliberadamente NO portado en esta pasada (nada
+  lo usa todavía): `aspirationalPicks` (vista previa "mezcla ideal" solo
+  para UI, sin panel que la muestre), `adviseCrossProvider`/
+  `applyingProviders` (envuelven `adviseWithAI`, que tampoco está
+  portado).
+- `AdvisorEngine.cs`: la clase pasa a `public static partial class` para
+  admitir el segundo fichero — el resto del fichero no cambia.
+- `Coral.Tests/AdvisorProvidersTests.cs` (nuevo): port 1:1 de los 26 tests
+  de `AdvisorProvidersTests.swift` (integridad de catálogo, enrutado
+  rol→eje, diversidad del revisor, sesgo de tier, no-op en Claude-solo,
+  determinismo, cobertura, proveedores "deprioritized", el bloqueo del
+  orquestador fuera de Gemini, el proveedor "model-locked", y que un
+  cambio nunca suba la banda de coste de un rol). Los 26 pasan en local
+  (`dotnet test`, sandbox Linux — esta parte es pura C#, sin WinUI3, así
+  que corre sin problema fuera de Windows). Total del proyecto:
+  377 tests, 375 pasan — los 2 que fallan
+  (`ManualClaudeRunnerSmokeTest`/`ManualProviderInstallerSmokeTest`) son
+  smoke tests preexistentes que requieren un `claude`/`npm` real en PATH,
+  no relacionados con este cambio (fallan igual en cualquier sandbox sin
+  esos binarios).
+- `MainPage.xaml`/`MainPage.xaml.cs`: dos botones nuevos, "Connect Codex"
+  y "Connect Gemini", clonando exactamente el patrón ya existente de
+  "Connect Claude" (mismo `Flyout`, mismo bloqueo de light-dismiss
+  mientras `IsConnecting`, mismo aviso "⚠ Paste the code" en la cabecera)
+  — dos `ConnectViewModel` nuevos (`ConnectCodexViewModel`/
+  `ConnectGeminiViewModel`) instanciados con `AIProvider.Openai`/
+  `AIProvider.Gemini`, reutilizando el mismo `ConnectViewModel` genérico
+  de Fase 6 sin tocarlo. Sin verificar aún contra esos dos CLIs reales en
+  Windows — solo Claude lo está (Fase 6).
+
+**Hallazgo real hecho ANTES de escribir el selector de proveedor por rol
+en el editor de equipo (Fase 2), que recortó el alcance de nuevo:**
+revisando cómo `AgentFileGenerator.cs` escribe el frontmatter de cada
+subagente (`model: {role.Model.ToRawValue()}`, línea ~69) se confirmó
+que ignora `role.Provider` por completo — y que el Swift original hace
+EXACTAMENTE lo mismo (`AgentFileGenerator.swift:74`). No es un bug del
+port: el campo `model:` del `.md` de un subagente nunca fue la fuente de
+verdad para un rol no-Claude — quien la ejecuta de verdad es
+`CrossProviderEditor`, leyendo `role.provider`/`role.providerModelID`
+directamente del `Strategy` en tiempo de ejecución, no del fichero
+generado. El problema es que Windows no tiene NINGÚN `CrossProviderEditor`
+todavía: los subagentes se delegan de forma nativa por el propio `claude`
+CLI (su herramienta `Agent` lee esos `.md`), así que si un rol trabajador
+se marca "Codex" en el editor y se guarda, Claude Code seguiría
+delegándolo como Claude al ejecutar — el cambio de proveedor no tendría
+ningún efecto real, de forma silenciosa. Se preguntó al founder antes de
+construir nada: eligió dejar el selector de proveedor FUERA de este
+corte (opción recomendada) en vez de añadirlo atenuado/deshabilitado, y
+preguntó explícitamente si en algún momento el cambio de proveedor podrá
+tener efecto real — respuesta: sí, es exactamente lo que entrega la fase
+`CrossProviderEditor` ya aparcada (worktree aislado vía `CodeArenaEngine`
++ ejecución secuencial por rol vía `CrossProviderEditor` + atribución de
+línea vía `LineAttributor`, ninguno portado aún), y parte del trabajo de
+bajo nivel ya existe a favor: `CLIOneShotRunner.cs` ya construye los
+comandos reales `codex exec`/`gemini -p` desde Fase 3.
+
+Con esto, este primer corte de reasignación entre proveedores queda
+cerrado en su alcance acordado: motor puro + tests + conexión a los
+otros dos proveedores desde la UI. El selector de proveedor por rol en
+el editor y la ejecución cross-provider real quedan como trabajo futuro,
+explícitamente fuera de este corte.

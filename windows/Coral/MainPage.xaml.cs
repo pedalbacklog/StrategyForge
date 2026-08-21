@@ -31,9 +31,17 @@ public sealed partial class MainPage : Page
 
     /// <summary>Drives the "Connect Claude" flyout (Fase 6) — install-if-missing
     /// + headless sign-in against the real CLI, streamed into the flyout's log/
-    /// status/paste-code UI. Claude only for now, matching ChatViewModel's own
-    /// single-provider scope.</summary>
+    /// status/paste-code UI.</summary>
     public ConnectViewModel ConnectViewModel { get; }
+
+    /// <summary>Same flow as <see cref="ConnectViewModel"/>, for Codex (OpenAI).
+    /// Cross-provider role reassignment (<c>AdvisorEngine.AssignProviders</c>)
+    /// only has something to assign once a second provider is actually
+    /// connected — this button is what makes that reachable from the UI.</summary>
+    public ConnectViewModel ConnectCodexViewModel { get; }
+
+    /// <summary>Same flow as <see cref="ConnectViewModel"/>, for Gemini (Google).</summary>
+    public ConnectViewModel ConnectGeminiViewModel { get; }
 
     /// <summary>Drives the "Open Repo" flyout — browse/clone/create a GitHub
     /// repo. Opening one hands off to a NEW <see cref="MainWindow"/> rather
@@ -62,6 +70,10 @@ public sealed partial class MainPage : Page
         ViewModel = new ChatViewModel(new RealProcessLauncher(), RepoPath);
         ConnectViewModel = new ConnectViewModel(new RealProcessLauncher(), new Win32PseudoConsoleLauncher(),
             AIProvider.Claude);
+        ConnectCodexViewModel = new ConnectViewModel(new RealProcessLauncher(), new Win32PseudoConsoleLauncher(),
+            AIProvider.Openai);
+        ConnectGeminiViewModel = new ConnectViewModel(new RealProcessLauncher(), new Win32PseudoConsoleLauncher(),
+            AIProvider.Gemini);
         RepoPickerViewModel = new RepoPickerViewModel(new RealProcessLauncher());
         StrategyPickerViewModel = new StrategyPickerViewModel(RepoPath);
         AdvisorViewModel = new AdvisorViewModel();
@@ -118,6 +130,24 @@ public sealed partial class MainPage : Page
     }
 
     private async void OnSubmitCodeClick(object sender, RoutedEventArgs e) => await ConnectViewModel.SubmitCodeAsync();
+
+    private async void OnConnectCodexFlyoutOpened(object sender, object e) => await ConnectCodexViewModel.ConnectAsync();
+
+    private void OnConnectCodexFlyoutClosing(FlyoutBase sender, FlyoutBaseClosingEventArgs e)
+    {
+        if (ConnectCodexViewModel.IsConnecting) e.Cancel = true;
+    }
+
+    private async void OnSubmitCodexCodeClick(object sender, RoutedEventArgs e) => await ConnectCodexViewModel.SubmitCodeAsync();
+
+    private async void OnConnectGeminiFlyoutOpened(object sender, object e) => await ConnectGeminiViewModel.ConnectAsync();
+
+    private void OnConnectGeminiFlyoutClosing(FlyoutBase sender, FlyoutBaseClosingEventArgs e)
+    {
+        if (ConnectGeminiViewModel.IsConnecting) e.Cancel = true;
+    }
+
+    private async void OnSubmitGeminiCodeClick(object sender, RoutedEventArgs e) => await ConnectGeminiViewModel.SubmitCodeAsync();
 
     private void OnCodeModeClick(object sender, RoutedEventArgs e) => new CodeModeWindow(RepoPath, ViewModel).Activate();
 

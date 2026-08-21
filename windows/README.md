@@ -322,7 +322,9 @@ browser code, reads one from stdin.
 **Fase 3 (process runner) done**; **Fase 4 (secretos + auth) started** (scope
 deliberately cut, see below); **Fase 5 (Chat MVP) done — confirmed end to end
 on real Windows**; **Fase 6 (Instalación de CLIs) done — confirmed end to
-end on real Windows** — see `PORT-PLAN.md` §6 for the live
+end on real Windows** (Claude only — "Connect Codex"/"Connect Gemini"
+buttons were added 2026-08-21, reusing the same `ConnectViewModel`, but
+not yet verified against those two CLIs for real) — see `PORT-PLAN.md` §6 for the live
 done/remaining checklist. Ported: the full "Strategy → subagent `.md` files +
 CLAUDE.md + dynamic workflow + MCP configs, written to disk" path
 (`AgentRole`/`Strategy`/validation + `Strategy.AutoFixed()` +
@@ -921,9 +923,10 @@ dependency. Ported first:
   Scope of THIS pass: `Advise()` only. Deliberately not yet ported:
   `adviseWithAI` (on-device AI upgrade, same reason as above), `adviseTiers`
   (the Economy/Recommended/Max three-tier UI — belongs with the Phase 4 UI
-  polish pass, not the engine), and `assignProviders`
-  (`AdvisorEngine+Providers.swift`, cross-provider role reassignment — a
-  smaller, separate follow-up, parked).
+  polish pass, not the engine). `assignProviders`
+  (`AdvisorEngine+Providers.swift`, cross-provider role reassignment) WAS
+  later ported, on 2026-08-21 — see the Status section and the dated entry
+  further down for the full detail.
 
 **A delicate call worth documenting on its own: `LoopKind.cs` (new).**
 `Advice.loopKind` is part of `advise()`'s contract — but `LoopKind` is
@@ -1195,3 +1198,90 @@ all three real bugs found along the way (stale validation from a missing
 `UpdateSourceTrigger`, a blank count not reflecting an invalid state, and
 `AutoFixed()` itself colliding with its own fan-out case) fixed and
 verified on real Windows.
+
+**2026-08-21 — Cross-provider role reassignment, first cut: `assignProviders`
+engine ported + "Connect Codex"/"Connect Gemini" buttons.** The founder
+asked why an earlier message in this session said "there's no way to
+connect Codex/Gemini." Looking into it found the actual gap: the generic
+connect engine (`ProviderInstaller`/`ConnectViewModel`, Phase 6) already
+supports any `AIProvider`, but only ONE button ("Connect Claude") was
+ever wired in `MainPage`, and `assignProviders` itself had never been
+ported. Scope was agreed with the founder before writing any code (same
+cut discipline as Phase 2): YES to the pure `assignProviders` engine plus
+its tests, YES to the two missing connect buttons; NO to real
+cross-provider execution (`CrossProviderEditor.swift` — depends on
+`CodeArenaEngine`, `LineAttributor`, and worktree isolation, none ported
+yet, a bigger phase of its own).
+
+- `Coral.Core/Services/AdvisorEngine.Providers.cs` (new, a `partial class`
+  split from `AdvisorEngine.cs` — mirrors the Swift extension file). Ports
+  `AssignProviders` in full: the `ModelProfiles` catalog (5 Claude + 3
+  OpenAI + 2 Gemini models, scored 1-5 on 4 axes — reasoning/coding/
+  breadth/speed), `PrimaryAxis` per role kind, cost-band capping
+  (`CostBand`, so a cheap seat never gets upgraded on a provider swap),
+  pass 1 (primary axis per role, orchestrator never on Gemini — it stalls
+  the real meta run, per the Swift comment this mirrors), pass 2 (reviewer
+  forced onto a DIFFERENT model family than the "coder" — diversity by
+  design), pass 3 (`EnsureCoverage` — every connected provider lands on at
+  least one role, capped at a 1-point loss on that role's axis),
+  deterministic tie-breaking (score desc → provider order asc → model id
+  asc, same order as `AIProvider.allCases`/`Enum.GetValues<AIProvider>()`),
+  and `CollapsingLocked` (a ChatGPT-account Codex login rejects `--model`,
+  so a "locked" provider collapses to one "account default" profile).
+  Deliberately NOT ported in this pass (nothing calls them yet):
+  `aspirationalPicks` (a display-only "ideal mix" preview with no UI to
+  show it), `adviseCrossProvider`/`applyingProviders` (wrap the not-yet-
+  ported `adviseWithAI`).
+- `AdvisorEngine.cs`: the class became `public static partial class` to
+  host the second file — nothing else in it changed.
+- `Coral.Tests/AdvisorProvidersTests.cs` (new): a 1:1 port of all 26 tests
+  in `AdvisorProvidersTests.swift` (catalog integrity, role-to-axis
+  routing, reviewer diversity, tier bias, the Claude-only no-op guarantee,
+  determinism, coverage, deprioritized providers, the orchestrator's
+  Gemini exclusion, the model-locked provider, and the "a swap never
+  raises a role's cost band" invariant). All 26 pass locally (`dotnet
+  test`, Linux sandbox — this slice is pure C#, no WinUI3, so it runs fine
+  outside Windows). Project total: 377 tests, 375 passing — the 2 that
+  fail (`ManualClaudeRunnerSmokeTest`/`ManualProviderInstallerSmokeTest`)
+  are pre-existing smoke tests that need a real `claude`/`npm` on PATH,
+  unrelated to this change (they fail the same way in any sandbox lacking
+  those binaries).
+- `MainPage.xaml`/`MainPage.xaml.cs`: two new buttons, "Connect Codex" and
+  "Connect Gemini", cloning the existing "Connect Claude" pattern exactly
+  (same `Flyout`, same light-dismiss guard while `IsConnecting`, same "⚠
+  Paste the code" header warning) — two new `ConnectViewModel` instances
+  (`ConnectCodexViewModel`/`ConnectGeminiViewModel`) constructed with
+  `AIProvider.Openai`/`AIProvider.Gemini`, reusing the Phase 6
+  `ConnectViewModel` untouched. Not yet verified against those two real
+  CLIs on Windows — only Claude has been (Phase 6).
+
+**Real finding made BEFORE writing a per-role provider picker into the
+Strategy Editor (Phase 2), which cut the scope again:** reading how
+`AgentFileGenerator.cs` writes each subagent's frontmatter
+(`model: {role.Model.ToRawValue()}`, line ~69) confirmed it ignores
+`role.Provider` entirely — and that the Swift original does the exact
+same thing (`AgentFileGenerator.swift:74`). Not a port bug: a subagent
+`.md`'s `model:` field was never the source of truth for a non-Claude
+role — `CrossProviderEditor` is, reading `role.provider`/
+`role.providerModelID` straight off the `Strategy` at RUN time, not off
+the generated file. The problem is Windows has no `CrossProviderEditor`
+at all yet: subagents are delegated natively by the `claude` CLI itself
+(its `Agent` tool reads those `.md` files), so marking a worker role
+"Codex" in the editor and saving would have Claude Code silently keep
+delegating it as Claude at run time — the provider change would have no
+real effect. Asked the founder before building anything: chose to leave
+the per-role provider picker OUT of this cut (the recommended option)
+rather than add it dimmed/disabled, and explicitly asked whether the
+provider change could ever have real effect — answer: yes, that's
+exactly what the already-parked `CrossProviderEditor` phase delivers
+(an isolated worktree via `CodeArenaEngine` + sequential per-role
+execution via `CrossProviderEditor` + line attribution via
+`LineAttributor`, none ported yet), and some of the groundwork already
+exists: `CLIOneShotRunner.cs` already builds the real `codex exec`/
+`gemini -p` commands, from Phase 3.
+
+With that, this first cut of cross-provider reassignment is closed at
+its agreed scope: the pure engine plus tests, plus connecting the other
+two providers from the UI. The per-role provider picker in the editor
+and real cross-provider execution remain explicitly out of scope, future
+work.

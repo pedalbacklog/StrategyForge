@@ -154,6 +154,64 @@
                 <TextBlock Text="⚠ Paste the code — click Connect Claude" FontSize="11"
                            Foreground="OrangeRed" VerticalAlignment="Center"
                            Visibility="{x:Bind ConnectViewModel.NeedsCode, Mode=OneWay, Converter={StaticResource Visible}}" />
+                <!-- Same flow as "Connect Claude" above, one per provider — see
+                     MainPage.xaml.cs's ConnectCodexViewModel/ConnectGeminiViewModel
+                     doc comments for why this exists (cross-provider role
+                     reassignment needs a second connected provider to do anything). -->
+                <Button Content="Connect Codex" VerticalAlignment="Center">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom" Opened="OnConnectCodexFlyoutOpened" Closing="OnConnectCodexFlyoutClosing">
+                            <StackPanel Width="380" Spacing="6">
+                                <TextBlock Text="{x:Bind ConnectCodexViewModel.PhaseLabel, Mode=OneWay}"
+                                           FontWeight="SemiBold" />
+                                <ListView ItemsSource="{x:Bind ConnectCodexViewModel.LogLines}" MaxHeight="160"
+                                          FontSize="11" SelectionMode="None" />
+                                <TextBlock Text="{x:Bind ConnectCodexViewModel.StatusMessage, Mode=OneWay}"
+                                           Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                                <Grid ColumnSpacing="8"
+                                      Visibility="{x:Bind ConnectCodexViewModel.NeedsCode, Mode=OneWay, Converter={StaticResource Visible}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" PlaceholderText="Paste the code from the browser"
+                                             Text="{x:Bind ConnectCodexViewModel.CodeInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <Button Grid.Column="1" Content="Submit" Click="OnSubmitCodexCodeClick" />
+                                </Grid>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+                <TextBlock Text="⚠ Paste the code — click Connect Codex" FontSize="11"
+                           Foreground="OrangeRed" VerticalAlignment="Center"
+                           Visibility="{x:Bind ConnectCodexViewModel.NeedsCode, Mode=OneWay, Converter={StaticResource Visible}}" />
+                <Button Content="Connect Gemini" VerticalAlignment="Center">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom" Opened="OnConnectGeminiFlyoutOpened" Closing="OnConnectGeminiFlyoutClosing">
+                            <StackPanel Width="380" Spacing="6">
+                                <TextBlock Text="{x:Bind ConnectGeminiViewModel.PhaseLabel, Mode=OneWay}"
+                                           FontWeight="SemiBold" />
+                                <ListView ItemsSource="{x:Bind ConnectGeminiViewModel.LogLines}" MaxHeight="160"
+                                          FontSize="11" SelectionMode="None" />
+                                <TextBlock Text="{x:Bind ConnectGeminiViewModel.StatusMessage, Mode=OneWay}"
+                                           Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                                <Grid ColumnSpacing="8"
+                                      Visibility="{x:Bind ConnectGeminiViewModel.NeedsCode, Mode=OneWay, Converter={StaticResource Visible}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" PlaceholderText="Paste the code from the browser"
+                                             Text="{x:Bind ConnectGeminiViewModel.CodeInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <Button Grid.Column="1" Content="Submit" Click="OnSubmitGeminiCodeClick" />
+                                </Grid>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+                <TextBlock Text="⚠ Paste the code — click Connect Gemini" FontSize="11"
+                           Foreground="OrangeRed" VerticalAlignment="Center"
+                           Visibility="{x:Bind ConnectGeminiViewModel.NeedsCode, Mode=OneWay, Converter={StaticResource Visible}}" />
                 <Button Content="Code Mode" VerticalAlignment="Center" Click="OnCodeModeClick" />
                 <Button Content="Open Repo" VerticalAlignment="Center">
                     <Button.Flyout>

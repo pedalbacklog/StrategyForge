@@ -21,10 +21,14 @@ namespace Coral.Core.Services;
 /// Windows equivalent) and <c>adviseTiers</c> (the Economy/Recommended/Max
 /// three-tier UI, which wraps <c>adviseWithAI</c> and belongs with the UI
 /// polish pass, not the engine port). Also not yet ported:
-/// <c>AdvisorEngine+Providers.swift</c>'s <c>assignProviders</c>
-/// (cross-provider role reassignment) — a separate, smaller follow-up.
+/// <c>AdvisorEngine+Providers.swift</c>'s <c>assignProviders</c> — now ported,
+/// see <c>AdvisorEngine.Providers.cs</c> (same file-split as the Swift
+/// original's extension file). Still not ported: <c>aspirationalPicks</c>
+/// (display-only "ideal mix" preview, no UI consumes it yet),
+/// <c>adviseCrossProvider</c>/<c>applyingProviders</c> (wrap the
+/// not-yet-ported <c>adviseWithAI</c>).
 /// </summary>
-public static class AdvisorEngine
+public static partial class AdvisorEngine
 {
     /// <summary>One node of the decision path: the question asked, the
     /// answer taken, and which signals fired (as localization keys, capped
