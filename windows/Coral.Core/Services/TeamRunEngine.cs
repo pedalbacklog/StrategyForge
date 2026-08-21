@@ -127,7 +127,7 @@ public static class TeamRunEngine
                 : orchestrator?.ProviderModelId ?? "";
             try
             {
-                var r = await runner.RunAsync(task, provider, model, path, ct);
+                var r = await runner.RunAsync($"{task}{CrossProviderEditor.DirectEditSuffix}", provider, model, path, ct);
                 outcome.Tokens = r.Tokens;
                 outcome.CostUsd = r.CostUsd;
                 outcome.Estimated = r.Estimated;

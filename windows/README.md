@@ -1750,3 +1750,42 @@ closes out the "Claude exited with an error" investigation as a genuine
 success for the stdout-fallback fix — it did exactly what it was for.
 The crash from the first attempt (see above) remains open, still pending
 a real call stack from the founder's WER dump.
+
+**A second, real finding from the same test session: silent no-op runs.**
+With a lower-cost team the founder retried "create a README.md with one
+sentence" and got `Done — no changes were made.` — no crash, no error,
+but nothing written either. Bisected by having him run the exact
+`claude --output-format json --permission-mode bypassPermissions --model
+... -p "..."` command by hand outside Coral entirely, three times: (1) in
+his everyday repo — worked; (2) in a brand-new `git init`'d folder Claude
+had never seen — also worked, ruling out a first-run "trust this folder"
+gate; (3) inside the actual Coral-generated worktree for that failed run
+(left on disk since he hadn't pressed Discard yet) — by the time he got to
+it a retry inside the app itself had already succeeded, showing a real
+diff for the identical team + task. That flip (same team, same task, same
+worktree shape — fails once, succeeds the next) rules out a deterministic
+bug and points at model non-determinism: "Orchestrator + Workers
+(Fan-out)"'s system prompt tells the orchestrator to delegate to a
+`worker` subagent, and in a single unsupervised `-p` call that delegation
+can apparently complete with `is_error:false` and zero effect, without
+the top-level orchestrator noticing or retrying.
+
+Root cause identified, not a Windows-port bug: `CrossProviderEditor`'s
+solo-editor prompt already appends "Edit the files in this repository
+directly to complete the task." to push the model toward acting instead
+of describing/delegating — `TeamRunEngine`'s native-Claude path (used for
+any Claude-only team, i.e. most of them) never did. This exact gap exists
+in `ProviderRun.swift`/`CodeArenaEngine.swift` too, so it's shared with
+Swift — flagged instead of fixed unprompted, and the founder chose to
+apply it to the Windows port after weighing it (the point of "run for
+real" is a diff to review, a silent no-op run defeats it; the two
+call sites already disagreed on this within the SAME window; the nudge
+doesn't prevent legitimate delegation, it only biases the top-level call
+toward acting). Fixed: extracted the suffix as
+`CrossProviderEditor.DirectEditSuffix` (`internal const`) so both call
+sites share the literal, and `TeamRunEngine.RunAsync`'s native-Claude
+branch now appends it to the task before calling `runner.RunAsync`.
+Covered by local build/test: 441/443 (same 2 pre-existing manual-only
+failures). Pending: push, CI, and the founder re-testing "Orchestrator +
+Workers" a few more times to see whether no-op runs become rare instead
+of gone entirely (the nudge biases the model, it can't force it).

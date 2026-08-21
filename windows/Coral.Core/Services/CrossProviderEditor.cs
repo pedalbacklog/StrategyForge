@@ -118,9 +118,18 @@ public static class CrossProviderEditor
 
     // MARK: - Helpers
 
+    /// <summary>Appended to a one-shot task so the model acts instead of just
+    /// describing/delegating — without it, a single unsupervised call can
+    /// legitimately choose to explain a plan (or delegate to a subagent whose
+    /// edit doesn't land) and return with nothing changed, which defeats the
+    /// point of an isolated, reviewable "run for real". Shared with
+    /// <see cref="TeamRunEngine"/>'s native-Claude path so both take the same
+    /// nudge.</summary>
+    internal const string DirectEditSuffix = "\n\nEdit the files in this repository directly to complete the task.";
+
     private static string WorkerPrompt(string task, AgentRole role, bool isSolo)
     {
-        if (isSolo) return $"{task}\n\nEdit the files in this repository directly to complete the task.";
+        if (isSolo) return $"{task}{DirectEditSuffix}";
         return $"""
             You are the "{role.Name}" agent on a team working this task:
 

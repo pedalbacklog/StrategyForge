@@ -2831,3 +2831,47 @@ with an error" como un éxito genuino del arreglo del respaldo a stdout —
 hizo exactamente lo que se esperaba de él. El crash del primer intento
 (ver arriba) sigue abierto, todavía pendiente de una pila de llamadas real
 del volcado de WER del founder.
+
+**Segundo hallazgo real de la misma sesión de pruebas: runs que no hacen
+nada, en silencio.** Con un equipo más barato, el founder repitió "crea un
+archivo README.md con una frase" y le salió `Done — no changes were
+made.` — sin crash, sin error, pero tampoco escribió nada. Se acotó
+haciéndole ejecutar a mano, fuera de Coral, el mismo comando exacto
+(`claude --output-format json --permission-mode bypassPermissions
+--model ... -p "..."`) tres veces: (1) en su repo habitual — funcionó;
+(2) en una carpeta nueva recién `git init`ada que Claude nunca había visto
+— también funcionó, descartando que fuera la primera-vez-en-una-carpeta
+("trust this folder"); (3) dentro del worktree real que había generado
+Coral para ese run fallido (seguía en disco porque no había pulsado
+Discard todavía) — para cuando llegó a probarlo, un reintento dentro de la
+propia app ya había funcionado, mostrando un diff real para el mismo
+equipo y la misma tarea. Ese cambio de resultado (mismo equipo, misma
+tarea, mismo tipo de worktree — falla una vez, funciona la siguiente)
+descarta un bug determinista y apunta a no-determinismo del modelo: el
+system prompt de "Orchestrator + Workers (Fan-out)" le dice al orquestador
+que delegue en un subagente `worker`, y en una única llamada `-p` sin
+supervisión esa delegación puede aparentemente completarse con
+`is_error:false` y efecto cero, sin que el orquestador de nivel superior
+se dé cuenta o reintente.
+
+Causa raíz identificada, y no es un bug del port de Windows: el prompt del
+editor solo de `CrossProviderEditor` ya añade "Edit the files in this
+repository directly to complete the task." para empujar al modelo a
+actuar en vez de describir/delegar — la ruta nativa de Claude en
+`TeamRunEngine` (la que usa cualquier equipo 100% Claude, o sea la
+mayoría) nunca lo hacía. Este mismo hueco existe también en
+`ProviderRun.swift`/`CodeArenaEngine.swift`, así que es compartido con
+Swift — se señaló en vez de arreglarlo sin preguntar, y el founder decidió
+aplicarlo igualmente al port de Windows tras sopesarlo (el sentido de
+"run for real" es producir un diff que revisar, un run mudo lo
+desvirtúa; los dos puntos de llamada ya discrepaban en esto dentro de la
+MISMA ventana; el empujón no impide la delegación legítima, solo inclina
+la llamada de nivel superior hacia actuar). Arreglado: se extrajo el sufijo
+como `CrossProviderEditor.DirectEditSuffix` (`internal const`) para que
+ambos puntos de llamada compartan el literal, y la rama nativa de Claude
+de `TeamRunEngine.RunAsync` ahora lo añade a la tarea antes de llamar a
+`runner.RunAsync`. Cubierto por build/test local: 441/443 (los mismos 2
+fallos preexistentes de los smoke tests manuales). Pendiente: push, CI, y
+que el founder vuelva a probar "Orchestrator + Workers" varias veces más
+para ver si los runs mudos se vuelven raros en vez de desaparecer del todo
+(el empujón inclina al modelo, no puede forzarlo).
