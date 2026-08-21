@@ -1659,3 +1659,20 @@ or user-visible behavior). Verified manually outside the test suite: a
 `git commit` with no identity configured fails with "Please tell me who
 you are"; with the new `-c` override, it succeeds regardless of host
 config — reproduces and confirms the exact fix CI needs.
+
+**A third red CI run, same pattern — the merge needed identity too.**
+Failures dropped from 3 to 2: the baseline/work commits were now landing
+correctly (CI's own log showed the diff carrying real content, `claude.txt`
+with `CostUsd = 0.01`), but "Apply" still failed — this time at the merge
+step itself, not the commits before it. Same root cause, one step further
+down the chain: `CodeGit.MergeNoFFAsync` runs
+`git merge --no-ff branch -m message`, and a `--no-ff` merge always creates
+a new merge commit — which also needs `user.name`/`user.email` — and
+`MergeNoFFAsync`, unlike the now-fixed `CommitAllAsync`, had no `-c`
+override at all. Same reasoning as the previous finding (an internal,
+app-owned commit, never attributed to the real user, with no exact Swift
+counterpart to diverge from): fixed by adding the same
+`-c user.name=Coral -c user.email=coral@localhost` to `MergeNoFFAsync`,
+without asking first. Covered by local build/test: 440/442 (the 2 failures
+are still the pre-existing manual smoke tests). Pending: CI confirmation
+that this closes out the last 2 failures.

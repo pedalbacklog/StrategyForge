@@ -410,7 +410,9 @@ public static class CodeGit
     {
         var git = (resolveBinary ?? BinaryResolver.Resolve)("git");
         if (git is null) return (false, "git not found");
-        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, repo, new[] { "merge", "--no-ff", branch, "-m", message }, ct);
+        var identity = new[] { "-c", "user.name=Coral", "-c", "user.email=coral@localhost" };
+        var (ok, stdout, stderr) = await RunGitAsync(launcher, git, repo,
+            identity.Concat(new[] { "merge", "--no-ff", branch, "-m", message }).ToArray(), ct);
         return (ok, CombineOutput(stdout, stderr));
     }
 

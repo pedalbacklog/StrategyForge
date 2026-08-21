@@ -2736,3 +2736,20 @@ usuario). Verificado manualmente fuera de los tests: un `git commit` sin
 identidad configurada falla con "Please tell me who you are"; con el
 override `-c` nuevo, funciona igual sin importar la configuración del
 host — reproduce y confirma el arreglo exacto que necesita CI.
+
+**Tercer intento de CI, mismo patrón — el merge también necesitaba
+identidad.** Bajó de 3 a 2 fallos: el commit base/de trabajo ya se hacía
+bien (el diff en el log de CI ya traía `claude.txt` de verdad, con
+`CostUsd = 0.01`), pero "Apply" seguía fallando — esta vez en el propio
+merge, no en los commits previos. Causa raíz idéntica a la anterior, un
+paso más adelante en la cadena: `CodeGit.MergeNoFFAsync` ejecuta
+`git merge --no-ff branch -m message`, y un merge `--no-ff` siempre crea un
+commit de merge nuevo — que también necesita `user.name`/`user.email`, y
+`MergeNoFFAsync`, a diferencia de `CommitAllAsync` (ya arreglado), no tenía
+ningún override `-c`. Mismo razonamiento que el hallazgo anterior (commit
+interno de la app, nunca atribuido al usuario real, sin equivalente exacto
+en Swift para "divergir" de él): arreglado añadiendo el mismo
+`-c user.name=Coral -c user.email=coral@localhost` a `MergeNoFFAsync`,
+sin preguntar. Cubierto por build/test local: 440/442 (los 2 fallos siguen
+siendo los smoke tests manuales preexistentes). Pendiente: confirmación en
+CI de que esto cierra los últimos 2 fallos.
