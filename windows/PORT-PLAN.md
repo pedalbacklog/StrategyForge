@@ -2902,3 +2902,102 @@ compile `Coral.csproj` en este sandbox Linux
 UI de este port), así que hace falta CI para confirmar que compila de
 verdad, más que el founder confirme que Enter ya funciona en Windows
 real.
+
+**Trabajo autónomo de seguimiento (el founder fuera unas horas) — portado
+`DiagnosticsLog`, acotado exactamente al hueco que esta misma sesión ya
+había encontrado.** Antes, al arreglar el respaldo a stdout de
+`ProviderOneShotRunner.RunClaudeAsync`, se comparó con `ProviderRun.swift`,
+que además registra la invocación completa (cmd/cwd/stderr/prefijo de
+stdout) en un `DiagnosticsLog` exportable antes de lanzar el error —
+infraestructura que este port no tenía. `DiagnosticsLog.record(...)` de
+Swift se llama desde ~30 sitios en servicios que este port aún no ha
+construido (`MetaOrchestrator`, `KeychainStore`, `CrashReporter`,
+`GraphifyService`, los sidecars de transcript de `AppModel`...) — portar
+todo eso sería una función grande y sin acotar. Se portó solo la clase en
+sí (`DiagnosticsLog.cs`: envoltorios reales `Record`/`Contents`/`Clear`
+sobre métodos puros `*Uncached`, misma forma que `AppSettings`/
+`ProviderAuth`; tope rotatorio de 256KB, recorta a la cabecera + el ~60%
+más reciente al superarlo; `%LOCALAPPDATA%\Coral\diagnostics.log`), y se
+conectó en los dos puntos de fallo que `ProviderOneShotRunner` ya tiene —
+el bloque `if (!ok)` de `RunClaudeAsync` y el bloque
+`if (exitCode != 0)` de `RunPtyAsync` — igual que los dos sitios
+`DiagnosticsLog.record` de `ProviderRun.swift` para estas mismas rutas. La
+tarea queda redactada como `<prompt: N chars>` en la línea de comando
+registrada, mismo razonamiento que Swift: el log está pensado para
+exportarse/compartirse, y la tarea lleva la conversación del propio
+usuario. 10 tests nuevos (`DiagnosticsLogTests.cs`) cubriendo el núcleo
+puro (cabecera, etiquetas de nivel, escapado de saltos de línea, orden,
+borrado, recorte, nunca lanza con una ruta inválida).
+
+**Todavía sin UI que lea este log** — el flujo de exportación de Swift
+vive en `AppModel.swift`, no portado. Dejado abierto a propósito: dónde
+debería aparecer esto en la UI de Windows (¿un ítem de menú? ¿un botón
+dentro de la propia "Run for real", justo donde más falta hace explicar
+un fallo mudo?) es una decisión de producto, no un puerto mecánico —
+se señala para el founder en vez de inventar una UI sin preguntar.
+
+**Un bug real encontrado al conectarlo: `ProviderOneShotRunner` llamaba
+directamente al `DiagnosticsLog.Record` real**, lo que habría hecho que
+cualquier test que ejercite un fallo de Claude/PTY (ya había varios)
+escribiera en silencio en el `%LOCALAPPDATA%\Coral\diagnostics.log` real
+de quien ejecute `dotnet test` — incluida la propia máquina del founder,
+cada vez que corra la suite en local. Arreglado antes de publicarlo: se
+añadió un parámetro de constructor inyectable `recordDiagnostic` (mismo
+patrón que `resolveBinary`/`callTimeout`), con el `DiagnosticsLog.Record`
+real como valor por defecto; todos los tests existentes basados en fakes
+ahora inyectan un no-op. 3 tests nuevos confirman el cableado en sí
+(diagnóstico registrado con los campos correctos, tarea redactada con la
+longitud correcta).
+
+**Un segundo bug real encontrado en la misma pasada: un fallo de arranque
+de PTY escapaba como excepción cruda, no como el contrato documentado
+`OneShotException`.** Los fallos de arranque de `RunClaudeAsync` ya pasan
+por el propio try/catch de `OneShotProcess.RunAsync` y salen como
+`OneShotException` normal; la llamada `_ptyLauncher.Start(...)` de
+`RunPtyAsync` no tenía ninguna guarda equivalente — un fallo de
+configuración de ConPTY (la única pieza de todo este port confirmada con
+aristas reales y afiladas — ver el bug `STATUS_DLL_INIT_FAILED` de la
+Fase 3) se habría propagado como un `InvalidOperationException` desnudo en
+vez del `OneShotException` que cualquier otro llamador
+(`TeamRunEngine`, `CrossProviderEditor`) ya captura específicamente.
+Arreglado: se envolvió `_ptyLauncher.Start(...)` en su propio try/catch,
+registrando un diagnóstico y relanzando como
+`OneShotException(Failed, ...)`, igual que cualquier otro tipo de fallo
+de esta clase. Cubierto por un test nuevo.
+
+**Señalado, no arreglado — una pregunta de arquitectura real para que la
+decida el founder.** Releer `ProviderRun.swift` con cuidado al conectar
+los puntos de diagnóstico sacó a la luz algo no notado antes: el
+`run(prompt:...)` BUFERIZADO (no streaming) de Swift — del que
+`ProviderOneShotRunner` de este port es en realidad el puerto — usa el
+`launch()` de pipe normal para LOS TRES proveedores, Codex/Gemini
+incluidos. El PTY (`launchPTY`) en Swift lo usa SOLO la variante
+STREAMING (`run(prompt:...:onEvent:)`, no portada — ver el propio
+comentario de `IOneShotRunner`), porque ahí el PTY resuelve un
+bloqueo-por-buffer que solo importa para progreso EN VIVO; una llamada
+bufferizada que solo espera la salida completa no lo necesita. El
+`RunPtyAsync` de este port, en cambio, enruta Codex/Gemini por ConPTY
+incluso en la ruta bufferizada sin streaming — lo que significa que cada
+llamada cross-provider de "Run for real" ejercita ahora mismo la única
+pieza de código específico de Windows menos probada de todo este port
+(`Win32PseudoConsoleLauncher`, P/Invoke crudo, confirmada funcionando solo
+para el flujo de sign-in hasta ahora). Enrutar las llamadas one-shot de
+Codex/Gemini por el pipe normal ya probado
+(`RealProcessLauncher`/`OneShotProcess`) en su lugar — igual que hace de
+verdad el modo bufferizado de Swift — eliminaría ese riesgo por completo
+para esta ruta. Es un cambio de comportamiento real sobre una ruta que ya
+funciona, no un arreglo de bug, así que hace falta que lo decida el
+founder antes de tocarlo, no un cambio autónomo.
+
+**También señalado, no arreglado — el hueco del worktree huérfano
+planteado en conversación se confirma compartido con Swift.** Se grepeó
+`ArenaView.swift` buscando cualquier limpieza al cerrar/descartar: no hay
+ninguna — el propio Arena de Swift también deja un worktree atrás si se
+cierra la vista sin descartar. No es una regresión del port de Windows,
+así que se deja tal cual pendiente de que lo decida el founder (misma
+norma que cualquier otro comportamiento compartido con Swift de esta
+sesión).
+
+Cubierto por build/test local: 454/456 (los mismos 2 fallos preexistentes
+de los smoke tests manuales, sin relación). Todavía sin empujar — próximo
+paso en cuanto esté listo para cerrar esta pasada autónoma.

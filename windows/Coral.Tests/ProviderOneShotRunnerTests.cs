@@ -14,7 +14,10 @@ public class ProviderOneShotRunnerTests
 {
     private static ProviderOneShotRunner Runner(FakeProcessLauncher pipes, FakePseudoConsoleLauncher pty,
         Func<string, string?>? resolveBinary = null, TimeSpan? callTimeout = null) =>
-        new(pipes, pty, resolveBinary ?? (n => $"/usr/bin/{n}"), callTimeout: callTimeout);
+        // recordDiagnostic: no-op — a failure path exercised here must never write to the
+        // real %LOCALAPPDATA%\Coral\diagnostics.log on whatever machine runs the tests.
+        new(pipes, pty, resolveBinary ?? (n => $"/usr/bin/{n}"), callTimeout: callTimeout,
+            recordDiagnostic: (_, _) => { });
 
     private static FakeProcessLauncher NoPipes() => new((_, _) => new FakeChildProcess(new List<string>()));
     private static FakePseudoConsoleLauncher NoPty() => new((_, _) => new FakePseudoConsoleSession(new List<string>()));
@@ -67,6 +70,64 @@ public class ProviderOneShotRunnerTests
 
         Assert.Equal(OneShotErrorKind.Failed, ex.Kind);
         Assert.Equal("boom", ex.Message);
+    }
+
+    [Fact]
+    public async Task ClaudeRecordsADiagnosticOnFailureWithThePromptRedacted()
+    {
+        var records = new List<(string Message, string Level)>();
+        var pipes = new FakeProcessLauncher((_, _) =>
+            new FakeChildProcess(new List<string>(), exitCode: 1, stderr: "boom"));
+        var runner = new ProviderOneShotRunner(pipes, NoPty(), n => $"/usr/bin/{n}",
+            recordDiagnostic: (msg, level) => records.Add((msg, level)));
+        var prompt = "a secret task description";
+
+        await Assert.ThrowsAsync<OneShotException>(
+            () => runner.RunAsync(prompt, AIProvider.Claude, "claude-sonnet-5", "/repo"));
+
+        Assert.Single(records);
+        Assert.Equal("ERROR", records[0].Level);
+        Assert.Contains("stderr: boom", records[0].Message);
+        Assert.Contains("cwd: /repo", records[0].Message);
+        Assert.DoesNotContain(prompt, records[0].Message);
+        Assert.Contains($"<prompt: {prompt.Length} chars>", records[0].Message);
+    }
+
+    [Fact]
+    public async Task PtyRecordsADiagnosticOnANonZeroExit()
+    {
+        var records = new List<(string Message, string Level)>();
+        var pty = new FakePseudoConsoleLauncher((_, _) =>
+            new FakePseudoConsoleSession(new List<string> { "some error text" }, exitCode: 1));
+        var runner = new ProviderOneShotRunner(NoPipes(), pty, n => $"/usr/bin/{n}",
+            recordDiagnostic: (msg, level) => records.Add((msg, level)));
+
+        await Assert.ThrowsAsync<OneShotException>(
+            () => runner.RunAsync("task", AIProvider.Gemini, "gemini-2.5-pro", "/repo"));
+
+        Assert.Single(records);
+        Assert.Contains("exit code 1", records[0].Message);
+    }
+
+    [Fact]
+    public async Task PtyLaunchFailureIsWrappedAsOneShotExceptionAndRecorded()
+    {
+        // Real gap found while wiring diagnostics: unlike the Claude path (whose launch
+        // failures already flow through OneShotProcess's own try/catch), a PTY launch
+        // failure (e.g. ConPTY setup) used to escape as a raw exception instead of the
+        // documented OneShotException contract every other failure kind uses.
+        var records = new List<(string Message, string Level)>();
+        var pty = new FakePseudoConsoleLauncher((_, _) => throw new InvalidOperationException("no ConPTY for you"));
+        var runner = new ProviderOneShotRunner(NoPipes(), pty, n => $"/usr/bin/{n}",
+            recordDiagnostic: (msg, level) => records.Add((msg, level)));
+
+        var ex = await Assert.ThrowsAsync<OneShotException>(
+            () => runner.RunAsync("task", AIProvider.Gemini, "gemini-2.5-pro", "/repo"));
+
+        Assert.Equal(OneShotErrorKind.Failed, ex.Kind);
+        Assert.Equal("no ConPTY for you", ex.Message);
+        Assert.Single(records);
+        Assert.Contains("no ConPTY for you", records[0].Message);
     }
 
     [Fact]

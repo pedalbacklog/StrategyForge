@@ -1810,3 +1810,95 @@ change — can't compile-check `Coral.csproj` in this Linux sandbox
 (`EnableWindowsTargeting`, same limitation as every other UI change in
 this port), so this needs CI to actually confirm it builds, plus the
 founder confirming Enter now works on real Windows.
+
+**Autonomous follow-up work (founder away for a few hours) — ported
+`DiagnosticsLog`, scoped to the exact gap this session already found.**
+Earlier in this same investigation, `ProviderOneShotRunner.RunClaudeAsync`'s
+stdout-fallback fix was compared against `ProviderRun.swift`, which also
+records the full invocation (cmd/cwd/stderr/stdout prefix) to an exportable
+`DiagnosticsLog` before throwing — infrastructure this port didn't have.
+Swift's `DiagnosticsLog.record(...)` is called from ~30 places across
+services this port hasn't built yet (`MetaOrchestrator`, `KeychainStore`,
+`CrashReporter`, `GraphifyService`, `AppModel`'s transcript sidecars...) —
+porting all of that would be a large, unscoped feature. Ported only the
+class itself (`DiagnosticsLog.cs`: `Record`/`Contents`/`Clear` real-path
+wrappers over pure `*Uncached` methods, same shape as `AppSettings`/
+`ProviderAuth`; rolling 256KB cap, trims to the header + newest ~60% once
+exceeded; `%LOCALAPPDATA%\Coral\diagnostics.log`), and wired it into the
+two failure call sites `ProviderOneShotRunner` already has —
+`RunClaudeAsync`'s `if (!ok)` block and `RunPtyAsync`'s
+`if (exitCode != 0)` block — matching `ProviderRun.swift`'s own two
+`DiagnosticsLog.record` sites for these exact paths. Prompt is redacted to
+`<prompt: N chars>` in the logged command line, same reasoning as Swift:
+the log is meant to be exported/shared, and the prompt carries the user's
+own conversation. 10 new tests (`DiagnosticsLogTests.cs`) covering the
+pure core (header, level tags, newline escaping, ordering, clearing,
+trimming, never-throws-on-a-bad-path).
+
+**No UI wired to read this log yet** — Swift's own export flow lives in
+`AppModel.swift`, not ported. Deliberately left open: where this should
+surface in the Windows UI (a menu item? a button in "Run for real"
+itself, right where a silent failure would be most useful to explain?) is
+a product decision, not a mechanical port — flagging for the founder
+rather than inventing a UI unprompted.
+
+**A correctness bug found while wiring this in: `ProviderOneShotRunner`
+called the real `DiagnosticsLog.Record` directly**, which would have made
+every test exercising a Claude/PTY failure path (several already existed)
+silently write to the real `%LOCALAPPDATA%\Coral\diagnostics.log` on
+whatever machine runs `dotnet test` — including the founder's own
+machine, every time he runs the suite locally. Fixed before it shipped:
+added an injectable `recordDiagnostic` constructor parameter (same
+pattern as `resolveBinary`/`callTimeout`), defaulting to the real
+`DiagnosticsLog.Record`; all existing fake-based tests now inject a
+no-op. 3 new tests confirm the wiring itself (diagnostic recorded with
+the right fields, prompt redacted with the right length).
+
+**A second real bug found in the same pass: a PTY launch failure escaped
+as a raw exception, not the documented `OneShotException` contract.**
+`RunClaudeAsync`'s launch failures already flow through
+`OneShotProcess.RunAsync`'s own try/catch and surface as a normal
+`OneShotException`; `RunPtyAsync`'s `_ptyLauncher.Start(...)` call had no
+equivalent guard — a ConPTY setup failure (the one piece of this whole
+port confirmed to have real, sharp edges — see the
+`STATUS_DLL_INIT_FAILED` bug from Fase 3) would have propagated as a bare
+`InvalidOperationException` instead of the `OneShotException` every other
+caller (`TeamRunEngine`, `CrossProviderEditor`) already catches
+specifically. Fixed: wrapped `_ptyLauncher.Start(...)` in its own
+try/catch, recording a diagnostic and rethrowing as
+`OneShotException(Failed, ...)`, matching every other failure kind in this
+class. Covered by a new test.
+
+**Flagged, not fixed — a real architecture question for the founder to
+weigh in on.** Re-reading `ProviderRun.swift` closely while wiring the
+diagnostics call sites surfaced something not noticed before: Swift's
+BUFFERED (non-streaming) `run(prompt:...)` — the one this port's
+`ProviderOneShotRunner` is actually a port of — uses the plain-pipe
+`launch()` for ALL THREE providers, Codex/Gemini included. PTY
+(`launchPTY`) in Swift is used ONLY by the STREAMING variant
+(`run(prompt:...:onEvent:)`, not ported — see `IOneShotRunner`'s own doc
+comment), because PTY there solves block-buffering that only matters for
+LIVE progress; a buffered call that just waits for full output doesn't
+need it. This port's `ProviderOneShotRunner.RunPtyAsync`, by contrast,
+routes Codex/Gemini through ConPTY even in the buffered, non-streaming
+path — meaning every cross-provider "Run for real" call currently
+exercises the single least-proven piece of Windows-specific code in this
+entire port (`Win32PseudoConsoleLauncher`, raw P/Invoke, confirmed working
+only for the sign-in flow so far). Routing Codex/Gemini one-shot calls
+through the already-proven `RealProcessLauncher`/`OneShotProcess` plain
+pipe instead — matching what Swift's buffered mode actually does — would
+remove that risk entirely for this path. Real behavior change to a
+working code path, not a bug fix, so this needs the founder's decision
+before touching it, not an autonomous change.
+
+**Also flagged, not fixed — the orphaned-worktree gap raised in
+conversation is confirmed shared with Swift.** Grepped `ArenaView.swift`
+for any close/dismiss cleanup: there is none — Swift's own Arena leaves a
+worktree behind too if the view is dismissed without discarding. Not a
+Windows-port regression, so left alone pending the founder's decision
+(same standing rule as every other shared-with-Swift behavior this
+session).
+
+Covered by local build/test: 454/456 (same 2 pre-existing manual-only
+failures, unrelated). Not yet pushed — next step once ready to end this
+autonomous pass.

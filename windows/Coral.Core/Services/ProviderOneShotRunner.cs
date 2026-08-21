@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Json;
 using Coral.Core.Models;
 
@@ -66,19 +67,26 @@ public sealed class ProviderOneShotRunner : IOneShotRunner
     private readonly Func<string, string?> _resolveBinary;
     private readonly string _permissionMode;
     private readonly TimeSpan _callTimeout;
+    private readonly Action<string, string> _recordDiagnostic;
 
     /// <param name="callTimeout">Overrides <see cref="CallTimeout"/> — test-only
     /// knob so the watchdog path can be exercised in milliseconds instead of
     /// 10 real minutes; production callers leave it at the default.</param>
+    /// <param name="recordDiagnostic">Overrides where a failed call's
+    /// diagnostics get recorded — defaults to the real
+    /// <see cref="DiagnosticsLog.Record"/> (writes under
+    /// <c>%LOCALAPPDATA%</c>); tests inject a no-op or a capturing delegate so
+    /// exercising a failure path doesn't write to the real user's app data.</param>
     public ProviderOneShotRunner(IProcessLauncher processLauncher, IPseudoConsoleLauncher ptyLauncher,
         Func<string, string?>? resolveBinary = null, string permissionMode = "bypassPermissions",
-        TimeSpan? callTimeout = null)
+        TimeSpan? callTimeout = null, Action<string, string>? recordDiagnostic = null)
     {
         _processLauncher = processLauncher;
         _ptyLauncher = ptyLauncher;
         _resolveBinary = resolveBinary ?? BinaryResolver.Resolve;
         _permissionMode = permissionMode;
         _callTimeout = callTimeout ?? CallTimeout;
+        _recordDiagnostic = recordDiagnostic ?? DiagnosticsLog.Record;
     }
 
     public async Task<OneShotResult> RunAsync(string prompt, AIProvider provider, string model, string? cwd,
@@ -116,14 +124,18 @@ public sealed class ProviderOneShotRunner : IOneShotRunner
             ClaudeRunner.BuildEnvironment(bin), ct);
         if (!ok)
         {
+            // Record the invocation + output so an exported log pinpoints the cause (the
+            // CLI's own stderr/stdout are otherwise lost once this exception is caught and
+            // shown as a one-line banner). Matches ProviderRun.swift's own DiagnosticsLog
+            // capture at this exact call site. The prompt is redacted — the log is designed
+            // to be exported and shared, and the prompt carries the user's own conversation.
+            _recordDiagnostic(DiagnosticMessage(provider, bin, command.Args, prompt, cwd, stderr, stdout), "ERROR");
             var authMessage = CLIOneShotRunner.AuthFailureMessage(provider, stdout, stderr);
             if (authMessage is not null) throw new OneShotException(OneShotErrorKind.AuthRequired, authMessage);
             // Prefer stderr (matches ProviderRun.swift's own fallback), but fall back to
             // stdout rather than discarding it: with --output-format json, a failure that
             // never reaches a valid JSON result often puts its only diagnostic text there
-            // instead of stderr — Swift keeps that text too, via a DiagnosticsLog capture
-            // this port hasn't ported yet, so the thrown message is the only place left to
-            // carry it.
+            // instead of stderr.
             var trimmed = stderr.Trim();
             if (trimmed.Length == 0) trimmed = stdout.Trim();
             throw new OneShotException(OneShotErrorKind.Failed,
@@ -141,7 +153,19 @@ public sealed class ProviderOneShotRunner : IOneShotRunner
         string cwd, CancellationToken ct)
     {
         var command = CLIOneShotRunner.Command(provider, prompt, model, _permissionMode);
-        using var session = _ptyLauncher.Start(bin, command.Args, cwd, new Dictionary<string, string?>());
+        IPseudoConsoleSession session;
+        try
+        {
+            session = _ptyLauncher.Start(bin, command.Args, cwd, new Dictionary<string, string?>());
+        }
+        catch (Exception ex)
+        {
+            // A launch failure (e.g. ConPTY setup) never reached the CLI at all, so there's
+            // no stdout/stderr to capture — just the exception that stopped it.
+            _recordDiagnostic(DiagnosticMessage(provider, bin, command.Args, prompt, cwd, ex.Message, ""), "ERROR");
+            throw new OneShotException(OneShotErrorKind.Failed, ex.Message);
+        }
+        using var _ = session;
         var lines = new List<string>();
         try
         {
@@ -164,6 +188,8 @@ public sealed class ProviderOneShotRunner : IOneShotRunner
         var rawOutput = string.Join("\n", lines);
         if (exitCode != 0)
         {
+            _recordDiagnostic(DiagnosticMessage(provider, bin, command.Args, prompt, cwd,
+                $"exit code {exitCode}", rawOutput), "ERROR");
             var authMessage = CLIOneShotRunner.AuthFailureMessage(provider, rawOutput, "");
             if (authMessage is not null) throw new OneShotException(OneShotErrorKind.AuthRequired, authMessage);
             var tail = CLIOneShotRunner.StripAnsi(rawOutput).Trim();
@@ -175,6 +201,23 @@ public sealed class ProviderOneShotRunner : IOneShotRunner
         var estTokens = CLIOneShotRunner.EstimateTokens(prompt, cleanText);
         var estCost = CLIOneShotRunner.EstimatedCostUsd(estTokens, model);
         return new OneShotResult(cleanText, estTokens, estCost, provider, model, Estimated: true);
+    }
+
+    /// <summary>Builds the multi-line diagnostics record for a failed one-shot
+    /// call. Matches <c>ProviderRun.swift</c>'s own record shape (invocation +
+    /// cwd + stderr + a stdout prefix), with the prompt argument redacted to
+    /// just its length — the log is meant to be exported/shared, and the
+    /// prompt carries the user's own conversation.</summary>
+    private static string DiagnosticMessage(AIProvider provider, string bin, IReadOnlyList<string> args,
+        string prompt, string cwd, string stderr, string stdout)
+    {
+        var safeArgs = args.Select(a => a == prompt ? $"<prompt: {a.Length} chars>" : a);
+        var stdoutPrefix = stdout.Length > 500 ? stdout[..500] : stdout;
+        return $"{provider.DisplayName()} CLI failed\n" +
+            $"cmd: {bin} {string.Join(' ', safeArgs)}\n" +
+            $"cwd: {cwd}\n" +
+            $"stderr: {(stderr.Trim().Length == 0 ? "(empty)" : stderr.Trim())}\n" +
+            $"stdout: {stdoutPrefix.Trim()}";
     }
 
     /// <summary>Resolve a provider's binary, preferring an alternative when
