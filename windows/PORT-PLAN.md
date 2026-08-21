@@ -3177,3 +3177,21 @@ de los smoke tests manuales, sin relación).
 sobre el commit `e40ff60`: `Passed! - Failed: 0, Passed: 495, Skipped: 0,
 Total: 495` — la subida exacta de +11 que coincide con los nuevos
 `WastedWorkTests` — y el build de la app WinUI 3 también en verde.
+
+**Señalado, no tocado — `BlastRadius.swift` es adyacente a Loops aunque
+no es uno de los cuatro ficheros nombrados.** Al escanear `Services/`
+buscando más candidatos puros bien acotados salió `BlastRadius.swift`: un
+clasificador puro que lee un diff de git y lo mete en un carril de riesgo
+`contained`/`wide`/`irreversible` ("abre la puerta según el radio de la
+explosión, no según la confianza"). Estructuralmente es exactamente el
+tipo de cosa que se ha estado portando en esta sesión (puro, sin spawnear
+CLI, con tests, capa de datos por delante de la UI) — pero antes de
+portarlo se grepeó quién lo llama y se encontró que `LoopRunner.swift` es
+uno de ellos, usándolo para decidir el auto-merge. Eso lo convierte en
+infraestructura adyacente a Loops aunque el fichero en sí no sea uno de
+los cuatro que nombra CLAUDE.md explícitamente — portar un clasificador
+de riesgo cuyo propósito entero es juzgar qué es seguro fusionar
+automáticamente es justo el tipo de cosa que merece que lo lea el
+founder antes de que entre en este port, así que se dejó tal cual en vez
+de portarlo con el mismo razonamiento de "es solo lógica pura" que
+justificó los demás de arriba.

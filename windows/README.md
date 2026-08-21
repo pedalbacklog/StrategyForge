@@ -2061,3 +2061,19 @@ failures, unrelated).
 on commit `e40ff60`: `Passed! - Failed: 0, Passed: 495, Skipped: 0, Total:
 495` — the exact +11 delta matching the new `WastedWorkTests` — and the
 WinUI 3 app build also green.
+
+**Flagged, not touched — `BlastRadius.swift` is Loop-adjacent despite not
+being one of the four named files.** Scanning `Services/` for more
+well-scoped pure-logic candidates surfaced `BlastRadius.swift`: a pure
+classifier that reads a git diff and sorts it into `contained`/`wide`/
+`irreversible` risk lanes ("open the gate on blast radius, not on
+confidence"). It's structurally exactly the kind of thing this session
+has been porting (pure, no CLI spawning, tested, data layer ahead of
+UI) — but before porting it, grepped for its callers and found
+`LoopRunner.swift` is one of them, using it to gate auto-merge decisions.
+That makes it Loop-adjacent infrastructure even though the file itself
+isn't one of the four CLAUDE.md names explicitly — porting a risk
+classifier whose entire purpose is judging what's safe to auto-merge is
+exactly the kind of thing that deserves the founder's read before it
+enters this port, so it was left alone rather than ported on the
+"it's just pure logic" reasoning that justified the others above.
