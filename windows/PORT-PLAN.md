@@ -2689,3 +2689,19 @@ Cubierto por build/test local: 440/442 (los 2 fallos son los smoke tests
 manuales preexistentes). Pendiente: confirmación en CI del build real de
 la app WinUI 3 (XAML nuevo, no compilable en este sandbox Linux) y
 verificación en Windows real por el founder.
+
+**CI en rojo al primer intento — bug real de Windows, no de producción.**
+6 de los tests nuevos (`TeamRunEngineTests`/`TeamRunViewModelTests`)
+fallaron en `windows-latest` con
+`System.UnauthorizedAccessException: Access to the path '...' is denied`
+al borrar el repo temporal en el `finally` de limpieza. Causa raíz: `git`
+marca los objetos sueltos bajo `.git/objects/` como solo-lectura, y el
+`Directory.Delete(recursive: true)` plano de .NET en Windows lanza esa
+excepción al toparse con uno en vez de quitarle el atributo antes (a
+diferencia de Linux, donde este sandbox nunca lo detectó). El código de
+producción nunca pisa esto — `TeamRunEngine`/`CodeGit` borran un worktree
+vía `git worktree remove`, una llamada real a git que gestiona sus propios
+objetos de solo lectura — así que es un arreglo solo de limpieza de tests,
+no de lógica. Arreglado con un `DeleteDirectoryRobustly` que quita
+`FileAttributes.ReadOnly` de cada fichero antes de borrar, en los dos
+ficheros de test afectados.

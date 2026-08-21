@@ -53,6 +53,25 @@ public class TeamRunEngineTests
         return dir;
     }
 
+    /// <summary>Real bug caught in CI on real Windows: git marks loose
+    /// objects under <c>.git/objects/</c> read-only, and .NET's
+    /// <c>Directory.Delete(recursive: true)</c> throws
+    /// <c>UnauthorizedAccessException</c> on Windows when it hits one
+    /// instead of clearing the attribute first (unlike Linux, where this
+    /// sandbox's own test runs never surfaced it). Production code never hit
+    /// this — <c>TeamRunEngine</c>/<c>CodeGit</c> remove a worktree via
+    /// <c>git worktree remove</c>, a real git subprocess call that handles
+    /// its own read-only objects — so this is a test-cleanup-only fix.</summary>
+    private static void DeleteDirectoryRobustly(string path)
+    {
+        if (!Directory.Exists(path)) return;
+        foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+        Directory.Delete(path, recursive: true);
+    }
+
     private static async Task<int> ChangedFileCountAsync(string dir)
     {
         var launcher = new RealProcessLauncher();
@@ -87,7 +106,7 @@ public class TeamRunEngineTests
         }
         finally
         {
-            Directory.Delete(repo, recursive: true);
+            DeleteDirectoryRobustly(repo);
         }
     }
 
@@ -108,7 +127,7 @@ public class TeamRunEngineTests
         }
         finally
         {
-            Directory.Delete(repo, recursive: true);
+            DeleteDirectoryRobustly(repo);
         }
     }
 
@@ -131,7 +150,7 @@ public class TeamRunEngineTests
         }
         finally
         {
-            Directory.Delete(repo, recursive: true);
+            DeleteDirectoryRobustly(repo);
         }
     }
 
@@ -152,7 +171,7 @@ public class TeamRunEngineTests
         }
         finally
         {
-            Directory.Delete(repo, recursive: true);
+            DeleteDirectoryRobustly(repo);
         }
     }
 }

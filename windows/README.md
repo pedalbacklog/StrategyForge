@@ -1614,3 +1614,18 @@ Covered by local build/test: 440/442 (the 2 failures are the pre-existing
 manual smoke tests). Pending: CI confirmation of the real WinUI 3 app
 build (new XAML, can't compile in this Linux sandbox) and verification on
 real Windows by the founder.
+
+**CI was red on the first attempt — a real Windows bug, not a production
+one.** 6 of the new tests (`TeamRunEngineTests`/`TeamRunViewModelTests`)
+failed on `windows-latest` with
+`System.UnauthorizedAccessException: Access to the path '...' is denied`
+while deleting the temp repo in the cleanup `finally`. Root cause: git
+marks loose objects under `.git/objects/` read-only, and .NET's plain
+`Directory.Delete(recursive: true)` throws that exception on Windows when
+it hits one instead of clearing the attribute first (unlike Linux, where
+this sandbox's own runs never surfaced it). Production code never hits
+this — `TeamRunEngine`/`CodeGit` remove a worktree via
+`git worktree remove`, a real git call that handles its own read-only
+objects — so this is a test-cleanup-only fix. Fixed with a
+`DeleteDirectoryRobustly` helper that clears `FileAttributes.ReadOnly`
+from every file before deleting, in both affected test files.

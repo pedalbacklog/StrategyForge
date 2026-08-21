@@ -43,6 +43,20 @@ public class TeamRunViewModelTests
         return dir;
     }
 
+    /// <summary>Same fix as TeamRunEngineTests.cs's — see its doc comment:
+    /// git leaves loose objects read-only, and .NET's plain
+    /// <c>Directory.Delete(recursive: true)</c> throws on Windows when it
+    /// hits one instead of clearing the attribute first.</summary>
+    private static void DeleteDirectoryRobustly(string path)
+    {
+        if (!Directory.Exists(path)) return;
+        foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+        Directory.Delete(path, recursive: true);
+    }
+
     private static Strategy ClaudeTeam() => new("Test", "", new List<AgentRole>
     {
         new("lead", RoleKind.Orchestrator, ClaudeModel.Sonnet5, "", "", isOrchestrator: true),
@@ -86,7 +100,7 @@ public class TeamRunViewModelTests
         }
         finally
         {
-            Directory.Delete(repo, recursive: true);
+            DeleteDirectoryRobustly(repo);
         }
     }
 
@@ -109,7 +123,7 @@ public class TeamRunViewModelTests
         }
         finally
         {
-            Directory.Delete(repo, recursive: true);
+            DeleteDirectoryRobustly(repo);
         }
     }
 
