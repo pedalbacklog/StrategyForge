@@ -23,10 +23,17 @@ namespace Coral.Core.Services;
 /// polish pass, not the engine port). Also not yet ported:
 /// <c>AdvisorEngine+Providers.swift</c>'s <c>assignProviders</c> — now ported,
 /// see <c>AdvisorEngine.Providers.cs</c> (same file-split as the Swift
-/// original's extension file). Still not ported: <c>aspirationalPicks</c>
-/// (display-only "ideal mix" preview, no UI consumes it yet),
-/// <c>adviseCrossProvider</c>/<c>applyingProviders</c> (wrap the
-/// not-yet-ported <c>adviseWithAI</c>).
+/// original's extension file), including <c>aspirationalPicks</c>.
+/// <c>adviseTiers</c>/<c>applyingProviders</c> are now ported too, see
+/// <c>AdvisorEngine.Tiers.cs</c> — <c>applyingProviders</c> only needed an
+/// already-built <see cref="Advice"/> plus the already-ported
+/// <see cref="AssignProviders"/>, it never actually depended on
+/// <c>adviseWithAI</c> itself. Still NOT ported: <c>adviseWithAI</c> (the
+/// on-device AI upgrade) and <c>adviseCrossProvider</c> (which wraps it) —
+/// <c>AdviseTiers</c> substitutes the plain <see cref="Advise"/> wherever
+/// Swift's <c>adviseTiers</c> calls <c>adviseWithAI</c>, exactly the
+/// fallback path Swift itself takes when AI is unavailable, so this is a
+/// substitution with an already-proven-equivalent behavior, not a cut.
 /// </summary>
 public static partial class AdvisorEngine
 {
@@ -53,10 +60,25 @@ public static partial class AdvisorEngine
         /// (best effort).</summary>
         public string GoalSuggestion { get; }
         public StrategyCost EstimatedCost { get; }
+        /// <summary>Free-text rationale from an on-device model, when AI
+        /// upgraded the shape. Always empty in this port — no Windows
+        /// equivalent to Apple Intelligence, see this class's doc comment —
+        /// kept only so <see cref="Tier"/>/<see cref="ApplyingProviders"/>
+        /// read the same way the Swift original does.</summary>
+        public string AiRationale { get; }
+        /// <summary>Always false in this port for the same reason as
+        /// <see cref="AiRationale"/>.</summary>
+        public bool UsedAI { get; }
+        /// <summary>Cross-provider assignments made on top of this advice.
+        /// Empty on the Claude-only path; populated when &gt;1 provider is
+        /// connected and <see cref="ApplyingProviders"/> mixed providers per
+        /// role.</summary>
+        public IReadOnlyList<ProviderPick> ProviderPicks { get; }
 
         public Advice(ClaudeModel model, Strategy strategy, string shapeRationaleKey, LoopKind loopKind,
             CostEffort effort, IReadOnlyList<DecisionStep> decisionPath, string goalSuggestion,
-            StrategyCost estimatedCost)
+            StrategyCost estimatedCost, string aiRationale = "", bool usedAI = false,
+            IReadOnlyList<ProviderPick>? providerPicks = null)
         {
             Model = model;
             Strategy = strategy;
@@ -66,6 +88,9 @@ public static partial class AdvisorEngine
             DecisionPath = decisionPath;
             GoalSuggestion = goalSuggestion;
             EstimatedCost = estimatedCost;
+            AiRationale = aiRationale;
+            UsedAI = usedAI;
+            ProviderPicks = providerPicks ?? Array.Empty<ProviderPick>();
         }
 
         private static string RoleSignature(AgentRole role) =>
@@ -84,7 +109,8 @@ public static partial class AdvisorEngine
                 && DecisionPath.Count == other.DecisionPath.Count
                 && DecisionPath.Zip(other.DecisionPath, StepsEqual).All(x => x)
                 && GoalSuggestion == other.GoalSuggestion
-                && Math.Abs(EstimatedCost.PerRun - other.EstimatedCost.PerRun) < 0.000_001;
+                && Math.Abs(EstimatedCost.PerRun - other.EstimatedCost.PerRun) < 0.000_001
+                && ProviderPicks.SequenceEqual(other.ProviderPicks);
         }
 
         private static bool StepsEqual(DecisionStep a, DecisionStep b) =>
@@ -104,6 +130,7 @@ public static partial class AdvisorEngine
             hash.Add(Effort);
             hash.Add(DecisionPath.Count);
             hash.Add(GoalSuggestion);
+            foreach (var pick in ProviderPicks) hash.Add(pick);
             return hash.ToHashCode();
         }
     }

@@ -201,26 +201,39 @@ public sealed partial class MainPage : Page
         new StrategyEditorWindow(strategy, StrategyPickerViewModel, ViewModel).Activate();
     }
 
-    private void OnSuggestTeamClick(object sender, RoutedEventArgs e) => AdvisorViewModel.Suggest();
+    private void OnSuggestTeamClick(object sender, RoutedEventArgs e)
+    {
+        AdvisorViewModel.ChosenTeamName = StrategyPickerViewModel.SelectedStrategy?.Name;
+        AdvisorViewModel.Suggest();
+    }
 
     private void OnAdvisorTaskBoxKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key != VirtualKey.Enter) return;
         e.Handled = true;
+        AdvisorViewModel.ChosenTeamName = StrategyPickerViewModel.SelectedStrategy?.Name;
         AdvisorViewModel.Suggest();
     }
 
-    /// <summary>Applies the Advisor's current recommendation the exact same
+    /// <summary>Switches the displayed tier (Economy/Recommended/Max) — the
+    /// clicked chip's tier id travels in its own <c>Tag</c>, set from
+    /// <c>TierChip.Id</c> in the XAML template.</summary>
+    private void OnTierChipClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is string tierId) AdvisorViewModel.SelectTier(tierId);
+    }
+
+    /// <summary>Applies the Advisor's currently SELECTED tier the exact same
     /// way manually picking a template does — writes the strategy, then
     /// (on success) updates <see cref="ChatViewModel.Model"/>. A no-op if
     /// "Suggest" hasn't produced anything yet (button is disabled in that
     /// state, this is defensive).</summary>
     private async void OnUseSuggestedTeamClick(object sender, RoutedEventArgs e)
     {
-        if (AdvisorViewModel.Advice is not { } advice) return;
-        if (await StrategyPickerViewModel.SelectAsync(advice.Strategy))
+        if (AdvisorViewModel.SelectedTier is not { } tier) return;
+        if (await StrategyPickerViewModel.SelectAsync(tier.Advice.Strategy))
         {
-            ViewModel.Model = advice.Model.ToRawValue();
+            ViewModel.Model = tier.Advice.Model.ToRawValue();
         }
     }
 

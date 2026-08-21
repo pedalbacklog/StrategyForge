@@ -27,6 +27,17 @@ public static partial class AdvisorEngine
     /// <summary>How aggressively to trade cost for quality.</summary>
     public enum TierBias { Saver, Balanced, Max }
 
+    /// <summary>Map a tier id ("saver" | "balanced" | "max", see
+    /// <see cref="Tier.Id"/>) to its bias — used by <see cref="AdviseTiers"/>
+    /// so each tier's cross-provider reassignment leans the same direction
+    /// as its cost/quality intent.</summary>
+    public static TierBias TierBiasFrom(string tierId) => tierId switch
+    {
+        "saver" => TierBias.Saver,
+        "max" => TierBias.Max,
+        _ => TierBias.Balanced,
+    };
+
     /// <summary>A model's capability fingerprint, scored 1-5 per axis. The
     /// numbers are a deliberate, editable starting point, mirrored verbatim
     /// from the Swift catalog.</summary>
@@ -153,6 +164,24 @@ public static partial class AdvisorEngine
             ModelProfiles.Where(p => connectedSet.Contains(p.Provider)).ToList(), modelLockedSet);
         if (available.Select(p => p.Provider).Distinct().Count() <= 1) return (strategy, new List<ProviderPick>());
         return AssignCore(strategy, available, bias, connectedSet, deprioritizeSet);
+    }
+
+    /// <summary>The IDEAL cross-provider mix computed against ALL providers
+    /// (ignoring what's connected) — for DISPLAY ONLY. Each pick is flagged
+    /// <see cref="ProviderPick.IsConnected"/> so a card can dim the
+    /// not-yet-connected ones and offer a one-tap connect. This never
+    /// mutates the strategy that actually runs (it returns picks, not a
+    /// strategy), so a run can never target a provider the user hasn't
+    /// connected.</summary>
+    public static List<ProviderPick> AspirationalPicks(
+        Strategy strategy,
+        IReadOnlySet<AIProvider> connected,
+        TierBias bias = TierBias.Balanced,
+        IReadOnlySet<AIProvider>? modelLocked = null)
+    {
+        var available = CollapsingLocked(ModelProfiles.ToList(), modelLocked ?? new HashSet<AIProvider>());
+        if (available.Select(p => p.Provider).Distinct().Count() <= 1) return new List<ProviderPick>();
+        return AssignCore(strategy, available, bias, connected, new HashSet<AIProvider>()).Picks;
     }
 
     /// <summary>Collapse each <paramref name="locked"/> provider — one whose CLI

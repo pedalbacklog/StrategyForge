@@ -2449,3 +2449,109 @@ segunda es el propio flujo de redirección OAuth de `codex`, no un
 duplicado de Coral. Pendiente para el pase de pulido de UI (junto con
 el Advisor Economy/Recommended/Max): limpiar los códigos ANSI del panel
 de log y aclarar el mensaje de estas modales/flyouts de conexión.
+
+**2026-08-21 — Advisor: niveles Economy/Recommended/Max, puerto completo
+de la tarjeta.** El founder pidió seguir con "los niveles" de la cola de
+pulido de UI, y eligió expresamente el alcance más grande ofrecido
+("todo de una vez": niveles + "¿por qué?" + mezcla entre proveedores +
+sugerencia de loop), tras ver el tamaño real (`adviseTiers` en
+`AdvisorEngine.swift`, 90 líneas; `AdvisorInlineCard.swift`, 255 líneas
+de UI).
+
+- `Coral.Core/Services/AdvisorEngine.Tiers.cs` (nuevo, `partial class`
+  compartida): porta `adviseTiers` completo — `Tier` (id/label/nota/
+  advice), las variantes saver/max (`Variant`: desplaza el modelo de
+  CADA rol una banda arriba/abajo, ajusta el `Count` del rol de mayor
+  fan-out, reestima coste y esfuerzo), la deduplicación (si la variante
+  barata colapsa a la MISMA forma que la recomendada — p. ej. una tarea
+  que ya cae en Haiku45 solo, sin nada más barato — se descarta, nunca
+  se muestra un duplicado), la reasignación entre proveedores por nivel
+  (cada nivel usa su propio sesgo: Economy → `TierBias.Saver`, Max →
+  `TierBias.Max`) vía `ApplyingProviders` (nuevo: solo necesitaba el
+  `AssignProviders` YA portado — nunca dependió de verdad de
+  `adviseWithAI`, a pesar de lo que decía el comentario de clase
+  anterior de `AdvisorEngine.cs`, corregido en este commit), y
+  `ForcingHeadDown` (si tras la reasignación el nivel Economy vuelve a
+  compartir el mismo modelo de cabecera que Recommended, se baja un
+  escalón para que siga leyéndose como "más barato" de verdad).
+  Deliberadamente NO portado: `adviseWithAI` en sí (sin equivalente en
+  Windows) — `AdviseTiers` usa `Advise()` (el camino determinista) en su
+  lugar en cada punto donde Swift llama a `adviseWithAI`, que es
+  EXACTAMENTE el camino de repliegue que el propio Swift toma cuando la
+  IA no está disponible — no es un recorte de comportamiento nuevo, es
+  una sustitución por un camino que Swift ya ejercita.
+- `Coral.Core/Services/AdvisorEngine.Providers.cs`: nuevo
+  `AspirationalPicks` (la mezcla IDEAL calculada contra TODOS los
+  proveedores del catálogo, ignorando cuáles están conectados — solo
+  para mostrar, nunca para ejecutar; reutiliza el `AssignCore` privado
+  ya existente) y `TierBiasFrom(tierId)`.
+- `Coral.Core/Services/AdvisorEngine.cs`: `Advice` gana tres campos
+  nuevos (`AiRationale`, `UsedAI` — siempre `""`/`false` en este port,
+  sin equivalente de IA on-device — y `ProviderPicks`), con
+  constructor/igualdad/hash actualizados para incluir `ProviderPicks`
+  (igual que la igualdad de `Advice.swift`, que sí la incluye).
+- `Coral.Core/ViewModels/AdvisorViewModel.cs` (reescrito): pasa de
+  exponer una única `Advice` a `Tiers`/`SelectedTierId`/`SelectedTier` +
+  `TierChips` (label/coste/selección, listo para bindear), `SummaryText`/
+  `SelectedNoteText` del nivel elegido, `DecisionLines` (el camino de
+  decisión pre-formateado línea a línea — mismo patrón que
+  `StrategyEditorViewModel.IssueLines`), `ProviderMixLines` (la mezcla
+  de proveedores del nivel elegido, real si hay ≥2 conectados, si no la
+  aspiracional con "(not connected)"), `ShowLoopHint`/`LoopHintText`
+  (solo informativo — ver más abajo por qué no hay botón), y
+  `ChosenTeamName`/`HasChosenTeam`/`ChosenTeamHintText` (el "elegiste X"
+  del original). Como Windows no tiene capa de localización (todo el
+  resto del port ya usa literales en inglés directamente en el XAML),
+  el texto de niveles/preguntas/evidencias/razones de proveedor se
+  portó como diccionarios `switch` privados con el copy EN de
+  `Localization+Advisor.swift`, con UN cambio deliberado: la respuesta
+  "hardest = no" nombra el modelo que Windows REALMENTE asigna en esa
+  rama (Opus 5, según `Advise()`), no el "Opus 4.8" ya desactualizado
+  del copy de Swift — no es tocar lógica compartida, es evitar escribir
+  un error factual nuevo en un texto que se está escribiendo desde cero.
+- `Coral/Converters/BoolToAccentButtonStyleConverter.cs` (nuevo):
+  bool → `Style` de botón (`AccentButtonStyle` si es el nivel
+  seleccionado, si no el estilo por defecto) — para que los tres chips
+  de nivel se vean como pestañas seleccionables sin inventar un sistema
+  de estilos general, solo este único uso.
+- `Coral/MainPage.xaml`/`.xaml.cs`: la fila de una sola línea "resumen +
+  Use this" se sustituye por: la fila de chips de nivel (`ItemsControl`
+  de `TierChips`, 1 a 3 según deduplicación), resumen + nota del nivel
+  elegido, botón "Why?" con un `Flyout` que muestra `DecisionLines`, la
+  fila de mezcla de proveedores, y el aviso de loop (sin botón — ver
+  abajo). `OnTierChipClick` nuevo (lee el `Tag` del botón pulsado, que
+  lleva el id del nivel vía `x:Bind Id`). `OnSuggestTeamClick`/
+  `OnAdvisorTaskBoxKeyDown` ahora también fijan
+  `AdvisorViewModel.ChosenTeamName` desde
+  `StrategyPickerViewModel.SelectedStrategy?.Name` antes de sugerir.
+  `OnUseSuggestedTeamClick` ahora aplica `SelectedTier.Advice` en vez de
+  la antigua `Advice` única.
+
+**Decisión delicada, comprobada ANTES de escribir código, no después:**
+la tarjeta de Swift incluye un botón "Create loop" que abre la creación
+real de un loop cuando la tarea lee como recurrente/con evento. Fase 8
+(Loops) no tiene NINGUNA UI de programación/generación en este port
+todavía, y `CLAUDE.md` es explícito: los cambios de Loop necesitan
+lectura humana del diff, nunca un cambio autónomo — no hay a dónde
+llevar ese botón sin entrar en esa zona vetada. Se portó el TEXTO
+informativo del aviso (lee `Advice.LoopKind`, ya portado sin tocar
+ficheros vetados — ver `Models/LoopKind.cs`), pero NO el botón/acción
+"Create loop". Esto no se preguntó aparte porque `CLAUDE.md` ya lo
+resuelve como regla firme, no una cuestión de alcance — se avisó al
+founder de este recorte específico como parte del plan, no en silencio.
+
+Nuevos tests: `AdvisorTiersTests.cs` (11, cobertura propia — no existe
+`AdviseTiersTests.swift` en el original, ni Swift tiene tests
+dedicados para `adviseTiers`): las tres opciones en orden, Recommended
+siempre presente y coincide con `Advise()` puro, Economy más barato/Max
+más caro, deduplicación de un nivel colapsado, sin picks en Claude-solo,
+picks reales con ≥3 proveedores conectados, la garantía "Economy nunca
+lee como el mismo modelo que Recommended", determinismo, y
+`ApplyingProviders`/`AspirationalPicks` por separado. `AdvisorViewModelTests.cs`
+reescrito (la antigua API de `Advice` único ya no existe) más 6 tests
+nuevos para los niveles/mezcla/loop hint/equipo elegido.
+
+Cubierto por build/test local: 395/397 (los 2 fallos son los smoke
+tests manuales preexistentes, sin relación). Pendiente: confirmación en
+CI del build real de la app WinUI 3 (el XAML nuevo no se puede compilar
+en este sandbox Linux) y verificación en Windows real por el founder.
