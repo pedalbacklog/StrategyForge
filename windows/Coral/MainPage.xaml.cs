@@ -201,6 +201,17 @@ public sealed partial class MainPage : Page
         new StrategyEditorWindow(strategy, StrategyPickerViewModel, ViewModel).Activate();
     }
 
+    /// <summary>Opens the "Run for real" window (cross-provider execution,
+    /// minimal cut — see TeamRunViewModel.cs's doc comment) for the
+    /// currently selected team. Like "Edit current team…", disabled while
+    /// <see cref="Coral.Core.ViewModels.StrategyPickerViewModel.HasSelectedStrategy"/>
+    /// is false.</summary>
+    private void OnRunTeamClick(object sender, RoutedEventArgs e)
+    {
+        if (StrategyPickerViewModel.SelectedStrategy is not { } strategy) return;
+        new TeamRunWindow(RepoPath, strategy).Activate();
+    }
+
     private void OnSuggestTeamClick(object sender, RoutedEventArgs e)
     {
         AdvisorViewModel.ChosenTeamName = StrategyPickerViewModel.SelectedStrategy?.Name;

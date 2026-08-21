@@ -79,6 +79,13 @@
                                 <Button Content="Edit current team…" Click="OnEditTeamClick"
                                         IsEnabled="{x:Bind StrategyPickerViewModel.HasSelectedStrategy, Mode=OneWay}" />
 
+                                <!-- Run for real (cross-provider execution, minimal cut — see
+                                     TeamRunViewModel.cs's doc comment): isolates the current
+                                     team in its own worktree and runs it for real, showing the
+                                     resulting diff before anything touches your repo. -->
+                                <Button Content="Run for real…" Click="OnRunTeamClick"
+                                        IsEnabled="{x:Bind StrategyPickerViewModel.HasSelectedStrategy, Mode=OneWay}" />
+
                                 <!-- Advisor (P0 item 2, Phase 3/4 — tiered options: Economy/
                                      Recommended/Max, see AdvisorViewModel.cs's doc comment
                                      for what's deliberately not ported from macOS's inline

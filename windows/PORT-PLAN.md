@@ -2665,3 +2665,27 @@ Cubierto por build/test local: 436/438 (los 2 fallos son los smoke tests
 manuales preexistentes, sin relación). Ningún fichero de este corte toca
 XAML, así que esta capa queda verificada sin necesitar CI. Pendiente: la UI
 ("Run for real") y, después, verificación en CI + Windows real.
+
+**UI: "Run for real…" — completa el corte mínimo.** Nuevo botón junto a
+"Edit current team…" en el flyout "Strategy" (mismo `IsEnabled` que él,
+atado a `StrategyPickerViewModel.HasSelectedStrategy`). Abre
+`TeamRunWindow` (mismo patrón "ventana separada" que
+`StrategyEditorWindow`/`CodeModeWindow` — así esta UI nueva, aún sin
+verificar en Windows real, no puede desestabilizar el flujo de chat ya
+confirmado). `TeamRunViewModel.cs` (nuevo): envuelve `TeamRunEngine` con
+`Task`/`IsRunning`/`StatusMessage`/`Outcome`, `DiffLines` (reutiliza
+`CodeGit.Parse`, el mismo formato que ya usa el panel de git de Code Mode),
+`AuthorshipLines` (solo tiene contenido en una ejecución cross-provider —
+un equipo solo-Claude no tiene procedencia por línea, fue la propia
+herramienta Agent de Claude Code quien delegó), y `RunAsync`/`ApplyAsync`/
+`DiscardAsync`. `TeamRunPage.xaml`: caja de tarea + "Run", el visor de
+diff (mismo `ListView`/`DiffLineKindToGlyphConverter` que
+`CodeModePage.xaml`), líneas de autoría, y "Discard"/"Apply". 4 tests
+nuevos para el ViewModel (reutilizando el mismo patrón de git real de
+`TeamRunEngineTests.cs` para los casos que necesitan un resultado `Done`
+real contra el que comprobar `CanApply`).
+
+Cubierto por build/test local: 440/442 (los 2 fallos son los smoke tests
+manuales preexistentes). Pendiente: confirmación en CI del build real de
+la app WinUI 3 (XAML nuevo, no compilable en este sandbox Linux) y
+verificación en Windows real por el founder.
