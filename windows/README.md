@@ -1346,4 +1346,18 @@ caught it in time) — the founder hasn't confirmed that part yet.
 
 Covered by local build/test (375/377 — the 2 failures are the
 pre-existing manual smoke tests needing real CLIs on PATH, unrelated to
-this change) — pending CI confirmation. Not blocking for this cut.
+this change). CONFIRMED compiling on windows-latest CI (commit
+`b1ff1fb`, run
+[32473164056](https://github.com/pedalbacklog/StrategyForge/actions/runs/32473164056) —
+raw log: "Passed! - Failed: 0, Passed: 372, Skipped: 0, Total: 372" and
+"Build succeeded. 0 Warning(s) 0 Error(s)" for `Coral.csproj`'s `dotnet
+build`).
+
+**The Gemini finding is now fully closed, not just parked:** the founder
+confirmed on real Windows, with a screenshot, that after Google's
+success screen the "Connect Gemini" button DID flip to "Connected." —
+the creds watcher (`WatchGeminiCredsAsync`) correctly catches the real
+success; the only fragile part was multi-screen human login timing,
+already mitigated by the wider window above. Still to reconfirm on real
+Windows: that "Connect Codex" now completes without the 150s timeout,
+under the new 300s limit. Not blocking for this cut.
