@@ -2149,11 +2149,14 @@ con nombre — eso, si hace falta, es un seguimiento futuro aparte.
 `AutoFix()` sustituyendo la estrategia y volviendo a validar,
 `IssueLines` distinguiendo error/aviso por el prefijo) — 345 en total.
 
-Cubierto por tests unitarios y build/test local (345/345) — pendiente de
-verificación de compilación en windows-latest CI (toda la superficie de
-`StrategyEditorPage.xaml` es nueva: `ItemsControl` anidado, un
-`DataTemplate` con `x:DataType="x:String"`, varios `Loaded`/eventos de
-cambio) y, sobre todo, de prueba a mano en Windows real — es la pieza de
-UI más grande de todo este bloque de trabajo, así que hay que contar con
-al menos una ronda de "el founder lo prueba y aparece un bug de WinUI",
-como en cada fase anterior.
+Cubierto por tests unitarios, build/test local (345/345) y CONFIRMADO
+compilando en windows-latest CI (commit `9da8730`, run
+[32431703595](https://github.com/pedalbacklog/StrategyForge/actions/runs/32431703595) —
+log real inspeccionado línea a línea, no solo el check verde: "Passed! -
+Failed: 0, Passed: 345, Skipped: 0, Total: 345" y "Build succeeded. 0
+Warning(s) 0 Error(s)" para `Coral.csproj`; el `x:DataType="x:String"` y
+los eventos `Loaded` dentro del `DataTemplate` anidado compilaron limpio,
+sin advertencias). Pendiente, sobre todo: prueba a mano en Windows real —
+es la pieza de UI más grande de todo este bloque de trabajo, así que hay
+que contar con al menos una ronda de "el founder lo prueba y aparece un
+bug de WinUI", como en cada fase anterior.

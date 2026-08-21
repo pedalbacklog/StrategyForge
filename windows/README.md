@@ -1105,11 +1105,14 @@ follow-up if it's ever needed.
 swapping the strategy and revalidating, `IssueLines` distinguishing
 error/warning by prefix) — 345 total.
 
-Covered by unit tests and local build/test (345/345) — pending
-windows-latest CI compile confirmation (all of `StrategyEditorPage.xaml`
-is new: a nested `ItemsControl`, a `DataTemplate` with
-`x:DataType="x:String"`, several `Loaded`/change events) and, most
-importantly, hands-on verification on real Windows — this is the biggest
-single UI surface in this whole block of work, so expect at least one
-round of "the founder tries it and a WinUI bug shows up," same as every
-phase before it.
+Covered by unit tests, local build/test (345/345), and CONFIRMED compiling
+on windows-latest CI (commit `9da8730`, run
+[32431703595](https://github.com/pedalbacklog/StrategyForge/actions/runs/32431703595) —
+raw log inspected line by line, not just the green check: "Passed! -
+Failed: 0, Passed: 345, Skipped: 0, Total: 345" and "Build succeeded. 0
+Warning(s) 0 Error(s)" for `Coral.csproj`; the `x:DataType="x:String"` and
+the `Loaded` events inside the nested `DataTemplate` compiled clean, no
+warnings). Pending, most importantly: hands-on verification on real
+Windows — this is the biggest single UI surface in this whole block of
+work, so expect at least one round of "the founder tries it and a WinUI
+bug shows up," same as every phase before it.
