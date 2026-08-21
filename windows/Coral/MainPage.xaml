@@ -72,6 +72,12 @@
                                 <TextBlock Text="{x:Bind StrategyPickerViewModel.StatusMessage, Mode=OneWay}"
                                            Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
 
+                                <!-- Edit team (P0 item 2, Phase 2 — a deliberately minimal
+                                     slice, see StrategyEditorViewModel.cs): nothing to edit
+                                     until a strategy has actually been written once. -->
+                                <Button Content="Edit current team…" Click="OnEditTeamClick"
+                                        IsEnabled="{x:Bind StrategyPickerViewModel.HasSelectedStrategy, Mode=OneWay}" />
+
                                 <!-- Advisor (P0 item 2, Phase 3 — heuristic half only, see
                                      AdvisorEngine.cs): describe the task in plain language,
                                      get a recommended team instantly (no network, no LLM

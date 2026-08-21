@@ -346,8 +346,8 @@ on-disk credentials files — the first piece of Fase 4), and the minimal
 `ChatViewModel` (Fase 5, single-provider `-p` path only),
 `ProviderInstaller`/`ConnectViewModel` (Fase 6), and `CodeGit`/
 `GitPanelViewModel`/`GitHubCLI`/`PullRequestViewModel`/`RepoPickerViewModel`/`ShipFlow`/`AppSettings` (Fase 7 — see below), and
-`StrategyPickerViewModel` (P0 item 2, Phase 1), and `StrategyGenerator`/`AdvisorEngine`/`AdvisorViewModel`
-(P0 item 2, Phase 3 — see below) — 340 automated
+`StrategyPickerViewModel` (P0 item 2, Phase 1), `StrategyGenerator`/`AdvisorEngine`/`AdvisorViewModel`
+(P0 item 2, Phase 3), and `StrategyEditorViewModel` (P0 item 2, Phase 2 — see below) — 345 automated
 xUnit tests, all passing (including `TemplatesAreAllValid`, which iterates
 every template through `Strategy.Validate()`, `StrategyWriterTests`, which
 round-trips real writes to a temp directory, `RealProcessLauncherTests`, which
@@ -358,7 +358,7 @@ added after the first real-Windows run, `ProviderAuthTests`,
 (against a new `FakePseudoConsoleLauncher`, mirroring `FakeProcessLauncher`),
 `ConnectViewModelTests`, `CodeGitTests`, `GitPanelViewModelTests`,
 `GitHubCLITests`, `AppSettingsTests`, `StrategyPickerViewModelTests`,
-`AdvisorEngineTests`, `AdvisorViewModelTests`, and the `MissionReport.AgentLines` cases) — plus 4 manual
+`AdvisorEngineTests`, `AdvisorViewModelTests`, `StrategyEditorViewModelTests`, and the `MissionReport.AgentLines` cases) — plus 4 manual
 tests excluded from that count and from CI
 (see "Testing the pieces that need a real Windows machine").
 Fase 2's last loose end (`MissionReport.agentLines()`, which needed
@@ -1035,3 +1035,81 @@ confirmed it. With that, Phase 3 (Advisor, heuristic half) is fully
 closed: engine ported, wired into the UI, all three real bugs found along
 the way (the flyout self-closing, Enter not triggering Suggest, "Use this"
 going silent from a stuck `IsBusy`) fixed and verified on real Windows.
+
+**Update: Phase 2 — strategy editing, a deliberately scoped-down first
+cut.** The founder asked to continue with "the first item" (strategy
+editing) from the remaining-work list. Before writing any code,
+`StrategyEditorView.swift` (589 lines) and `RoleRowView.swift` (469
+lines) were read — much bigger than "tweak the roles I already have and
+save" actually needs: a repo picker embedded in the editor (this port's
+repo is already open), an animated topology diagram, a cost popover, an
+MCP server editor, cross-provider role mixing (Windows can't connect
+Codex/Gemini yet), prompt/description/memory editing, and several
+"generate" variants (Terminal, commit, download a brief, copy a starter
+prompt). An explicit cut was agreed with the founder before any code was
+written: only name, model, instance count, and tools per role, with live
+`Strategy.Validate()` and a "Fix All" (`Strategy.AutoFixed()`) button —
+everything else stays out, documented as a deliberate cut, not an
+oversight.
+
+New pieces: `StrategyEditorViewModel` (`Coral.Core`, new) wraps a
+`Strategy` in place — `Roles` exposed separately from `Strategy` so the
+role-row `ItemsControl` only re-binds when the role LIST itself changes,
+`Issues`/`IssueLines` (pre-formatted plain-text lines — `"❌ ..."`/`"⚠ ..."` —
+so the issues list's DataTemplate x:Binds against `string` instead of
+needing a XAML type reference to the nested `Strategy.ValidationIssue`
+record), `IsValid`, `HasAutoFixableIssues`, `Revalidate()`, `AutoFix()`
+(swaps the whole `Strategy` for `AutoFixed()`'s fixed copy — not an
+in-place mutation). `StrategyEditorWindow`/`StrategyEditorPage` (`Coral`,
+new): a separate window, same pattern as `CodeModeWindow` — a real role
+editor needs more room than a 380px flyout comfortably gives, and keeping
+it separate means this not-yet-real-Windows-verified UI can't destabilize
+the already-confirmed chat/Strategy flow. An `ItemsControl` (not
+`ListView`, so selection handling doesn't fight clicking into a `TextBox`)
+renders one card per role. Most of each row's controls (model, instance
+count, tools) are wired in code-behind rather than x:Bind, since
+`AgentRole` isn't an observable type and none of those three fields had a
+clean x:Bind path without a converter that wasn't worth it for this small
+a surface: the model uses 4 fixed `ComboBoxItem`s with `Loaded`/
+`SelectionChanged` mapping by hand (avoids a `ClaudeModel`↔index
+converter); instance count is a numeric `TextBox` with `Loaded`/
+`TextChanged` (avoids an int↔double converter for `NumberBox`); tools are
+a comma-separated `TextBox` with the same `Loaded`/`TextChanged` shape.
+The role name DOES use plain `x:Bind Mode=TwoWay` (a simple `string`, no
+type friction) — disabled for the orchestrator, matching Swift, since it
+generates no subagent file of its own.
+
+**Real bug caught before it ever reached CI**: `Text="{x:Bind Role}"`
+(each row's `RoleKind`) would NOT have compiled — x:Bind doesn't
+implicitly convert an enum to `string`, the same reason
+`DiffLineKindToGlyphConverter` already exists for `DiffLineKind`. Caught
+in self-review before pushing this time (not on real Windows), fixed with
+a new converter of the same shape, `RoleKindToDisplayNameConverter.cs`.
+
+A new "Edit current team…" button on the Fase 1 "Strategy" flyout, enabled
+only when `StrategyPickerViewModel.HasSelectedStrategy` is true (new
+property, same pattern as `AdvisorViewModel.HasAdvice` — this port only
+has bool→something converters, not one for a nullable reference). "Save"
+in the editor writes through the same path
+(`StrategyPickerViewModel.SelectAsync`) picking a template or applying
+Advisor's suggestion already uses, so the header and the orchestrator's
+model stay in sync the same way.
+
+Persistence is deliberately minimal, same as the original plan flagged:
+edits live on the in-memory `Strategy` for as long as the window is open;
+there's no "my saved named templates" library yet — a separate future
+follow-up if it's ever needed.
+
+5 new tests (`StrategyEditorViewModelTests.cs`: initial validation,
+`Revalidate()` picking up a real hand-made error on a role, `AutoFix()`
+swapping the strategy and revalidating, `IssueLines` distinguishing
+error/warning by prefix) — 345 total.
+
+Covered by unit tests and local build/test (345/345) — pending
+windows-latest CI compile confirmation (all of `StrategyEditorPage.xaml`
+is new: a nested `ItemsControl`, a `DataTemplate` with
+`x:DataType="x:String"`, several `Loaded`/change events) and, most
+importantly, hands-on verification on real Windows — this is the biggest
+single UI surface in this whole block of work, so expect at least one
+round of "the founder tries it and a WinUI bug shows up," same as every
+phase before it.

@@ -101,8 +101,11 @@ Puntos concretos que hacen de WinUI 3 un buen encaje mirando el código real:
    esta lista estaba desactualizado; tanto macOS como el port ya tienen 15),
    Advisor básico. Selección de plantilla (Fase 1) y el motor del Advisor
    en su mitad determinista, enganchado a la UI (Fase 3) — ambos ✅, ver
-   §10 (2026-08-11). Queda: edición de estrategia (Fase 2) y el pulido de
-   UI del Advisor con niveles Economy/Recommended/Max (Fase 4).
+   §10 (2026-08-11). Edición de estrategia (Fase 2) — 🔶 primer corte
+   escrito (nombre/modelo/instancias/herramientas por rol + validación +
+   Fix All), pendiente de CI y de prueba en Windows real (2026-08-21).
+   Queda: el pulido de UI del Advisor con niveles Economy/Recommended/Max
+   (Fase 4).
 3. Instalación guiada + login de al menos **Claude Code** (el proveedor
    principal); Codex y Gemini pueden ir en P1 si el adapter tarda.
 4. Generación de archivos (`.claude/agents/*.md`, `CLAUDE.md`) — portar
@@ -2073,3 +2076,84 @@ effort"), pulsó "Use this", y la cabecera cambió a "Debate / Consensus
 enganchado a la UI, los tres bugs reales encontrados en el camino
 (flyout autocerrándose, Intro sin disparar Suggest, "Use this" silencioso
 por `IsBusy` atascado) arreglados y verificados en Windows real.
+
+**2026-08-21 — Fase 2: edición de estrategia, primer corte deliberadamente
+recortado.** El founder pidió seguir con "la primera de la lista"
+(edición de estrategia). Antes de tocar código se leyó
+`StrategyEditorView.swift` (589 líneas) y `RoleRowView.swift` (469
+líneas) — mucho más grande de lo necesario para "tocar los roles que ya
+tengo y guardar": selector de repo propio (este port ya tiene el repo
+abierto), diagrama de topología animado, popover de coste, editor de
+servidores MCP, mezcla entre proveedores (Windows aún no puede conectar
+Codex/Gemini), edición de prompt/descripción/memoria, y variantes de
+generar (Terminal, commit, descargar brief, copiar prompt). Se acordó con
+el founder un recorte explícito antes de escribir nada: solo nombre,
+modelo, número de instancias y herramientas por rol, con
+`Strategy.Validate()` en vivo y "Fix All" (`Strategy.AutoFixed()`) — todo
+lo demás queda fuera, documentado como corte deliberado, no ausencia.
+
+Piezas nuevas:
+- `Coral.Core/ViewModels/StrategyEditorViewModel.cs` (nuevo). Envuelve un
+  `Strategy` en el sitio: `Roles` (expuesto aparte de `Strategy` para que
+  el `ItemsControl` de filas solo se refresque cuando la LISTA de roles
+  cambia, no en cada notificación no relacionada), `Issues`/`IssueLines`
+  (mensajes pre-formateados como texto plano — `"❌ ..."`/`"⚠ ..."` — para
+  que la plantilla de la lista de incidencias haga `x:Bind` contra
+  `string` en vez de necesitar una referencia XAML al tipo anidado
+  `Strategy.ValidationIssue`), `IsValid`, `HasAutoFixableIssues`,
+  `Revalidate()`, `AutoFix()` (sustituye `Strategy` entero por la copia
+  arreglada que devuelve `AutoFixed()` — no es una mutación en el sitio).
+- `Coral/StrategyEditorWindow.xaml`/`.xaml.cs` + `StrategyEditorPage.xaml`/`.xaml.cs`
+  (nuevos). Ventana separada, mismo patrón que `CodeModeWindow` — un
+  editor de roles de verdad necesita más sitio del que da cómodamente una
+  Flyout de 380px, y mantenerlo separado evita que esta UI todavía no
+  verificada en Windows real pueda desestabilizar el flujo de chat/Strategy
+  ya confirmado. Un `ItemsControl` (no `ListView`, para que la selección
+  no estorbe al hacer clic dentro de una `TextBox`) con una tarjeta por
+  rol. La mayoría de los controles de cada fila (modelo, número de
+  instancias, herramientas) se conectan desde el code-behind en vez de con
+  `x:Bind`, porque `AgentRole` no es un tipo observable y ninguno de esos
+  tres campos tiene un camino de `x:Bind` limpio sin un converter que no
+  compensaba para una superficie tan pequeña: el modelo usa 4
+  `ComboBoxItem` fijos con `Loaded`/`SelectionChanged` mapeando a mano
+  (evita un converter `ClaudeModel`↔índice); el número de instancias es una
+  `TextBox` numérica con `Loaded`/`TextChanged` (evita un converter
+  int↔double para `NumberBox`); las herramientas son una `TextBox` de texto
+  separado por comas con el mismo patrón `Loaded`/`TextChanged`. El nombre
+  del rol sí usa `x:Bind Mode=TwoWay` normal (es un `string` simple, sin
+  fricción de tipos) — deshabilitado para el orquestador, igual que en
+  Swift, porque no genera fichero de subagente propio.
+- **Bug real evitado antes de llegar a CI**: `Text="{x:Bind Role}"` (el
+  `RoleKind` de cada fila) no habría compilado — `x:Bind` no convierte un
+  enum a `string` implícitamente, el mismo motivo por el que ya existe
+  `DiffLineKindToGlyphConverter` para `DiffLineKind`. Se detectó en
+  revisión propia antes de pushear (no en Windows real esta vez) y se
+  arregló con un converter nuevo del mismo patrón,
+  `RoleKindToDisplayNameConverter.cs`.
+- Botón nuevo "Edit current team…" en la flyout "Strategy" de Fase 1,
+  habilitado solo cuando `StrategyPickerViewModel.HasSelectedStrategy` es
+  verdadero (propiedad nueva, mismo patrón que `AdvisorViewModel.HasAdvice` —
+  este port ya solo tiene conversores bool→algo, no uno para referencia
+  nula). "Save" en el editor escribe por el mismo camino
+  (`StrategyPickerViewModel.SelectAsync`) que elegir una plantilla o
+  aplicar la sugerencia del Advisor, así que la cabecera y el modelo del
+  orquestador quedan sincronizados igual.
+
+Persistencia deliberadamente mínima, igual que el plan original ya
+anotaba: la edición vive en el `Strategy` en memoria mientras la ventana
+está abierta; no hay todavía una biblioteca de "mis plantillas guardadas"
+con nombre — eso, si hace falta, es un seguimiento futuro aparte.
+
+5 tests nuevos (`StrategyEditorViewModelTests.cs`: validación inicial,
+`Revalidate()` recogiendo un error real hecho a mano sobre un rol,
+`AutoFix()` sustituyendo la estrategia y volviendo a validar,
+`IssueLines` distinguiendo error/aviso por el prefijo) — 345 en total.
+
+Cubierto por tests unitarios y build/test local (345/345) — pendiente de
+verificación de compilación en windows-latest CI (toda la superficie de
+`StrategyEditorPage.xaml` es nueva: `ItemsControl` anidado, un
+`DataTemplate` con `x:DataType="x:String"`, varios `Loaded`/eventos de
+cambio) y, sobre todo, de prueba a mano en Windows real — es la pieza de
+UI más grande de todo este bloque de trabajo, así que hay que contar con
+al menos una ronda de "el founder lo prueba y aparece un bug de WinUI",
+como en cada fase anterior.

@@ -33,7 +33,22 @@ public sealed class StrategyPickerViewModel : ObservableObject
     public List<Strategy> Templates { get; } = StrategyLibrary.All;
 
     private Strategy? _selectedStrategy;
-    public Strategy? SelectedStrategy { get => _selectedStrategy; private set => SetProperty(ref _selectedStrategy, value); }
+    public Strategy? SelectedStrategy
+    {
+        get => _selectedStrategy;
+        private set
+        {
+            if (SetProperty(ref _selectedStrategy, value)) OnPropertyChanged(nameof(HasSelectedStrategy));
+        }
+    }
+
+    /// <summary>Bool-typed companion to <see cref="SelectedStrategy"/> —
+    /// same reasoning as <c>AdvisorViewModel.HasAdvice</c>: this port's
+    /// <c>BoolToVisibilityConverter</c>/enable bindings only handle
+    /// <c>bool</c>, not a nullable reference type. Gates "Edit team" (P0
+    /// item 2, Phase 2) — nothing to edit until a strategy has actually
+    /// been written once.</summary>
+    public bool HasSelectedStrategy => SelectedStrategy is not null;
 
     private bool _isBusy;
     public bool IsBusy { get => _isBusy; private set => SetProperty(ref _isBusy, value); }

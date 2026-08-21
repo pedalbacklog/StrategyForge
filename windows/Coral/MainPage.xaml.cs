@@ -160,6 +160,17 @@ public sealed partial class MainPage : Page
         StrategyFlyout.Hide();
     }
 
+    /// <summary>Opens the "Edit team" window (P0 item 2, Phase 2) for
+    /// whatever strategy is currently active. The button that triggers
+    /// this is disabled while <see cref="Coral.Core.ViewModels.StrategyPickerViewModel.HasSelectedStrategy"/>
+    /// is false, so the null-conditional below is defensive, not an
+    /// expected path.</summary>
+    private void OnEditTeamClick(object sender, RoutedEventArgs e)
+    {
+        if (StrategyPickerViewModel.SelectedStrategy is not { } strategy) return;
+        new StrategyEditorWindow(strategy, StrategyPickerViewModel, ViewModel).Activate();
+    }
+
     private void OnSuggestTeamClick(object sender, RoutedEventArgs e) => AdvisorViewModel.Suggest();
 
     private void OnAdvisorTaskBoxKeyDown(object sender, KeyRoutedEventArgs e)

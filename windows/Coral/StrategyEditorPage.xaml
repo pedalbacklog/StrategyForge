@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Coral.StrategyEditorPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:Coral.Core.Models"
+    xmlns:converters="using:Coral.Converters">
+
+    <Page.Resources>
+        <converters:BoolNegationConverter x:Key="Negate" />
+        <converters:BoolToVisibilityConverter x:Key="Visible" />
+        <converters:RoleKindToDisplayNameConverter x:Key="RoleName" />
+    </Page.Resources>
+
+    <Border Padding="20">
+        <Grid RowSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Spacing="2">
+                <TextBlock Text="{x:Bind ViewModel.Strategy.Name}" FontSize="20" FontWeight="SemiBold" />
+                <TextBlock Text="Editing roles, models, instance counts, and tools. Everything else about this team (MCP servers, prompts, cross-provider mixing) stays as generated."
+                           Opacity="0.6" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- One editable card per role. A plain ItemsControl (not ListView):
+                 there's no selection concept here, just a form per row, and
+                 ListView's selection handling only gets in the way of clicking
+                 into a TextBox. -->
+            <ScrollViewer Grid.Row="1">
+                <ItemsControl ItemsSource="{x:Bind ViewModel.Roles, Mode=OneWay}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:AgentRole">
+                            <Border Padding="12" Margin="0,0,0,8" CornerRadius="6"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                <StackPanel Spacing="8">
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{x:Bind Role, Converter={StaticResource RoleName}}"
+                                                   Opacity="0.6" FontSize="11" VerticalAlignment="Center" />
+                                        <!-- The orchestrator's name isn't renamed here (matches
+                                             StrategyEditorView.swift) — it's the main session, not
+                                             a generated subagent file. -->
+                                        <TextBox Grid.Column="1" Text="{x:Bind Name, Mode=TwoWay}"
+                                                 IsEnabled="{x:Bind IsOrchestrator, Converter={StaticResource Negate}}"
+                                                 TextChanged="OnRoleFieldChanged" />
+                                    </Grid>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="140" />
+                                            <ColumnDefinition Width="80" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <!-- Model: SelectedIndex/Tag mapping handled in code-behind
+                                             (Loaded/SelectionChanged) rather than x:Bind — a ClaudeModel
+                                             enum has no clean x:Bind path into a fixed ComboBoxItem list
+                                             without a converter round-trip that isn't worth it for 4
+                                             fixed choices. -->
+                                        <ComboBox Grid.Column="0" Loaded="OnModelComboLoaded"
+                                                  SelectionChanged="OnModelComboSelectionChanged">
+                                            <ComboBoxItem Content="Opus 5" Tag="Opus5" />
+                                            <ComboBoxItem Content="Fable 5" Tag="Fable5" />
+                                            <ComboBoxItem Content="Sonnet 5" Tag="Sonnet5" />
+                                            <ComboBoxItem Content="Haiku 4.5" Tag="Haiku45" />
+                                        </ComboBox>
+                                        <!-- Count: plain numeric TextBox, same reasoning as the model
+                                             ComboBox above — avoids a NumberBox int/double converter
+                                             for one field. Fixed at 1 for the orchestrator. -->
+                                        <TextBox Grid.Column="1" Loaded="OnCountBoxLoaded"
+                                                 IsEnabled="{x:Bind IsOrchestrator, Converter={StaticResource Negate}}"
+                                                 TextChanged="OnCountBoxTextChanged" />
+                                        <TextBox Grid.Column="2" PlaceholderText="Tools, comma-separated (blank = inherit all)"
+                                                 Loaded="OnToolsBoxLoaded" TextChanged="OnToolsBoxTextChanged" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <StackPanel Grid.Row="2" Spacing="6">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Issues" FontWeight="SemiBold" Opacity="0.6" FontSize="12"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Content="Fix All" Click="OnAutoFixClick"
+                            Visibility="{x:Bind ViewModel.HasAutoFixableIssues, Mode=OneWay, Converter={StaticResource Visible}}" />
+                </Grid>
+                <ItemsControl ItemsSource="{x:Bind ViewModel.IssueLines, Mode=OneWay}" MaxHeight="120">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <TextBlock Text="{x:Bind}" FontSize="12" TextWrapping="Wrap" Margin="0,2" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <Grid Grid.Row="3" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                           Opacity="0.7" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="Cancel" Click="OnCancelClick" />
+                <Button Grid.Column="2" Content="Save" Click="OnSaveClick"
+                        IsEnabled="{x:Bind ViewModel.IsValid, Mode=OneWay}" />
+            </Grid>
+        </Grid>
+    </Border>
+
+</Page>
