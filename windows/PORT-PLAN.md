@@ -2189,5 +2189,9 @@ Ninguno de los dos es testeable con los fakes de `Coral.Tests` — son
 puro comportamiento de binding de WinUI3 en tiempo de ejecución, no
 lógica de `Coral.Core` — así que este bug solo podía encontrarse
 probando la app de verdad en Windows, exactamente como ha pasado.
-Pendiente: que el founder reconfirme que "Issues"/"Save" reaccionan ya en
-vivo a un nombre duplicado y a una cantidad en blanco.
+CONFIRMADO compilando en windows-latest CI (commit `6ffdccd`, run
+[32433412699](https://github.com/pedalbacklog/StrategyForge/actions/runs/32433412699) —
+log real: "Passed! - Failed: 0, Passed: 345, Skipped: 0, Total: 345" y
+"Build succeeded. 0 Warning(s) 0 Error(s)"). Pendiente: que el founder
+reconfirme que "Issues"/"Save" reaccionan ya en vivo a un nombre
+duplicado y a una cantidad en blanco.

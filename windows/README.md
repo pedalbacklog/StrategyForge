@@ -1143,5 +1143,9 @@ as any other bad edit.
 Neither is testable with `Coral.Tests`'s fakes — pure WinUI3 runtime
 binding behavior, not `Coral.Core` logic — so this bug could only be
 found by actually running the app on Windows, exactly as happened.
-Pending: the founder reconfirming "Issues"/"Save" now react live to a
-duplicate name and a blank count.
+CONFIRMED compiling on windows-latest CI (commit `6ffdccd`, run
+[32433412699](https://github.com/pedalbacklog/StrategyForge/actions/runs/32433412699) —
+raw log: "Passed! - Failed: 0, Passed: 345, Skipped: 0, Total: 345" and
+"Build succeeded. 0 Warning(s) 0 Error(s)"). Pending: the founder
+reconfirming "Issues"/"Save" now react live to a duplicate name and a
+blank count.
