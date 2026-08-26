@@ -1,0 +1,222 @@
+using Coral.Core.Services;
+using Coral.Core.ViewModels;
+using Xunit;
+
+namespace Coral.Tests;
+
+/// <summary>Tests for PullRequestViewModel's state-mutation logic against a
+/// FakeProcessLauncher — mirrors GitPanelViewModelTests's style. No real gh
+/// process ever spawns.</summary>
+public class PullRequestViewModelTests
+{
+    private static readonly Func<string, string?> ResolveGh = n => n == "gh" ? "/usr/bin/gh" : null;
+
+    [Fact]
+    public async Task RefreshAsyncPopulatesInfoFromARealResponse()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>
+        {
+            """{"number":5,"state":"OPEN","url":"https://github.com/o/r/pull/5","title":"Fix","isDraft":false}""",
+        }));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGh, loadAutoPr: () => false, saveAutoPr: _ => { });
+
+        await vm.RefreshAsync("feature-x");
+
+        Assert.NotNull(vm.Info);
+        Assert.Equal(5, vm.Info!.Number);
+        Assert.False(vm.IsBusy);
+    }
+
+    [Fact]
+    public async Task RefreshAsyncClearsInfoWhenNoPrExists()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>(), exitCode: 1));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGh, loadAutoPr: () => false, saveAutoPr: _ => { });
+
+        await vm.RefreshAsync("feature-x");
+
+        Assert.Null(vm.Info);
+    }
+
+    [Fact]
+    public async Task CreateAsyncIsANoOpOnABlankTitle()
+    {
+        var called = false;
+        var launcher = new FakeProcessLauncher((_, _) => { called = true; return new FakeChildProcess(new List<string>()); });
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGh, loadAutoPr: () => false, saveAutoPr: _ => { });
+
+        vm.Title = "   ";
+        await vm.CreateAsync("feature-x");
+
+        Assert.False(called);
+    }
+
+    [Fact]
+    public async Task CreateAsyncClearsTitleAndBodyAndRefreshesOnSuccess()
+    {
+        var launcher = new FakeProcessLauncher((_, args) =>
+            args.Contains("create")
+                ? new FakeChildProcess(new List<string> { "https://github.com/o/r/pull/9" })
+                : new FakeChildProcess(new List<string>
+                {
+                    """{"number":9,"state":"OPEN","url":"https://github.com/o/r/pull/9","title":"Fix","isDraft":false}""",
+                }));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGh, loadAutoPr: () => false, saveAutoPr: _ => { });
+        vm.Title = "Fix the bug";
+        vm.Body = "Details";
+
+        await vm.CreateAsync("feature-x");
+
+        Assert.Equal("PR created: https://github.com/o/r/pull/9", vm.StatusMessage);
+        Assert.Equal("", vm.Title);
+        Assert.Equal("", vm.Body);
+        Assert.NotNull(vm.Info);
+        Assert.Equal(9, vm.Info!.Number);
+    }
+
+    [Fact]
+    public async Task CreateAsyncReportsFailureAndKeepsTheTitle()
+    {
+        var launcher = new FakeProcessLauncher((_, _) =>
+            new FakeChildProcess(new List<string>(), exitCode: 1, stderr: "no commits between main and feature-x"));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGh, loadAutoPr: () => false, saveAutoPr: _ => { });
+        vm.Title = "Fix the bug";
+
+        await vm.CreateAsync("feature-x");
+
+        Assert.Equal("Error: no commits between main and feature-x", vm.StatusMessage);
+        Assert.Equal("Fix the bug", vm.Title);
+    }
+
+    [Fact]
+    public async Task MergeAsyncRefreshesToReflectMergedOnSuccess()
+    {
+        var launcher = new FakeProcessLauncher((_, args) =>
+            args.Contains("merge")
+                ? new FakeChildProcess(new List<string> { "Merged" })
+                : new FakeChildProcess(new List<string>
+                {
+                    """{"number":9,"state":"MERGED","url":"https://github.com/o/r/pull/9","title":"Fix","isDraft":false}""",
+                }));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGh, loadAutoPr: () => false, saveAutoPr: _ => { });
+
+        await vm.MergeAsync("feature-x");
+
+        Assert.Equal("Merged.", vm.StatusMessage);
+        Assert.Equal("MERGED", vm.Info!.State);
+    }
+
+    [Fact]
+    public async Task MergeAsyncReportsFailure()
+    {
+        var launcher = new FakeProcessLauncher((_, _) =>
+            new FakeChildProcess(new List<string>(), exitCode: 1, stderr: "checks have not passed"));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGh, loadAutoPr: () => false, saveAutoPr: _ => { });
+
+        await vm.MergeAsync("feature-x");
+
+        Assert.Equal("Error: checks have not passed", vm.StatusMessage);
+    }
+
+    private static readonly Func<string, string?> ResolveGitAndGh =
+        n => n switch { "git" => "/usr/bin/git", "gh" => "/usr/bin/gh", _ => null };
+
+    [Fact]
+    public async Task ShipAsyncCommitsPushesAndOpensAPrWhenNoneExistedYet()
+    {
+        var launcher = new FakeProcessLauncher((file, args) =>
+        {
+            if (file.EndsWith("gh")) return new FakeChildProcess(new List<string> { "https://github.com/o/r/pull/9" });
+            if (args.Contains("commit")) return new FakeChildProcess(new List<string> { "[main abc] msg" });
+            return new FakeChildProcess(new List<string> { "main" });
+        });
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGitAndGh, loadAutoPr: () => false, saveAutoPr: _ => { });
+
+        await vm.ShipAsync("/repo", "feature-x", "fix the bug", "Fix the bug", "details", anyStaged: false);
+
+        Assert.Equal("Pull request opened.", vm.StatusMessage);
+        Assert.False(vm.IsBusy);
+    }
+
+    [Fact]
+    public async Task ShipAsyncReportsUpdatedInsteadOfOpeningASecondPr()
+    {
+        var launcher = new FakeProcessLauncher((file, args) =>
+        {
+            if (file.EndsWith("gh") && args.Contains("view"))
+            {
+                return new FakeChildProcess(new List<string>
+                {
+                    """{"number":9,"state":"OPEN","url":"https://github.com/o/r/pull/9","title":"Fix","isDraft":false}""",
+                });
+            }
+            if (file.EndsWith("gh")) return new FakeChildProcess(new List<string>()); // create shouldn't be called
+            if (args.Contains("commit")) return new FakeChildProcess(new List<string> { "[main abc] msg" });
+            return new FakeChildProcess(new List<string> { "main" });
+        });
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGitAndGh, loadAutoPr: () => false, saveAutoPr: _ => { });
+        await vm.RefreshAsync("feature-x"); // populates Info, so ShipAsync sees hadPR: true
+
+        await vm.ShipAsync("/repo", "feature-x", "fix the bug", "Fix the bug", "details", anyStaged: false);
+
+        Assert.Equal("Pull request updated.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task ShipAsyncReportsFailureWhenTheCommitFails()
+    {
+        var launcher = new FakeProcessLauncher((_, args) =>
+            args.Contains("commit")
+                ? new FakeChildProcess(new List<string>(), exitCode: 1, stderr: "fatal: not a git repository")
+                : new FakeChildProcess(new List<string>()));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGitAndGh, loadAutoPr: () => false, saveAutoPr: _ => { });
+
+        await vm.ShipAsync("/repo", "feature-x", "msg", "t", "b", anyStaged: false);
+
+        Assert.Equal("Error: fatal: not a git repository", vm.StatusMessage);
+    }
+
+    [Fact]
+    public void ConstructorLoadsAutoPrFromTheInjectedLoader()
+    {
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGh, loadAutoPr: () => true, saveAutoPr: _ => { });
+
+        Assert.True(vm.AutoPr);
+    }
+
+    [Fact]
+    public void SettingAutoPrPersistsThroughTheInjectedSaver()
+    {
+        var saved = new List<bool>();
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGh, loadAutoPr: () => false, saveAutoPr: saved.Add);
+
+        vm.AutoPr = true;
+
+        Assert.Equal(new List<bool> { true }, saved);
+        Assert.True(vm.AutoPr);
+    }
+
+    [Fact]
+    public void SettingAutoPrToItsCurrentValueDoesntPersistAgain()
+    {
+        var saveCount = 0;
+        var launcher = new FakeProcessLauncher((_, _) => new FakeChildProcess(new List<string>()));
+        var vm = new PullRequestViewModel(launcher, "/repo", ResolveGh, loadAutoPr: () => false, saveAutoPr: _ => saveCount++);
+
+        vm.AutoPr = false; // already false — SetProperty should no-op
+
+        Assert.Equal(0, saveCount);
+    }
+
+    [Theory]
+    [InlineData(true, true, true, true, true)]
+    [InlineData(false, true, true, true, false)]
+    [InlineData(true, false, true, true, false)]
+    [InlineData(true, true, false, true, false)]
+    [InlineData(true, true, true, false, false)]
+    public void ShouldAutoShipMatchesCodeModeViewSwiftsGuard(
+        bool autoPr, bool hasRepo, bool ghInstalled, bool hasChanges, bool expected) =>
+        Assert.Equal(expected, PullRequestViewModel.ShouldAutoShip(autoPr, hasRepo, ghInstalled, hasChanges));
+}

@@ -1,5 +1,7 @@
 # CI for the Windows port (windows/). Independent of tests.yml (the macOS gate):
-# this only triggers on windows/** changes, and macOS-only changes never trigger this.
+# this only triggers on windows/** changes (plus models.json, which Coral.Tests reads
+# as a fixture — see windows/Coral.Tests/Coral.Tests.csproj), and macOS-only changes
+# never trigger this.
 name: windows-tests
 
 on:
@@ -7,10 +9,12 @@ on:
     branches: [main]
     paths:
       - 'windows/**'
+      - 'models.json'
   pull_request:
     branches: [main]
     paths:
       - 'windows/**'
+      - 'models.json'
   workflow_dispatch:
 
 concurrency:
@@ -18,10 +22,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  placeholder:
+  test:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: No project yet
-        run: echo "windows/ has no solution to build yet. Replace this job with an actual build+test step once the Windows project is scaffolded (see windows/README.md)."
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Coral.Tests only references Coral.Core (plain net8.0, no WinUI/Windows App
+      # SDK), so this alone already exercises the ported logic (ModelCatalog today)
+      # against the real repo-root models.json. Category=Manual is excluded: those
+      # tests (ManualClaudeRunnerSmokeTest) need a real, logged-in `claude` CLI,
+      # which this runner doesn't have — see windows/README.md to run them yourself.
+      - name: Test Coral.Core (via Coral.Tests)
+        run: dotnet test windows/Coral.Tests/Coral.Tests.csproj -c Release --filter "Category!=Manual"
+
+      # Separate step so a WinUI 3/Windows App SDK restore or packaging problem in
+      # the app project doesn't get masked by (or block) the test step above.
+      - name: Build the WinUI 3 app (Coral)
+        run: dotnet build windows/Coral/Coral.csproj -c Release -p:Platform=x64
